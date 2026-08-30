@@ -2,6 +2,7 @@
 #include "ui_registerdialog.h"
 
 #include "global.h"
+#include "httpmanager.h"
 
 RegisterDialog::RegisterDialog(QWidget *parent)
     : QDialog(parent)
@@ -13,6 +14,11 @@ RegisterDialog::RegisterDialog(QWidget *parent)
 
     ui->err_tip->setProperty("state", "normal");
     repolish(ui->err_tip);
+
+    connect(&HttpManager::GetInstance(), &HttpManager::sig_reg_http_finish, this, &RegisterDialog::slot_reg_mod_finish);
+
+    // 注册回调函数
+    initHttpHandlers();
 }
 
 RegisterDialog::~RegisterDialog()
@@ -33,6 +39,49 @@ void RegisterDialog::on_get_token_button_clicked()
     {
         showTip(tr("邮箱地址不准确"), false);
     }
+}
+
+void RegisterDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
+{
+    if (err != ErrorCodes::SUCCESS)
+    {
+        showTip(tr("网络请求错误"), false);
+        return;
+    }
+
+    // json解析
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
+    if (jsonDoc.isNull())
+    {
+        showTip(tr("josn解析失败"), false);
+        return;
+    }
+    if (!jsonDoc.isObject())
+    {
+        showTip(tr("json解析失败"), false);
+        return;
+    }
+
+    m_handlers[id](jsonDoc.object());
+
+    return;
+}
+
+void RegisterDialog::initHttpHandlers()
+{
+    // 获取验证码回调函数
+    m_handlers.insert(ReqId::ID_GET_VARIFY_CODE, [this](const QJsonObject& jsonObj){
+        int error = jsonObj["error"].toInt();
+        if (error != ErrorCodes::SUCCESS)
+        {
+            showTip(tr("参数错误"), false);
+            return;
+        }
+
+        auto email = jsonObj["email"].toString();
+        showTip(tr("验证码已发送到邮箱，注意查收"), true);
+        qDebug() << "email is: " << email;
+    });
 }
 
 void RegisterDialog::showTip(const QString& str, bool b_ok)
