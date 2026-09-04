@@ -18,11 +18,6 @@ class HttpManager
 public:
     ~HttpManager();
 
-private:
-    friend class TSingLeton<HttpManager>;
-    HttpManager();
-    QNetworkAccessManager m_manager;
-
     /**
      * @brief postHttpReq 发送网络亲求
      * @param url url
@@ -31,6 +26,11 @@ private:
      * @param mod 模块
      */
     void postHttpReq(QUrl url, QJsonObject json, ReqId req_id, Modules mod);
+
+private:
+    friend class TSingLeton<HttpManager>;
+    HttpManager();
+    QNetworkAccessManager m_manager;
 
 private slots:
     void slot_http_finish(ReqId id, QString res, ErrorCodes err, Modules mod);

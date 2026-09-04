@@ -34,6 +34,12 @@ void RegisterDialog::on_get_token_button_clicked()
     if (match)
     {
         // 发送验证码
+        QJsonObject json_obj;
+        json_obj["email"] = email;
+        HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/get_Verifycode"),
+                                                json_obj,
+                                                ReqId::ID_GET_VERIFY_CODE,
+                                                Modules::REGISTERMOD);
     }
     else
     {
@@ -70,7 +76,7 @@ void RegisterDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
 void RegisterDialog::initHttpHandlers()
 {
     // 获取验证码回调函数
-    m_handlers.insert(ReqId::ID_GET_VARIFY_CODE, [this](const QJsonObject& jsonObj){
+    m_handlers.insert(ReqId::ID_GET_VERIFY_CODE, [this](const QJsonObject& jsonObj){
         int error = jsonObj["error"].toInt();
         if (error != ErrorCodes::SUCCESS)
         {
