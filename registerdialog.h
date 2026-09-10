@@ -20,6 +20,8 @@ private slots:
     void on_get_token_button_clicked();
     void slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err);
 
+    void on_confirm_button_clicked();
+
 private:
     void initHttpHandlers();
     void showTip(const QString& str, bool b_ok);

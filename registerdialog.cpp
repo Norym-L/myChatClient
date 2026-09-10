@@ -81,12 +81,27 @@ void RegisterDialog::initHttpHandlers()
         if (error != ErrorCodes::SUCCESS)
         {
             showTip(tr("参数错误"), false);
+            qDebug() << "error: " << error << "  json: " << jsonObj << "\n";
             return;
         }
 
         auto email = jsonObj["email"].toString();
         showTip(tr("验证码已发送到邮箱，注意查收"), true);
         qDebug() << "email is: " << email;
+    });
+
+    // 注册用户回包逻辑
+    m_handlers.insert(ReqId::ID_REG_USER, [this](const QJsonObject& jsonObj){
+        int error = jsonObj["error"].toInt();
+        if (error != ErrorCodes::SUCCESS)
+        {
+            showTip(tr("参数错误"), false);
+            return;
+        }
+
+        auto email = jsonObj["email"].toString();
+        showTip(tr("注册成功"), true);
+        qDebug() << "email is " << email;
     });
 }
 
@@ -103,5 +118,51 @@ void RegisterDialog::showTip(const QString& str, bool b_ok)
     ui->err_tip->setText(str);
 
     repolish(ui->err_tip);
+}
+
+
+void RegisterDialog::on_confirm_button_clicked()
+{
+    if(ui->user_name_edit->text() == ""){
+        showTip(tr("用户名不能为空"), false);
+        return;
+    }
+
+    if(ui->email_edit->text() == ""){
+        showTip(tr("邮箱不能为空"), false);
+        return;
+    }
+
+    if(ui->pass_edit->text() == ""){
+        showTip(tr("密码不能为空"), false);
+        return;
+    }
+
+    if(ui->pass2_edit->text() == ""){
+        showTip(tr("确认密码不能为空"), false);
+        return;
+    }
+
+    if(ui->pass2_edit->text() != ui->pass_edit->text()){
+        showTip(tr("密码和确认密码不匹配"), false);
+        return;
+    }
+
+    if(ui->token_edit->text() == ""){
+        showTip(tr("验证码不能为空"), false);
+        return;
+    }
+
+    //day11 发送http请求注册用户
+    QJsonObject json_obj;
+    json_obj["user"] = ui->user_name_edit->text();
+    json_obj["email"] = ui->email_edit->text();
+    json_obj["password"] = ui->pass_edit->text(); // 密码
+    json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
+    json_obj["verify_code"] = ui->token_edit->text(); // 验证码
+    HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX+"/user_register"),
+                                           json_obj,
+                                           ReqId::ID_REG_USER,
+                                           Modules::REGISTERMOD);
 }
 
