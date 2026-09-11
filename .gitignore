@@ -1,0 +1,8 @@
+.vs/
+x64/
+ChatClient/
+*.user
+*.suo
+*.opendb
+*.db
+*.ipch

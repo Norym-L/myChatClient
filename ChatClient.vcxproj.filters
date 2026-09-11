@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Application">
+      <UniqueIdentifier>{a0000001-0000-4000-8000-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages">
+      <UniqueIdentifier>{a0000002-0000-4000-8000-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\Login">
+      <UniqueIdentifier>{a0000003-0000-4000-8000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\Register">
+      <UniqueIdentifier>{a0000004-0000-4000-8000-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\Main">
+      <UniqueIdentifier>{a0000005-0000-4000-8000-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{a0000006-0000-4000-8000-000000000006}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Http">
+      <UniqueIdentifier>{a0000007-0000-4000-8000-000000000007}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Core">
+      <UniqueIdentifier>{a0000008-0000-4000-8000-000000000008}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{a0000009-0000-4000-8000-000000000009}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="logindialog.cpp">
+      <Filter>Pages\Login</Filter>
+    </ClCompile>
+    <ClCompile Include="registerdialog.cpp">
+      <Filter>Pages\Register</Filter>
+    </ClCompile>
+    <ClCompile Include="mainwindow.cpp">
+      <Filter>Pages\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="httpmanager.cpp">
+      <Filter>Common\Http</Filter>
+    </ClCompile>
+    <ClCompile Include="global.cpp">
+      <Filter>Common\Core</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="logindialog.h">
+      <Filter>Pages\Login</Filter>
+    </QtMoc>
+    <QtMoc Include="registerdialog.h">
+      <Filter>Pages\Register</Filter>
+    </QtMoc>
+    <QtMoc Include="mainwindow.h">
+      <Filter>Pages\Main</Filter>
+    </QtMoc>
+    <QtMoc Include="httpmanager.h">
+      <Filter>Common\Http</Filter>
+    </QtMoc>
+    <QtMoc Include="global.h">
+      <Filter>Common\Core</Filter>
+    </QtMoc>
+    <ClInclude Include="singleton.h">
+      <Filter>Common\Core</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="logindialog.ui">
+      <Filter>Pages\Login</Filter>
+    </QtUic>
+    <QtUic Include="registerdialog.ui">
+      <Filter>Pages\Register</Filter>
+    </QtUic>
+    <QtUic Include="mainwindow.ui">
+      <Filter>Pages\Main</Filter>
+    </QtUic>
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="rc.qrc">
+      <Filter>Resources</Filter>
+    </QtRcc>
+    <None Include="config.ini">
+      <Filter>Resources</Filter>
+    </None>
+  </ItemGroup>
+</Project>

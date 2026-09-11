@@ -1,0 +1,14 @@
+QDialog#LoginDialog
+{
+    background-color: rgb(23,21,22)
+}
+
+#err_tip[state='normal']
+{
+    color: green;
+}
+
+#err_tip[state='err']
+{
+    color: red;
+}
