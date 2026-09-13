@@ -4,29 +4,56 @@
 #include <QDialog>
 #include "global.h"
 
-namespace Ui {
-class RegisterDialog;
+namespace Ui
+{
+	class RegisterDialog;
 }
 
 class RegisterDialog : public QDialog
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
-    explicit RegisterDialog(QWidget *parent = nullptr);
-    ~RegisterDialog();
-
-private slots:
-    void on_get_token_button_clicked();
-    void slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err);
-
-    void on_confirm_button_clicked();
+	explicit RegisterDialog(QWidget* parent = nullptr);
+	~RegisterDialog();
 
 private:
-    void initHttpHandlers();
-    void showTip(const QString& str, bool b_ok);
-    Ui::RegisterDialog *ui;
-    QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
+	/**
+	 * 添加错误提示
+	 * @param tip 错误码
+	 * @param notice 错误提示
+	 */
+	void addTipErr(const TipErr tip, const QString& notice);
+
+	/**
+	 * 删除错误提示
+	 * @param tip 错误码
+	 */
+	void delTipErr(const TipErr tip);
+
+	/// 检查用户名合法性
+	bool checkUserNameImputValid();
+	/// 检查邮箱合法性
+	bool checkEmailImputValid();
+	/// 检查密码合法性
+	bool checkPasswordImputValid();
+	/// 检查再次输入密码合法性
+	bool checkPassword2ImputValid();
+	/// 检查验证码合法性
+	bool checkVerifyImputValid();
+
+private slots:
+	void on_get_token_button_clicked();
+	void slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err);
+
+	void on_confirm_button_clicked();
+
+private:
+	void initHttpHandlers();
+	void showTip(const QString& str, bool b_ok);
+	Ui::RegisterDialog* ui;
+	QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
+	QMap<TipErr, QString> m_tipErrs; // 错误码 - 错误提示
 };
 
 #endif // REGISTERDIALOG_H

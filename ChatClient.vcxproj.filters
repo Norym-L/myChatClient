@@ -7,15 +7,6 @@
     <Filter Include="Pages">
       <UniqueIdentifier>{a0000002-0000-4000-8000-000000000002}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Pages\Login">
-      <UniqueIdentifier>{a0000003-0000-4000-8000-000000000003}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Pages\Register">
-      <UniqueIdentifier>{a0000004-0000-4000-8000-000000000004}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Pages\Main">
-      <UniqueIdentifier>{a0000005-0000-4000-8000-000000000005}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Common">
       <UniqueIdentifier>{a0000006-0000-4000-8000-000000000006}</UniqueIdentifier>
     </Filter>
@@ -25,8 +16,20 @@
     <Filter Include="Common\Core">
       <UniqueIdentifier>{a0000008-0000-4000-8000-000000000008}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resources">
+    <Filter Include="Pages\注册页面">
+      <UniqueIdentifier>{a0000004-0000-4000-8000-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\主页">
+      <UniqueIdentifier>{a0000005-0000-4000-8000-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\登录页面">
+      <UniqueIdentifier>{a0000003-0000-4000-8000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源">
       <UniqueIdentifier>{a0000009-0000-4000-8000-000000000009}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Pages\注册页面\获取验证码按钮">
+      <UniqueIdentifier>{fb6a7ead-212d-413a-ae1b-768e60b8c512}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -34,13 +37,13 @@
       <Filter>Application</Filter>
     </ClCompile>
     <ClCompile Include="logindialog.cpp">
-      <Filter>Pages\Login</Filter>
+      <Filter>Pages\登录页面</Filter>
     </ClCompile>
     <ClCompile Include="registerdialog.cpp">
-      <Filter>Pages\Register</Filter>
+      <Filter>Pages\注册页面</Filter>
     </ClCompile>
     <ClCompile Include="mainwindow.cpp">
-      <Filter>Pages\Main</Filter>
+      <Filter>Pages\主页</Filter>
     </ClCompile>
     <ClCompile Include="httpmanager.cpp">
       <Filter>Common\Http</Filter>
@@ -48,22 +51,22 @@
     <ClCompile Include="global.cpp">
       <Filter>Common\Core</Filter>
     </ClCompile>
+    <ClCompile Include="timer_button.cpp">
+      <Filter>Pages\注册页面\获取验证码按钮</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
-      <Filter>Pages\Login</Filter>
+      <Filter>Pages\登录页面</Filter>
     </QtMoc>
     <QtMoc Include="registerdialog.h">
-      <Filter>Pages\Register</Filter>
+      <Filter>Pages\注册页面</Filter>
     </QtMoc>
     <QtMoc Include="mainwindow.h">
-      <Filter>Pages\Main</Filter>
+      <Filter>Pages\主页</Filter>
     </QtMoc>
     <QtMoc Include="httpmanager.h">
       <Filter>Common\Http</Filter>
-    </QtMoc>
-    <QtMoc Include="global.h">
-      <Filter>Common\Core</Filter>
     </QtMoc>
     <ClInclude Include="singleton.h">
       <Filter>Common\Core</Filter>
@@ -71,21 +74,29 @@
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="logindialog.ui">
-      <Filter>Pages\Login</Filter>
+      <Filter>Pages\登录页面</Filter>
     </QtUic>
     <QtUic Include="registerdialog.ui">
-      <Filter>Pages\Register</Filter>
+      <Filter>Pages\注册页面</Filter>
     </QtUic>
     <QtUic Include="mainwindow.ui">
-      <Filter>Pages\Main</Filter>
+      <Filter>Pages\主页</Filter>
     </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="rc.qrc">
-      <Filter>Resources</Filter>
+      <Filter>资源</Filter>
     </QtRcc>
     <None Include="config.ini">
-      <Filter>Resources</Filter>
+      <Filter>资源</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="timer_button.h">
+      <Filter>Pages\注册页面\获取验证码按钮</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>Common\Core</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
