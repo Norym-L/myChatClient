@@ -10,10 +10,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
     setCentralWidget(m_login_dialog);
 
-    //创建和注册消息的链接
-    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::SlotSwitchReg);
-    m_register_dialog = new RegisterDialog(this);
-    m_register_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
 }
 
 MainWindow::~MainWindow()
@@ -21,9 +18,24 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::SlotSwitchReg()
+void MainWindow::slotSwitchReg()
 {
+    m_register_dialog = new RegisterDialog(this);
+    m_register_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+
+    connect(m_register_dialog, &RegisterDialog::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin);
     setCentralWidget(m_register_dialog);
     m_login_dialog->hide();
     m_register_dialog->show();
+}
+
+void MainWindow::slotSwitchLogin()
+{
+    m_login_dialog = new LoginDialog(this);
+    m_login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+    setCentralWidget(m_login_dialog);
+
+    m_register_dialog->hide();
+    m_login_dialog->show();
+    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
 }

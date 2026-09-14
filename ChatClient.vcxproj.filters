@@ -31,9 +31,6 @@
     <Filter Include="Pages\注册页面\获取验证码按钮">
       <UniqueIdentifier>{fb6a7ead-212d-413a-ae1b-768e60b8c512}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Pages\注册页面\显示隐藏密码label">
-      <UniqueIdentifier>{d1a13eba-336d-422d-90eb-d406f811141e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="资源\res">
       <UniqueIdentifier>{4f415f7a-f6dc-4289-9574-844990390123}</UniqueIdentifier>
     </Filter>

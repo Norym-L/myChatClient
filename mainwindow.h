@@ -21,7 +21,10 @@ public:
     ~MainWindow() override;
 
 public slots:
-    void SlotSwitchReg();
+    /// 切换注册页
+    void slotSwitchReg();
+    /// 切换登录页
+    void slotSwitchLogin();
 
 private:
     Ui::MainWindow *ui;

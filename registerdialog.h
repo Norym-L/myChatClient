@@ -1,7 +1,9 @@
 #ifndef REGISTERDIALOG_H
 #define REGISTERDIALOG_H
 
+#include <QTimer>
 #include <QDialog>
+
 #include "global.h"
 
 namespace Ui
@@ -48,8 +50,15 @@ private slots:
 
 	void on_confirm_button_clicked();
 
+signals:
+	/// 返回登录页面
+	void sigSwitchLoginPage(void);
+
 private:
+	QTimer* m_timer = nullptr;
+	int m_countdown = 5; // 注册成功提示页面停留时间
 	void initHttpHandlers();
+	void changeTipPage();
 	void showTip(const QString& str, bool b_ok);
 	Ui::RegisterDialog* ui;
 	QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;

@@ -143,11 +143,43 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 			qDebug() << "pass2label was released";
 		});
 
+	// 注册定时器（定时返回登录界面）
+	m_timer = new QTimer(this);
+	m_timer->stop();
+	connect(m_timer, &QTimer::timeout, [this]()
+		{
+			if (m_countdown == 0)
+			{
+				m_timer->stop();
+				emit sigSwitchLoginPage();
+				return;
+			}
+			m_countdown--;
+			ui->reg_success_tip_label->setText(
+				QString("注册成功，%1 秒后返回登录").arg(m_countdown)
+			);
+		});
+
+	// 返回按钮
+	connect(ui->return_to_login, &QPushButton::clicked, this, [this]()
+		{
+			m_timer->stop();
+			emit sigSwitchLoginPage();
+			qDebug() << "return to login page";
+		});
+	connect(ui->cancel_button, &QPushButton::clicked, this, [this]()
+		{
+			m_timer->stop();
+			emit sigSwitchLoginPage();
+			qDebug() << "return to login page";
+		});
+
 
 	connect(&HttpManager::GetInstance(), &HttpManager::sig_reg_http_finish, this, &RegisterDialog::slot_reg_mod_finish);
 
 	// 注册回调函数
 	initHttpHandlers();
+	ui->stackedWidget->setCurrentWidget(ui->page);
 }
 
 RegisterDialog::~RegisterDialog()
@@ -248,10 +280,19 @@ void RegisterDialog::initHttpHandlers()
 				return;
 			}
 
-			auto email = jsonObj["email"].toString();
 			showTip(tr("注册成功"), true);
-			qDebug() << "email is " << email;
+			qDebug() << "email is " << jsonObj["email"].toString();
+			qDebug() << "uuid is" << jsonObj["uuid"].toString();
+			changeTipPage();
 		});
+}
+
+void RegisterDialog::changeTipPage()
+{
+	m_timer->stop();
+	m_countdown = 5;
+	ui->stackedWidget->setCurrentWidget(ui->page_2);
+	m_timer->start(1000);
 }
 
 void RegisterDialog::showTip(const QString& str, bool b_ok)
@@ -281,16 +322,16 @@ void RegisterDialog::on_confirm_button_clicked()
 		return;
 	}
 
-	// //day11 发送http请求注册用户
-	// QJsonObject json_obj;
-	// json_obj["user"] = ui->user_name_edit->text();
-	// json_obj["email"] = ui->email_edit->text();
-	// json_obj["password"] = ui->pass_edit->text(); // 密码
-	// json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
-	// json_obj["verify_code"] = ui->token_edit->text(); // 验证码
-	// HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
-	// 	json_obj,
-	// 	ReqId::ID_REG_USER,
-	// 	Modules::REGISTERMOD);
+	//day11 发送http请求注册用户
+	QJsonObject json_obj;
+	json_obj["user"] = ui->user_name_edit->text();
+	json_obj["email"] = ui->email_edit->text();
+	json_obj["password"] = ui->pass_edit->text(); // 密码
+	json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
+	json_obj["verify_code"] = ui->token_edit->text(); // 验证码
+	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
+		json_obj,
+		ReqId::ID_REG_USER,
+		Modules::REGISTERMOD);
 }
 
