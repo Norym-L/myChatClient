@@ -20,6 +20,7 @@ private:
 
 signals:
     void switchRegister();
+    void switchReset();
 };
 
 #endif // LOGINDIALOG_H

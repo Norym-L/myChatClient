@@ -13,6 +13,26 @@ QDialog#LoginDialog
     color: red;
 }
 
+#error_tip[state='normal']
+{
+    color: green;
+}
+
+#error_tip[state='err']
+{
+    color: red;
+}
+
+#forget_label[state="normal"]
+{
+    color: white;
+}
+
+#forget_label[state="hover"]
+{
+    color: blue;
+}
+
 #pass_visible[state='unvisible']
 {
    border-image: url(:/res/unvisible.png);

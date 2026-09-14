@@ -37,6 +37,9 @@
     <Filter Include="Common\widgts">
       <UniqueIdentifier>{23981f47-c847-4e3a-8c02-a8ca2d23cabc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pages\重置密码页面">
+      <UniqueIdentifier>{3f8a15ab-c24e-465a-a429-791ce55f9565}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -63,6 +66,9 @@
     <ClCompile Include="clicked_label.cpp">
       <Filter>Common\widgts</Filter>
     </ClCompile>
+    <ClCompile Include="resetdialog.cpp">
+      <Filter>Pages\重置密码页面</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -83,6 +89,9 @@
     <QtMoc Include="clicked_label.h">
       <Filter>Common\widgts</Filter>
     </QtMoc>
+    <QtMoc Include="resetdialog.h">
+      <Filter>Pages\重置密码页面</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="logindialog.ui">
@@ -93,6 +102,9 @@
     </QtUic>
     <QtUic Include="mainwindow.ui">
       <Filter>Pages\主页</Filter>
+    </QtUic>
+    <QtUic Include="resetdialog.ui">
+      <Filter>Pages\重置密码页面</Filter>
     </QtUic>
   </ItemGroup>
   <ItemGroup>
@@ -110,6 +122,7 @@
     <ClInclude Include="global.h">
       <Filter>Common\Core</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="style\stylesheet.qss">
@@ -132,5 +145,8 @@
     <Image Include="res\visible_hover.png">
       <Filter>资源\res</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ChatClient.rc" />
   </ItemGroup>
 </Project>
