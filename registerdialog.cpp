@@ -3,6 +3,7 @@
 
 #include "global.h"
 #include "httpmanager.h"
+#include "clicked_label.h"
 
 bool RegisterDialog::checkUserNameImputValid()
 {
@@ -111,6 +112,37 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 		{
 			checkVerifyImputValid();
 		});
+
+	// 设置显示隐藏按钮
+	ui->pass_visible->setCursor(Qt::PointingHandCursor);
+	ui->pass2_visible->setCursor(Qt::PointingHandCursor);
+	ui->pass_visible->setState("unvisible", "unvisible_hover", "visible_hover", "visible", "visible_hover", "unvisible_hover");
+	ui->pass2_visible->setState("unvisible", "unvisible_hover", "visible_hover", "visible", "visible_hover", "unvisible_hover");
+
+	connect(ui->pass_visible, &ClickedLabel::clicked, this, [this]()
+		{
+			ui->pass_edit->setEchoMode(QLineEdit::Normal);
+			qDebug() << "passlabel was clicked";
+		});
+
+	connect(ui->pass_visible, &ClickedLabel::released, this, [this]()
+		{
+			ui->pass_edit->setEchoMode(QLineEdit::Password);
+			qDebug() << "passlabel was released";
+		});
+
+	connect(ui->pass2_visible, &ClickedLabel::clicked, this, [this]()
+		{
+			ui->pass2_edit->setEchoMode(QLineEdit::Normal);
+			qDebug() << "pass2label was clicked";
+		});
+
+	connect(ui->pass2_visible, &ClickedLabel::released, this, [this]()
+		{
+			ui->pass2_edit->setEchoMode(QLineEdit::Password);
+			qDebug() << "pass2label was released";
+		});
+
 
 	connect(&HttpManager::GetInstance(), &HttpManager::sig_reg_http_finish, this, &RegisterDialog::slot_reg_mod_finish);
 
@@ -240,7 +272,7 @@ void RegisterDialog::showTip(const QString& str, bool b_ok)
 
 void RegisterDialog::on_confirm_button_clicked()
 {
-	if (!checkEmailImputValid() || 
+	if (!checkEmailImputValid() ||
 		!checkUserNameImputValid() ||
 		!checkPasswordImputValid() ||
 		!checkPassword2ImputValid() ||
@@ -249,16 +281,16 @@ void RegisterDialog::on_confirm_button_clicked()
 		return;
 	}
 
-	//day11 发送http请求注册用户
-	QJsonObject json_obj;
-	json_obj["user"] = ui->user_name_edit->text();
-	json_obj["email"] = ui->email_edit->text();
-	json_obj["password"] = ui->pass_edit->text(); // 密码
-	json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
-	json_obj["verify_code"] = ui->token_edit->text(); // 验证码
-	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
-		json_obj,
-		ReqId::ID_REG_USER,
-		Modules::REGISTERMOD);
+	// //day11 发送http请求注册用户
+	// QJsonObject json_obj;
+	// json_obj["user"] = ui->user_name_edit->text();
+	// json_obj["email"] = ui->email_edit->text();
+	// json_obj["password"] = ui->pass_edit->text(); // 密码
+	// json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
+	// json_obj["verify_code"] = ui->token_edit->text(); // 验证码
+	// HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
+	// 	json_obj,
+	// 	ReqId::ID_REG_USER,
+	// 	Modules::REGISTERMOD);
 }
 

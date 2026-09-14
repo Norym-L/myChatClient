@@ -104,7 +104,10 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="clicked_label.cpp" />
     <ClCompile Include="timer_button.cpp" />
+    <None Include="style\stylesheet.qss" />
+    <QtMoc Include="clicked_label.h" />
     <ClInclude Include="timer_button.h" />
     <QtRcc Include="rc.qrc" />
     <QtUic Include="logindialog.ui" />
@@ -123,6 +126,13 @@
     <ClCompile Include="mainwindow.cpp" />
     <ClCompile Include="registerdialog.cpp" />
     <None Include="config.ini" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\login.png" />
+    <Image Include="res\unvisible.png" />
+    <Image Include="res\unvisible_hover.png" />
+    <Image Include="res\visible.png" />
+    <Image Include="res\visible_hover.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

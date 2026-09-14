@@ -58,6 +58,14 @@ enum class TipErr
     TIP_USER_ERR = 6
 };
 
+/// label选择状态
+enum class ClickLabelState
+{
+    NORMAL = 0,
+    SELECT = 1,
+};
+
+
 extern QString GATE_URL_PERFIX;
 
 #endif // GLOBAL_H

@@ -187,6 +187,25 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="ClickedLabel" name="pass_visible">
+         <property name="minimumSize">
+          <size>
+           <width>30</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>30</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
@@ -223,6 +242,25 @@
            <width>16777215</width>
            <height>30</height>
           </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="ClickedLabel" name="pass2_visible">
+         <property name="minimumSize">
+          <size>
+           <width>30</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>30</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
@@ -364,7 +402,14 @@
    <extends>QPushButton</extends>
    <header>timer_button.h</header>
   </customwidget>
+  <customwidget>
+   <class>ClickedLabel</class>
+   <extends>QLabel</extends>
+   <header location="global">clicked_label.h</header>
+  </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="rc.qrc"/>
+ </resources>
  <connections/>
 </ui>

@@ -31,6 +31,15 @@
     <Filter Include="Pages\注册页面\获取验证码按钮">
       <UniqueIdentifier>{fb6a7ead-212d-413a-ae1b-768e60b8c512}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pages\注册页面\显示隐藏密码label">
+      <UniqueIdentifier>{d1a13eba-336d-422d-90eb-d406f811141e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源\res">
+      <UniqueIdentifier>{4f415f7a-f6dc-4289-9574-844990390123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\widgts">
+      <UniqueIdentifier>{23981f47-c847-4e3a-8c02-a8ca2d23cabc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -54,6 +63,9 @@
     <ClCompile Include="timer_button.cpp">
       <Filter>Pages\注册页面\获取验证码按钮</Filter>
     </ClCompile>
+    <ClCompile Include="clicked_label.cpp">
+      <Filter>Common\widgts</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -71,6 +83,9 @@
     <ClInclude Include="singleton.h">
       <Filter>Common\Core</Filter>
     </ClInclude>
+    <QtMoc Include="clicked_label.h">
+      <Filter>Common\widgts</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="logindialog.ui">
@@ -98,5 +113,27 @@
     <ClInclude Include="global.h">
       <Filter>Common\Core</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="style\stylesheet.qss">
+      <Filter>资源</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\login.png">
+      <Filter>资源\res</Filter>
+    </Image>
+    <Image Include="res\unvisible.png">
+      <Filter>资源\res</Filter>
+    </Image>
+    <Image Include="res\visible.png">
+      <Filter>资源\res</Filter>
+    </Image>
+    <Image Include="res\unvisible_hover.png">
+      <Filter>资源\res</Filter>
+    </Image>
+    <Image Include="res\visible_hover.png">
+      <Filter>资源\res</Filter>
+    </Image>
   </ItemGroup>
 </Project>
