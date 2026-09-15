@@ -27,6 +27,8 @@ private:
 	 */
 	void delTipErr(const TipErr tip);
 
+	/// 检查账号合法性
+	bool checkAccountImputValid();
 	/// 检查邮箱合法性
 	bool checkEmailImputValid();
 	/// 检查密码合法性

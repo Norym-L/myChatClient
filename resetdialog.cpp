@@ -53,12 +53,14 @@ ResetDialog::ResetDialog(QWidget* parent)
 		{
 			if (!checkEmailImputValid() ||
 				!checkPasswordImputValid() ||
-				!checkVerifyImputValid())
+				!checkVerifyImputValid() ||
+				!checkAccountImputValid())
 			{
 				return;
 			}
 
 			QJsonObject json_object;
+			json_object["user"] = ui->user_edit->text().toInt();
 			json_object["email"] = ui->email_edit->text();
 			json_object["password"] = ui->new_password_edit->text();
 			json_object["verify_code"] = ui->verify_edit->text();
@@ -86,6 +88,21 @@ void ResetDialog::delTipErr(const TipErr tip)
 	}
 
 	showTip(m_tipErrs.first(), false);
+}
+
+bool ResetDialog::checkAccountImputValid()
+{
+	auto account = ui->user_edit->text();
+	QRegularExpression regx(R"(^[1-9][0-9]{3,}$)");
+	bool match = regx.match(account).hasMatch();
+	if (!match)
+	{
+		addTipErr(TipErr::TIP_USER_ERR, "输入账号非法");
+		return false;
+	}
+
+	delTipErr(TipErr::TIP_USER_ERR);
+	return true;
 }
 
 bool ResetDialog::checkEmailImputValid()
