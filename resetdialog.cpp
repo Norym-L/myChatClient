@@ -8,6 +8,7 @@ ResetDialog::ResetDialog(QWidget* parent)
 	, ui(new Ui::ResetDialogClass)
 {
 	ui->setupUi(this);
+	ui->error_tip->clear();
 
 	connect(ui->email_edit, &QLineEdit::editingFinished, this, [this]()
 		{
