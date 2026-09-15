@@ -10,6 +10,11 @@ void ClickedLabel::mousePressEvent(QMouseEvent* event)
 {
 	if (event->button() == Qt::LeftButton)
 	{
+		if (m_normalPress.isEmpty() || m_selectedPress.isEmpty())
+		{
+			return;
+		}
+
 		if (m_currentState == ClickLabelState::NORMAL)
 		{
 			qDebug() << "clicked, change to normal pressed: " << m_normalPress;
@@ -32,6 +37,11 @@ void ClickedLabel::mouseReleaseEvent(QMouseEvent* event)
 {
 	if (event->button() == Qt::LeftButton)
 	{
+		if (m_normalHover.isEmpty() || m_selectedHover.isEmpty())
+		{
+			return;
+		}
+
 		if (m_currentState == ClickLabelState::NORMAL)
 		{
 			qDebug() << "released, change to select hover: " << m_selectedHover;
@@ -54,6 +64,11 @@ void ClickedLabel::mouseReleaseEvent(QMouseEvent* event)
 
 void ClickedLabel::enterEvent(QEnterEvent* event)
 {
+	if (m_normalHover.isEmpty() || m_selectedHover.isEmpty())
+	{
+		return;
+	}
+
 	if (m_currentState == ClickLabelState::NORMAL)
 	{
 		qDebug() << "enter, change to normal hover:" << m_normalHover;
@@ -73,6 +88,11 @@ void ClickedLabel::enterEvent(QEnterEvent* event)
 
 void ClickedLabel::leaveEvent(QEvent* event)
 {
+	if (m_normal.isEmpty() || m_selected.isEmpty())
+	{
+		return;
+	}
+
 	if (m_currentState == ClickLabelState::NORMAL)
 	{
 		qDebug() << "enter, change to normal:" << m_normal;
