@@ -155,7 +155,7 @@ bool ResetDialog::checkVerifyImputValid()
 	return true;
 }
 
-void ResetDialog::showTip(const QString& str, bool b_ok)
+void ResetDialog::showTip(const QString& str, const bool b_ok) const
 {
 	if (b_ok)
 	{

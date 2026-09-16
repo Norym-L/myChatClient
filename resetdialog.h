@@ -36,7 +36,7 @@ private:
 	/// 检查验证码合法性
 	bool checkVerifyImputValid();
 	/// 显示错误提示
-	void showTip(const QString& str, bool b_ok);
+	void showTip(const QString& str, bool b_ok) const;
 	/// 初始化处理函数
 	void initHandlers();
 
