@@ -40,6 +40,9 @@
     <Filter Include="Pages\重置密码页面">
       <UniqueIdentifier>{3f8a15ab-c24e-465a-a429-791ce55f9565}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\TCP">
+      <UniqueIdentifier>{fa94a510-8744-431b-a01a-0ffd15186d8f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -69,6 +72,9 @@
     <ClCompile Include="resetdialog.cpp">
       <Filter>Pages\重置密码页面</Filter>
     </ClCompile>
+    <ClCompile Include="TCPManager.cpp">
+      <Filter>Common\TCP</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -91,6 +97,9 @@
     </QtMoc>
     <QtMoc Include="resetdialog.h">
       <Filter>Pages\重置密码页面</Filter>
+    </QtMoc>
+    <QtMoc Include="TCPManager.h">
+      <Filter>Common\TCP</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

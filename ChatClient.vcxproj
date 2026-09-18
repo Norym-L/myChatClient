@@ -106,11 +106,13 @@
   <ItemGroup>
     <ClCompile Include="clicked_label.cpp" />
     <ClCompile Include="resetdialog.cpp" />
+    <ClCompile Include="TCPManager.cpp" />
     <ClCompile Include="timer_button.cpp" />
     <None Include="style\stylesheet.qss" />
     <QtMoc Include="clicked_label.h" />
     <QtMoc Include="resetdialog.h" />
     <ClInclude Include="resource.h" />
+    <QtMoc Include="TCPManager.h" />
     <ClInclude Include="timer_button.h" />
     <QtRcc Include="rc.qrc" />
     <QtUic Include="logindialog.ui" />
