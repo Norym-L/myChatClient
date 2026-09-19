@@ -218,7 +218,7 @@ void RegisterDialog::on_get_token_button_clicked()
 		HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/get_Verifycode"),
 			json_obj,
 			ReqId::ID_GET_VERIFY_CODE,
-			Modules::REGISTERMOD);
+			Modules::REGISTER_MOD);
 	}
 	else
 	{
@@ -332,6 +332,6 @@ void RegisterDialog::on_confirm_button_clicked()
 	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
 		json_obj,
 		ReqId::ID_REG_USER,
-		Modules::REGISTERMOD);
+		Modules::REGISTER_MOD);
 }
 

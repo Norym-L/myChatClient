@@ -46,7 +46,7 @@ ResetDialog::ResetDialog(QWidget* parent)
 				QUrl(GATE_URL_PERFIX + "/get_Verifycode"),
 				json_object,
 				ReqId::ID_GET_VERIFY_CODE,
-				Modules::REGISTERMOD);
+				Modules::REGISTER_MOD);
 		});
 
 	// 确认按钮
@@ -69,7 +69,7 @@ ResetDialog::ResetDialog(QWidget* parent)
 				QUrl(GATE_URL_PERFIX + "/reset_password"),
 				json_object,
 				ReqId::ID_RESET_PWD,
-				Modules::RESETMOD);
+				Modules::RESET_MOD);
 		});
 }
 

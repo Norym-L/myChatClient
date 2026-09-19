@@ -5,9 +5,11 @@
 
 #include <QRegularExpression>
 
+#include "TCPManager.h"
+
 LoginDialog::LoginDialog(QWidget* parent)
 	: QDialog(parent)
-	, ui(new Ui::LoginDialog)
+	  , ui(new Ui::LoginDialog)
 {
 	ui->setupUi(this);
 
@@ -16,31 +18,35 @@ LoginDialog::LoginDialog(QWidget* parent)
 	ui->forget_label->setCursor(Qt::PointingHandCursor);
 	ui->forget_label->setState("normal", "hover", "hover", "normal", "hover", "hover");
 	connect(ui->forget_label, &ClickedLabel::clicked, this, [this]()
-		{
-			emit switchReset();
-		});
+	{
+		emit switchReset();
+	});
 
 	ui->error_tip->clear();
 
 	/// 登录按钮
 	connect(ui->login_button, &QPushButton::clicked, this, [this]()
-		{
-			login();
-		});
+	{
+		login();
+	});
 
 	/// 错误提示
 	connect(ui->pass_edit, &QLineEdit::editingFinished, this, [this]()
-		{
-			checkPasswordImputValid();
-		});
+	{
+		checkPasswordImputValid();
+	});
 	connect(ui->account_edit, &QLineEdit::editingFinished, this, [this]()
-		{
-			checkAccountImputValid();
-		});
+	{
+		checkAccountImputValid();
+	});
 
 	/// 消息处理
 	initHttpHandlers();
 	connect(&HttpManager::GetInstance(), &HttpManager::sig_login_mod_finish, this, &LoginDialog::slot_login_mod_finish);
+
+	/// tcp连接
+	connect(this, &LoginDialog::sig_connectTcp, &TCPManager::GetInstance(), &TCPManager::slot_tcpConnect);
+	connect(&TCPManager::GetInstance(), &TCPManager::sig_connectSuccess, this, &LoginDialog::slot_tcpConnectFinish);
 }
 
 LoginDialog::~LoginDialog()
@@ -135,30 +141,43 @@ void LoginDialog::login()
 		QUrl(GATE_URL_PERFIX + "/user_login"),
 		json_object,
 		ReqId::ID_LOGIN_USER,
-		Modules::LOGINMOD);
+		Modules::LOGIN_MOD);
 }
 
 void LoginDialog::initHttpHandlers()
 {
 	m_handlers.insert(ReqId::ID_LOGIN_USER, [this](QJsonObject json_object)
+	{
+		int error = json_object["error"].toInt();
+		if (error != ErrorCodes::SUCCESS)
 		{
-			int error = json_object["error"].toInt();
-			if (error != ErrorCodes::SUCCESS)
+			if (error == ErrorCodes::PASSWORD_ERROR)
 			{
-				if (error == ErrorCodes::PASSWORD_ERROR)
-				{
-					showTip(tr("账号或密码错误"), false);
-				}
-				else
-				{
-					showTip(tr("参数错误"), false);
-				}
-				return;
+				showTip(tr("账号或密码错误"), false);
 			}
-			auto user = json_object["user"].toString();
-			showTip(tr("登录成功"), true);
-			qDebug() << "user account: " << user;
-		});
+			else
+			{
+				showTip(tr("参数错误"), false);
+			}
+			return;
+		}
+		auto user = json_object["user"].toString();
+
+		ServerInfo si;
+		si._uid = json_object["uid"].toInt();
+		si._token = json_object["token"].toString();
+		si._host = json_object["host"].toString();
+		si._port = json_object["port"].toString();
+
+		m_uid = si._uid;
+		m_token = si._token;
+
+		showTip(tr("登录成功"), true);
+		qDebug() << "user account: " << user;
+		qDebug() << "user is " << user << " uid is " << si._uid << " host is "
+			<< si._host << " Port is " << si._port << " Token is " << si._token;
+		emit sig_connectTcp(si);
+	});
 }
 
 void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
@@ -177,4 +196,25 @@ void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
 	}
 
 	m_handlers[id](json_document.object());
+}
+
+void LoginDialog::slot_tcpConnectFinish(bool success)
+{
+	if (success)
+	{
+		showTip(tr("服务器连接成功，正在登录..."), true);
+		QJsonObject json_object;
+		json_object["uid"] = m_uid;
+		json_object["token"] = m_token;
+
+		QJsonDocument document(json_object);
+		QString json_str = document.toJson(QJsonDocument::Indented);
+
+		// 发送tcp请求
+		TCPManager::GetInstance().sig_sendData(ReqId::ID_CHAT_LOGIN, json_str);
+	}
+	else
+	{
+		showTip(tr("网络异常"), false);
+	}
 }

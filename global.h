@@ -22,28 +22,29 @@ extern std::function<void(QWidget*)> repolish;
 /**
  * @brief The ReqId enum 请求
  */
-enum ReqId
+enum ReqId : std::uint16_t
 {
 	ID_GET_VERIFY_CODE = 1001, // 获取验证码
 	ID_REG_USER = 1002, // 注册用户
 	ID_RESET_PWD = 1003, // 重置密码
 	ID_LOGIN_USER = 1004, // 用户登录
+	ID_CHAT_LOGIN = 1005, // 聊天系统登录
 };
 
 /**
  * @brief The Modules enum 模块
  */
-enum Modules
+enum Modules : std::uint8_t
 {
-	REGISTERMOD = 0, // 注册模块
-	RESETMOD = 1, // 重置密码模块
-	LOGINMOD = 2, // 登录模块
+	REGISTER_MOD = 0, // 注册模块
+	RESET_MOD = 1, // 重置密码模块
+	LOGIN_MOD = 2, // 登录模块
 };
 
 /**
  * @brief The ErrorCodes enum 异常码
  */
-enum ErrorCodes
+enum ErrorCodes : std::uint16_t
 {
 	SUCCESS = 0, // 成功
 	ERR_JSON = 1, // json 解析失败
@@ -63,7 +64,7 @@ enum ErrorCodes
 };
 
 /// 注册页面错误提示
-enum class TipErr
+enum class TipErr : std::uint8_t
 {
 	TIP_SUCCESS = 0,
 	TIP_EMAIL_ERR = 1,
@@ -75,7 +76,7 @@ enum class TipErr
 };
 
 /// label选择状态
-enum class ClickLabelState
+enum class ClickLabelState : std::uint8_t
 {
 	NORMAL = 0,
 	SELECT = 1,
@@ -83,6 +84,8 @@ enum class ClickLabelState
 
 struct ServerInfo
 {
+	int _uid;
+	QString _token;
 	QString _host;
 	QString _port;
 };

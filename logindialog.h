@@ -32,13 +32,17 @@ private:
     QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
     Ui::LoginDialog *ui;
     QMap<TipErr, QString> m_tipErrs;
+    int m_uid;
+    QString m_token;
 
 private slots:
     void slot_login_mod_finish(ReqId id, QString res, ErrorCodes err);
+    void slot_tcpConnectFinish(bool success);
 
 signals:
     void switchRegister();
     void switchReset();
+    void sig_connectTcp(ServerInfo);
 };
 
 #endif // LOGINDIALOG_H
