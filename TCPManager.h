@@ -12,10 +12,15 @@ class TCPManager : public QObject, public Singleton<TCPManager>
 	friend class Singleton;
 
 	Q_OBJECT
+public:
+	void handleMessage(ReqId id, int len, QByteArray data);
 
 private:
 	TCPManager();
 
+	void initHandlers();
+
+	std::map<ReqId, std::function<void(ReqId , int , QByteArray)>> m_handlers;
 	QByteArray m_buffer;
 	QTcpSocket m_socket;
 	QString m_host;
@@ -30,4 +35,6 @@ public slots:
 signals:
 	void sig_connectSuccess(bool be_success);
 	void sig_sendData(ReqId req_id, QString data);
+	void sig_loginFailed(int error);
+	void sig_switchToChatDialog(void);
 };

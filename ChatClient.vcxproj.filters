@@ -75,6 +75,9 @@
     <ClCompile Include="TCPManager.cpp">
       <Filter>Common\TCP</Filter>
     </ClCompile>
+    <ClCompile Include="UserManager.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -100,6 +103,9 @@
     </QtMoc>
     <QtMoc Include="TCPManager.h">
       <Filter>Common\TCP</Filter>
+    </QtMoc>
+    <QtMoc Include="UserManager.h">
+      <Filter>Common</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

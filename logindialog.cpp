@@ -47,6 +47,9 @@ LoginDialog::LoginDialog(QWidget* parent)
 	/// tcp连接
 	connect(this, &LoginDialog::sig_connectTcp, &TCPManager::GetInstance(), &TCPManager::slot_tcpConnect);
 	connect(&TCPManager::GetInstance(), &TCPManager::sig_connectSuccess, this, &LoginDialog::slot_tcpConnectFinish);
+
+	// 登录失败
+	connect(&TCPManager::GetInstance(), &TCPManager::sig_loginFailed, this, &LoginDialog::slot_loginFailed);
 }
 
 LoginDialog::~LoginDialog()
@@ -217,4 +220,10 @@ void LoginDialog::slot_tcpConnectFinish(bool success)
 	{
 		showTip(tr("网络异常"), false);
 	}
+}
+
+void LoginDialog::slot_loginFailed(int error_code)
+{
+	qDebug() << "[login] login to chat server error: " << error_code;
+	showTip(tr("登录失败"), false);
 }

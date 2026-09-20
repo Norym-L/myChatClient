@@ -1,6 +1,20 @@
 #include "TCPManager.h"
 #include "TCPManager.h"
 
+#include "logindialog.h"
+#include "UserManager.h"
+
+void TCPManager::handleMessage(ReqId id, int len, QByteArray data)
+{
+	auto find_iter = m_handlers.find(id);
+	if (find_iter == m_handlers.end())
+	{
+		qDebug() << "[tcp] message handle a unknow reqId: " << id;
+	}
+
+	find_iter->second(id, len, data);
+}
+
 TCPManager::TCPManager()
 	: m_host(""), m_port(0), m_messageId(0), m_messageLen(0), m_beReceivePending(false)
 {
@@ -60,6 +74,44 @@ TCPManager::TCPManager()
 		        Q_UNUSED(socketError)
 		        qDebug() << "[Tcp] error: " << m_socket.errorString();
 	        });
+}
+
+void TCPManager::initHandlers()
+{
+	m_handlers.emplace(ReqId::ID_CHAT_LOGIN_RESP, [this](ReqId id, int len, QByteArray data)
+	{
+		qDebug() << "[tcp] handle message id: " << id << " data is: " << data;
+		QJsonDocument json_document = QJsonDocument::fromJson(data);
+
+		if (json_document.isNull())
+		{
+			qDebug() << "[tcp] handle failed to parse json!";
+			return;
+		}
+
+		QJsonObject json_object = json_document.object();
+		if (!json_object.contains("error"))
+		{
+			int error = ErrorCodes::ERROR_JSON;
+			qDebug() << "[tcp] handle login failed, error: " << error;
+			emit sig_loginFailed(error);
+			return;
+		}
+
+		int error = json_object["error"].toInt();
+		if (error != ErrorCodes::SUCCESS)
+		{
+			qDebug() << "[tcp] handle login failed, error" << error;
+			emit sig_loginFailed(error);
+			return;
+		}
+
+		auto& user = UserManager::GetInstance();
+		user.setUid(json_object["uid"].toInt());
+		user.setName(json_object["name"].toString());
+		user.setToken(json_object["token"].toString());
+		emit sig_switchToChatDialog();
+	});
 }
 
 void TCPManager::slot_tcpConnect(const ServerInfo& si)

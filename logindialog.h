@@ -38,6 +38,7 @@ private:
 private slots:
     void slot_login_mod_finish(ReqId id, QString res, ErrorCodes err);
     void slot_tcpConnectFinish(bool success);
+    void slot_loginFailed(int error_code);
 
 signals:
     void switchRegister();

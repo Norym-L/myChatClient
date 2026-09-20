@@ -108,6 +108,8 @@
     <ClCompile Include="resetdialog.cpp" />
     <ClCompile Include="TCPManager.cpp" />
     <ClCompile Include="timer_button.cpp" />
+    <ClCompile Include="UserManager.cpp" />
+    <QtMoc Include="UserManager.h" />
     <None Include="style\stylesheet.qss" />
     <QtMoc Include="clicked_label.h" />
     <QtMoc Include="resetdialog.h" />
