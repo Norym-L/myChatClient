@@ -7,6 +7,12 @@
 
 #include "TCPManager.h"
 
+void LoginDialog::enableLoginButton(const bool enable) const
+{
+	ui->login_button->setEnabled(enable);
+}
+
+
 LoginDialog::LoginDialog(QWidget* parent)
 	: QDialog(parent)
 	  , ui(new Ui::LoginDialog)
@@ -145,6 +151,7 @@ void LoginDialog::login()
 		json_object,
 		ReqId::ID_LOGIN_USER,
 		Modules::LOGIN_MOD);
+	enableLoginButton(false);
 }
 
 void LoginDialog::initHttpHandlers()
@@ -188,6 +195,7 @@ void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
 	if (err != ErrorCodes::SUCCESS)
 	{
 		showTip(tr("网络请求错误"), false);
+		enableLoginButton(true);
 		return;
 	}
 
@@ -195,6 +203,7 @@ void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
 	if (json_document.isEmpty() || !json_document.isObject())
 	{
 		showTip(tr("Json解析失败"), false);
+		enableLoginButton(true);
 		return;
 	}
 
@@ -219,6 +228,7 @@ void LoginDialog::slot_tcpConnectFinish(bool success)
 	else
 	{
 		showTip(tr("网络异常"), false);
+		enableLoginButton(true);
 	}
 }
 
@@ -226,4 +236,5 @@ void LoginDialog::slot_loginFailed(int error_code)
 {
 	qDebug() << "[login] login to chat server error: " << error_code;
 	showTip(tr("登录失败"), false);
+	enableLoginButton(true);
 }

@@ -28,6 +28,8 @@ private:
     void login();
     void initHttpHandlers();
 
+    /// 设置登录按钮是否启用
+    void enableLoginButton(bool enable) const;
 
     QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
     Ui::LoginDialog *ui;
