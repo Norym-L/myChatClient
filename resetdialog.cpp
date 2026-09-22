@@ -1,7 +1,9 @@
 #include "resetdialog.h"
-#include "resetdialog.h"
+
+#include <QJsonDocument>
 
 #include "httpmanager.h"
+#include "logger.h"
 
 ResetDialog::ResetDialog(QWidget* parent)
 	: QDialog(parent)
@@ -40,13 +42,17 @@ ResetDialog::ResetDialog(QWidget* parent)
 				return;
 			}
 
+			// 文档：POST /get_Verifycode 必填 email；本页的响应由 RESET_MOD 分发回来
 			QJsonObject json_object;
-			json_object["email"] = ui->email_edit->text();
+			json_object.insert("email", ui->email_edit->text());
+
+			showTip(tr("正在获取验证码..."), true);
+
 			HttpManager::GetInstance().postHttpReq(
-				QUrl(GATE_URL_PERFIX + "/get_Verifycode"),
+				QUrl(GATE_URL_PREFIX + "/get_Verifycode"),
 				json_object,
 				ReqId::ID_GET_VERIFY_CODE,
-				Modules::REGISTER_MOD);
+				Modules::RESET_MOD);
 		});
 
 	// 确认按钮
@@ -60,13 +66,18 @@ ResetDialog::ResetDialog(QWidget* parent)
 				return;
 			}
 
+			// 文档：/reset_password 的 user 字段为 uid（数字），验证码字段为 verify_code
 			QJsonObject json_object;
-			json_object["user"] = ui->user_edit->text().toInt();
-			json_object["email"] = ui->email_edit->text();
-			json_object["password"] = ui->new_password_edit->text();
-			json_object["verify_code"] = ui->verify_edit->text();
+			json_object.insert("user", ui->user_edit->text().toInt());
+			json_object.insert("email", ui->email_edit->text());
+			json_object.insert("password", ui->new_password_edit->text());
+			json_object.insert("verify_code", ui->verify_edit->text());
+
+			showTip(tr("正在重置密码..."), true);
+			ui->ok_button->setEnabled(false);
+
 			HttpManager::GetInstance().postHttpReq(
-				QUrl(GATE_URL_PERFIX + "/reset_password"),
+				QUrl(GATE_URL_PREFIX + "/reset_password"),
 				json_object,
 				ReqId::ID_RESET_PWD,
 				Modules::RESET_MOD);
@@ -147,11 +158,11 @@ bool ResetDialog::checkVerifyImputValid()
 	auto verify = ui->verify_edit->text();
 	if (verify.isEmpty())
 	{
-		addTipErr(TipErr::TIP_VARIFY_ERR, tr("验证码不能为空"));
+		addTipErr(TipErr::TIP_VERIFY_ERR, tr("验证码不能为空"));
 		return false;
 	}
 
-	delTipErr(TipErr::TIP_VARIFY_ERR);
+	delTipErr(TipErr::TIP_VERIFY_ERR);
 	return true;
 }
 
@@ -172,31 +183,43 @@ void ResetDialog::showTip(const QString& str, const bool b_ok) const
 
 void ResetDialog::initHandlers()
 {
-	m_handlers.insert(ReqId::ID_GET_VERIFY_CODE, [this](QJsonObject json_object)
+	m_handlers.insert(ReqId::ID_GET_VERIFY_CODE, [this](const QJsonObject& json_object)
 		{
-			int error = json_object["error"].toInt();
+			const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
 			if (error != ErrorCodes::SUCCESS)
 			{
-				showTip(tr("参数错误"), false);
+				// 文档：1001 参数缺失；1002 转调验证码服务失败
+				showTip(errorCodeToTip(error), false);
 				return;
 			}
 
 			showTip(tr("验证码已经发送到邮箱，注意查收"), true);
-			qDebug() << "email is: " << json_object["email"].toString();
+			LOG_INFO() << "[reset] verify code sent to:" << json_object.value("email").toString();
+
+			// 文档：仅 Debug 构建（GATE_DEBUG）会返回 verify_code，用于本地联调
+			if (json_object.contains("verify_code"))
+			{
+				LOG_DEBUG() << "[reset] debug verify_code:" << json_object.value("verify_code").toString();
+			}
 		});
 
-	m_handlers.insert(ReqId::ID_RESET_PWD, [this](QJsonObject json_object)
+	m_handlers.insert(ReqId::ID_RESET_PWD, [this](const QJsonObject& json_object)
 		{
-			int error = json_object["error"].toInt();
+			ui->ok_button->setEnabled(true);
+
+			const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
 			if (error != ErrorCodes::SUCCESS)
 			{
-				showTip(tr("参数错误"), false);
+				// 文档：1003 验证码过期、1004 验证码错误、1013 后端故障、
+				//       1007 uid 与邮箱不匹配、1008 密码更新失败
+				showTip(errorCodeToTip(error), false);
 				return;
 			}
 
+			// 文档：成功响应回显 email 与 verify_code，不再回显 passwd
 			showTip(tr("重置成功，点击返回登录"), true);
-			qDebug() << "email is: " << json_object["email"].toString();
-			qDebug() << "uuid is:" << json_object["uuid"].toString();
+			LOG_INFO() << "[reset] reset password success, email:" << json_object.value("email").toString()
+				<< "verify_code:" << json_object.value("verify_code").toString();
 		});
 }
 
@@ -204,7 +227,8 @@ void ResetDialog::slot_resetModFinish(ReqId id, QString res, ErrorCodes error)
 {
 	if (error != ErrorCodes::SUCCESS)
 	{
-		showTip(tr("网络请求错误"), false);
+		showTip(errorCodeToTip(error), false);
+		ui->ok_button->setEnabled(true);
 		return;
 	}
 
@@ -212,13 +236,21 @@ void ResetDialog::slot_resetModFinish(ReqId id, QString res, ErrorCodes error)
 	if (json_document.isNull() ||
 		!json_document.isObject())
 	{
-		showTip(tr("Json解析错误"), false);
+		showTip(tr("服务器返回数据解析失败"), false);
+		ui->ok_button->setEnabled(true);
 		return;
 	}
 
-	m_handlers[id](json_document.object());
+	const auto iter = m_handlers.find(id);
+	if (iter == m_handlers.end())
+	{
+		LOG_WARN() << "[reset] no handler for req id:" << static_cast<int>(id);
+		ui->ok_button->setEnabled(true);
+		return;
+	}
+
+	iter.value()(json_document.object());
 }
 
 ResetDialog::~ResetDialog()
 {}
-

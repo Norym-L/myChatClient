@@ -63,6 +63,9 @@
     <ClCompile Include="global.cpp">
       <Filter>Common\Core</Filter>
     </ClCompile>
+    <ClCompile Include="logger.cpp">
+      <Filter>Common\Core</Filter>
+    </ClCompile>
     <ClCompile Include="timer_button.cpp">
       <Filter>Pages\注册页面\获取验证码按钮</Filter>
     </ClCompile>
@@ -135,6 +138,9 @@
       <Filter>Pages\注册页面\获取验证码按钮</Filter>
     </ClInclude>
     <ClInclude Include="global.h">
+      <Filter>Common\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="logger.h">
       <Filter>Common\Core</Filter>
     </ClInclude>
     <ClInclude Include="resource.h" />

@@ -16,7 +16,7 @@ class LoginDialog : public QDialog
 
 public:
     explicit LoginDialog(QWidget *parent = nullptr);
-    ~LoginDialog();
+    ~LoginDialog() override;
     bool checkAccountImputValid();
     bool checkPasswordImputValid();
     void addTipErr(TipErr tip, const QString& notice);
@@ -34,13 +34,15 @@ private:
     QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
     Ui::LoginDialog *ui;
     QMap<TipErr, QString> m_tipErrs;
-    int m_uid;
+    int m_uid = 0;
     QString m_token;
 
 private slots:
     void slot_login_mod_finish(ReqId id, QString res, ErrorCodes err);
     void slot_tcpConnectFinish(bool success);
     void slot_loginFailed(int error_code);
+    void slot_tcpError(const QString& reason);
+    void slot_switchToChatDialog();
 
 signals:
     void switchRegister();

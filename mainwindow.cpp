@@ -1,17 +1,14 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "logger.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    m_login_dialog = new LoginDialog(this);
-    m_login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
-    setCentralWidget(m_login_dialog);
-
-    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
-    connect(m_login_dialog, &LoginDialog::switchReset, this, &MainWindow::slotSwitchReset);
+    slotSwitchLogin();
 }
 
 MainWindow::~MainWindow()
@@ -19,50 +16,80 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::switchPage(QWidget* page)
+{
+    QWidget* old_page = centralWidget();
+    if (old_page == page)
+    {
+        page->show();
+        return;
+    }
+
+    setCentralWidget(page);
+    page->show();
+    LOG_DEBUG() << "[ui] switched page to" << page->metaObject()->className();
+
+    if (old_page == nullptr)
+    {
+        return;
+    }
+
+    // 旧页面不再使用：先清空成员，再销毁，避免野指针
+    if (old_page == m_login_dialog)
+    {
+        m_login_dialog = nullptr;
+    }
+    if (old_page == m_register_dialog)
+    {
+        m_register_dialog = nullptr;
+    }
+    if (old_page == m_reset_dialog)
+    {
+        m_reset_dialog = nullptr;
+    }
+
+    old_page->hide();
+    old_page->deleteLater();
+}
+
 void MainWindow::slotSwitchReg()
 {
-    m_register_dialog = new RegisterDialog(this);
-    m_register_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+    if (m_register_dialog == nullptr)
+    {
+        auto* register_dialog = new RegisterDialog(this);
+        register_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+        connect(register_dialog, &RegisterDialog::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin);
+        m_register_dialog = register_dialog;
+    }
 
-    connect(m_register_dialog, &RegisterDialog::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin);
-    setCentralWidget(m_register_dialog);
-    m_login_dialog->hide();
-    m_register_dialog->show();
+    switchPage(m_register_dialog);
 }
 
 void MainWindow::slotSwitchLogin()
 {
-    m_login_dialog = new LoginDialog(this);
-    m_login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
-    setCentralWidget(m_login_dialog);
+    if (m_login_dialog == nullptr)
+    {
+        auto* login_dialog = new LoginDialog(this);
+        login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+        // 连接登录界面注册信号
+        connect(login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
+        // 连接登录界面忘记密码信号
+        connect(login_dialog, &LoginDialog::switchReset, this, &MainWindow::slotSwitchReset);
+        m_login_dialog = login_dialog;
+    }
 
-    m_register_dialog->hide();
-    m_login_dialog->show();
-    connect(m_login_dialog, &LoginDialog::switchReset, this, &MainWindow::slotSwitchReset);
-    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
-}
-
-void MainWindow::slotSwitchLogin2()
-{
-    m_login_dialog = new LoginDialog(this);
-    m_login_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
-    setCentralWidget(m_login_dialog);
-
-    m_reset_dialog->hide();
-    m_login_dialog->show();
-    //连接登录界面忘记密码信号
-    connect(m_login_dialog, &LoginDialog::switchReset, this, &MainWindow::slotSwitchReset);
-    //连接登录界面注册信号
-    connect(m_login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
+    switchPage(m_login_dialog);
 }
 
 void MainWindow::slotSwitchReset()
 {
-    m_reset_dialog = new ResetDialog(this);
-    m_reset_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+    if (m_reset_dialog == nullptr)
+    {
+        auto* reset_dialog = new ResetDialog(this);
+        reset_dialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+        connect(reset_dialog, &ResetDialog::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin);
+        m_reset_dialog = reset_dialog;
+    }
 
-    connect(m_reset_dialog, &ResetDialog::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin2);
-    setCentralWidget(m_reset_dialog);
-    m_reset_dialog->hide();
-    m_reset_dialog->show();
+    switchPage(m_reset_dialog);
 }

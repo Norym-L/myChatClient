@@ -1,6 +1,8 @@
 #include "timer_button.h"
 #include <QMouseEvent>
 
+#include "logger.h"
+
 TimerButton::TimerButton(QWidget* parent)
 	: QPushButton(parent), m_counter(10)
 {
@@ -30,11 +32,11 @@ void TimerButton::mouseReleaseEvent(QMouseEvent* e)
 {
 	if (e->button() == Qt::LeftButton)
 	{
-		qDebug() << "释放获取验证码按钮\n";
+		LOG_DEBUG() << "[ui] get verify code button released, countdown:" << m_counter;
 		this->setEnabled(false);
 		this->setText(tr("%1 秒后重新获取验证码").arg(m_counter));
 		m_timer->start(1000);
-		emit clicked();
+		// 注意：clicked() 由基类实现发出，此处不要再手动 emit，否则会重复发起一次请求
 	}
 
 	QPushButton::mouseReleaseEvent(e);

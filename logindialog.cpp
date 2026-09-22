@@ -3,9 +3,12 @@
 #include "httpmanager.h"
 #include "ui_logindialog.h"
 
+#include <QJsonDocument>
 #include <QRegularExpression>
 
 #include "TCPManager.h"
+#include "UserManager.h"
+#include "logger.h"
 
 void LoginDialog::enableLoginButton(const bool enable) const
 {
@@ -54,8 +57,10 @@ LoginDialog::LoginDialog(QWidget* parent)
 	connect(this, &LoginDialog::sig_connectTcp, &TCPManager::GetInstance(), &TCPManager::slot_tcpConnect);
 	connect(&TCPManager::GetInstance(), &TCPManager::sig_connectSuccess, this, &LoginDialog::slot_tcpConnectFinish);
 
-	// 登录失败
+	/// 聊天服登录结果
 	connect(&TCPManager::GetInstance(), &TCPManager::sig_loginFailed, this, &LoginDialog::slot_loginFailed);
+	connect(&TCPManager::GetInstance(), &TCPManager::sig_tcpError, this, &LoginDialog::slot_tcpError);
+	connect(&TCPManager::GetInstance(), &TCPManager::sig_switchToChatDialog, this, &LoginDialog::slot_switchToChatDialog);
 }
 
 LoginDialog::~LoginDialog()
@@ -140,52 +145,62 @@ void LoginDialog::login()
 		return;
 	}
 
-	auto account = ui->account_edit->text().toInt();
-	auto password = ui->pass_edit->text();
+	// 文档：/user_login 的 user 字段为 uid（数字）；email 仅用于响应回显、不参与校验
+	const int uid = ui->account_edit->text().toInt();
+	const QString password = ui->pass_edit->text();
 
 	QJsonObject json_object;
-	json_object["user"] = account;
-	json_object["password"] = password;
+	json_object.insert("user", uid);
+	json_object.insert("password", password);
+
+	showTip(tr("正在登录..."), true);
+	enableLoginButton(false);
+
 	HttpManager::GetInstance().postHttpReq(
-		QUrl(GATE_URL_PERFIX + "/user_login"),
+		QUrl(GATE_URL_PREFIX + "/user_login"),
 		json_object,
 		ReqId::ID_LOGIN_USER,
 		Modules::LOGIN_MOD);
-	enableLoginButton(false);
 }
 
 void LoginDialog::initHttpHandlers()
 {
-	m_handlers.insert(ReqId::ID_LOGIN_USER, [this](QJsonObject json_object)
+	m_handlers.insert(ReqId::ID_LOGIN_USER, [this](const QJsonObject& json_object)
 	{
-		int error = json_object["error"].toInt();
+		const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
 		if (error != ErrorCodes::SUCCESS)
 		{
-			if (error == ErrorCodes::PASSWORD_ERROR)
-			{
-				showTip(tr("账号或密码错误"), false);
-			}
-			else
-			{
-				showTip(tr("参数错误"), false);
-			}
+			// 文档：1006 凭据错误、1013 后端故障（稍后重试）、1002 获取聊天服失败
+			showTip(errorCodeToTip(error), false);
+			enableLoginButton(true);
 			return;
 		}
-		auto user = json_object["user"].toString();
 
 		ServerInfo si;
-		si._uid = json_object["uid"].toInt();
-		si._token = json_object["token"].toString();
-		si._host = json_object["host"].toString();
-		si._port = json_object["port"].toString();
+		si._uid = json_object.value("uid").toInt();
+		si._token = json_object.value("token").toString();
+		si._host = json_object.value("host").toString();
+		si._port = json_object.value("port").toString();
+
+		// 文档：响应中的 email 为请求回显（未传则为空串）
+		const QString email = json_object.value("email").toString();
+
+		if (si._token.isEmpty() || si._host.isEmpty() || si._port.isEmpty())
+		{
+			LOG_WARN() << "[login] login resp is incomplete:" << json_object;
+			showTip(tr("服务器返回数据不完整"), false);
+			enableLoginButton(true);
+			return;
+		}
 
 		m_uid = si._uid;
 		m_token = si._token;
 
-		showTip(tr("登录成功"), true);
-		qDebug() << "user account: " << user;
-		qDebug() << "user is " << user << " uid is " << si._uid << " host is "
-			<< si._host << " Port is " << si._port << " Token is " << si._token;
+		LOG_INFO() << "[login] http login success, uid:" << si._uid << "email:" << email
+			<< "host:" << si._host << "port:" << si._port;
+
+		// 文档：取得 token/host/port 后应连接该 ChatServer 并发送 message_id = 0 的登录帧
+		showTip(tr("登录成功，正在连接聊天服务器..."), true);
 		emit sig_connectTcp(si);
 	});
 }
@@ -194,7 +209,7 @@ void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
 {
 	if (err != ErrorCodes::SUCCESS)
 	{
-		showTip(tr("网络请求错误"), false);
+		showTip(errorCodeToTip(err), false);
 		enableLoginButton(true);
 		return;
 	}
@@ -202,39 +217,67 @@ void LoginDialog::slot_login_mod_finish(ReqId id, QString res, ErrorCodes err)
 	QJsonDocument json_document = QJsonDocument::fromJson(res.toUtf8());
 	if (json_document.isEmpty() || !json_document.isObject())
 	{
-		showTip(tr("Json解析失败"), false);
+		showTip(tr("服务器返回数据解析失败"), false);
 		enableLoginButton(true);
 		return;
 	}
 
-	m_handlers[id](json_document.object());
+	const auto iter = m_handlers.find(id);
+	if (iter == m_handlers.end())
+	{
+		LOG_WARN() << "[login] no handler for req id:" << static_cast<int>(id);
+		enableLoginButton(true);
+		return;
+	}
+
+	iter.value()(json_document.object());
 }
 
 void LoginDialog::slot_tcpConnectFinish(bool success)
 {
-	if (success)
+	if (!success)
 	{
-		showTip(tr("服务器连接成功，正在登录..."), true);
-		QJsonObject json_object;
-		json_object["uid"] = m_uid;
-		json_object["token"] = m_token;
-
-		QJsonDocument document(json_object);
-		QString json_str = document.toJson(QJsonDocument::Indented);
-
-		// 发送tcp请求
-		TCPManager::GetInstance().sig_sendData(ReqId::ID_CHAT_LOGIN, json_str);
+		showTip(tr("连接聊天服务器失败，请稍后重试"), false);
+		enableLoginButton(true);
+		return;
 	}
-	else
+
+	showTip(tr("已连接聊天服务器，正在登录..."), true);
+
+	// 文档：MESSAGE_CHAT_LOGIN(0) 的 body 为 {"uid": <int>, "token": <string>}
+	QJsonObject json_object;
+	json_object.insert("uid", m_uid);
+	json_object.insert("token", m_token);
+
+	if (!TCPManager::GetInstance().sendChatMessage(ReqId::ID_CHAT_LOGIN, json_object))
 	{
-		showTip(tr("网络异常"), false);
+		showTip(tr("登录消息发送失败"), false);
 		enableLoginButton(true);
 	}
 }
 
 void LoginDialog::slot_loginFailed(int error_code)
 {
-	qDebug() << "[login] login to chat server error: " << error_code;
-	showTip(tr("登录失败"), false);
+	LOG_WARN() << "[login] login to chat server error:" << error_code;
+	showTip(errorCodeToTip(error_code), false);
 	enableLoginButton(true);
+}
+
+void LoginDialog::slot_tcpError(const QString& reason)
+{
+	LOG_WARN() << "[login] chat server link error:" << reason;
+	showTip(errorCodeToTip(ErrorCodes::ERR_NETWORK), false);
+	enableLoginButton(true);
+}
+
+void LoginDialog::slot_switchToChatDialog()
+{
+	auto& user = UserManager::GetInstance();
+	LOG_INFO() << "[login] chat server login success, uid:" << user.getUid() << "name:" << user.getName();
+
+	// 文档：当前 ChatServer 仅支持登录消息，尚无聊天转发等业务消息类型
+	showTip(tr("登录成功"), true);
+	enableLoginButton(false);
+	ui->account_edit->setEnabled(false);
+	ui->pass_edit->setEnabled(false);
 }

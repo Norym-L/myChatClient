@@ -1,9 +1,12 @@
 #include "registerdialog.h"
 #include "ui_registerdialog.h"
 
+#include <QJsonDocument>
+
 #include "global.h"
 #include "httpmanager.h"
 #include "clicked_label.h"
+#include "logger.h"
 
 bool RegisterDialog::checkUserNameImputValid()
 {
@@ -70,11 +73,11 @@ bool RegisterDialog::checkVerifyImputValid()
 	auto verify = ui->token_edit->text();
 	if (verify.isEmpty())
 	{
-		addTipErr(TipErr::TIP_VARIFY_ERR, tr("验证码不能为空"));
+		addTipErr(TipErr::TIP_VERIFY_ERR, tr("验证码不能为空"));
 		return false;
 	}
 
-	delTipErr(TipErr::TIP_VARIFY_ERR);
+	delTipErr(TipErr::TIP_VERIFY_ERR);
 	return true;
 }
 
@@ -122,25 +125,25 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 	connect(ui->pass_visible, &ClickedLabel::clicked, this, [this]()
 		{
 			ui->pass_edit->setEchoMode(QLineEdit::Normal);
-			qDebug() << "passlabel was clicked";
+			LOG_DEBUG() << "passlabel was clicked";
 		});
 
 	connect(ui->pass_visible, &ClickedLabel::released, this, [this]()
 		{
 			ui->pass_edit->setEchoMode(QLineEdit::Password);
-			qDebug() << "passlabel was released";
+			LOG_DEBUG() << "passlabel was released";
 		});
 
 	connect(ui->pass2_visible, &ClickedLabel::clicked, this, [this]()
 		{
 			ui->pass2_edit->setEchoMode(QLineEdit::Normal);
-			qDebug() << "pass2label was clicked";
+			LOG_DEBUG() << "pass2label was clicked";
 		});
 
 	connect(ui->pass2_visible, &ClickedLabel::released, this, [this]()
 		{
 			ui->pass2_edit->setEchoMode(QLineEdit::Password);
-			qDebug() << "pass2label was released";
+			LOG_DEBUG() << "pass2label was released";
 		});
 
 	// 注册定时器（定时返回登录界面）
@@ -165,13 +168,13 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 		{
 			m_timer->stop();
 			emit sigSwitchLoginPage();
-			qDebug() << "return to login page";
+			LOG_DEBUG() << "return to login page";
 		});
 	connect(ui->cancel_button, &QPushButton::clicked, this, [this]()
 		{
 			m_timer->stop();
 			emit sigSwitchLoginPage();
-			qDebug() << "return to login page";
+			LOG_DEBUG() << "return to login page";
 		});
 
 
@@ -210,27 +213,31 @@ void RegisterDialog::on_get_token_button_clicked()
 	auto email = ui->email_edit->text();
 	QRegularExpression regex(R"((\w+)(\.|_)?(\w*)@(\w+)(\.(\w+))+)");
 	bool match = regex.match(email).hasMatch();
-	if (match)
-	{
-		// 发送验证码
-		QJsonObject json_obj;
-		json_obj["email"] = email;
-		HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/get_Verifycode"),
-			json_obj,
-			ReqId::ID_GET_VERIFY_CODE,
-			Modules::REGISTER_MOD);
-	}
-	else
+	if (!match)
 	{
 		showTip(tr("邮箱地址不准确"), false);
+		return;
 	}
+
+	// 文档：POST /get_Verifycode 必填 email
+	QJsonObject json_obj;
+	json_obj.insert("email", email);
+
+	showTip(tr("正在获取验证码..."), true);
+	ui->get_token_button->setEnabled(false);
+
+	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PREFIX + "/get_Verifycode"),
+		json_obj,
+		ReqId::ID_GET_VERIFY_CODE,
+		Modules::REGISTER_MOD);
 }
 
 void RegisterDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
 {
 	if (err != ErrorCodes::SUCCESS)
 	{
-		showTip(tr("网络请求错误"), false);
+		showTip(errorCodeToTip(err), false);
+		ui->confirm_button->setEnabled(true);
 		return;
 	}
 
@@ -238,18 +245,26 @@ void RegisterDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
 	QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
 	if (jsonDoc.isNull())
 	{
-		showTip(tr("josn解析失败"), false);
+		showTip(tr("服务器返回数据解析失败"), false);
+		ui->confirm_button->setEnabled(true);
 		return;
 	}
 	if (!jsonDoc.isObject())
 	{
-		showTip(tr("json解析失败"), false);
+		showTip(tr("服务器返回数据解析失败"), false);
+		ui->confirm_button->setEnabled(true);
 		return;
 	}
 
-	m_handlers[id](jsonDoc.object());
+	const auto iter = m_handlers.find(id);
+	if (iter == m_handlers.end())
+	{
+		LOG_WARN() << "[register] no handler for req id:" << static_cast<int>(id);
+		ui->confirm_button->setEnabled(true);
+		return;
+	}
 
-	return;
+	iter.value()(jsonDoc.object());
 }
 
 void RegisterDialog::initHttpHandlers()
@@ -257,32 +272,47 @@ void RegisterDialog::initHttpHandlers()
 	// 获取验证码回调函数
 	m_handlers.insert(ReqId::ID_GET_VERIFY_CODE, [this](const QJsonObject& jsonObj)
 		{
-			int error = jsonObj["error"].toInt();
+			ui->get_token_button->setEnabled(true);
+
+			const int error = jsonObj.value("error").toInt(ErrorCodes::ERROR_JSON);
 			if (error != ErrorCodes::SUCCESS)
 			{
-				showTip(tr("参数错误"), false);
-				qDebug() << "error: " << error << "  json: " << jsonObj << "\n";
+				// 文档：1001 参数缺失；1002 转调验证码服务失败
+				showTip(errorCodeToTip(error), false);
+				LOG_WARN() << "[register] get verify code failed, error:" << error << "json:" << jsonObj;
 				return;
 			}
 
-			auto email = jsonObj["email"].toString();
+			const QString email = jsonObj.value("email").toString();
 			showTip(tr("验证码已发送到邮箱，注意查收"), true);
-			qDebug() << "email is: " << email;
+			LOG_INFO() << "[register] verify code sent to:" << email;
+
+			// 文档：仅 Debug 构建（GATE_DEBUG）会返回 verify_code，用于本地联调
+			if (jsonObj.contains("verify_code"))
+			{
+				LOG_DEBUG() << "[register] debug verify_code:" << jsonObj.value("verify_code").toString();
+			}
 		});
 
 	// 注册用户回包逻辑
 	m_handlers.insert(ReqId::ID_REG_USER, [this](const QJsonObject& jsonObj)
 		{
-			int error = jsonObj["error"].toInt();
+			ui->confirm_button->setEnabled(true);
+
+			const int error = jsonObj.value("error").toInt(ErrorCodes::ERROR_JSON);
 			if (error != ErrorCodes::SUCCESS)
 			{
-				showTip(tr("参数错误"), false);
+				// 文档：1006 两次密码不一致、1003 验证码过期、1004 验证码错误、1010 注册失败
+				showTip(errorCodeToTip(error), false);
 				return;
 			}
 
+			// 文档：成功响应含 uid / email / user（昵称），不再回显 password
+			LOG_INFO() << "[register] register success, uid:" << jsonObj.value("uid").toInt()
+				<< "email:" << jsonObj.value("email").toString()
+				<< "user:" << jsonObj.value("user").toString();
+
 			showTip(tr("注册成功"), true);
-			qDebug() << "email is " << jsonObj["email"].toString();
-			qDebug() << "uuid is" << jsonObj["uuid"].toString();
 			changeTipPage();
 		});
 }
@@ -322,16 +352,19 @@ void RegisterDialog::on_confirm_button_clicked()
 		return;
 	}
 
-	//day11 发送http请求注册用户
+	// 文档：/user_register 的 user 字段为昵称（字符串），并需同时提交 password / confirm / verify_code
 	QJsonObject json_obj;
-	json_obj["user"] = ui->user_name_edit->text();
-	json_obj["email"] = ui->email_edit->text();
-	json_obj["password"] = ui->pass_edit->text(); // 密码
-	json_obj["confirm"] = ui->pass2_edit->text(); // 密码2确认密码
-	json_obj["verify_code"] = ui->token_edit->text(); // 验证码
-	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PERFIX + "/user_register"),
+	json_obj.insert("user", ui->user_name_edit->text());
+	json_obj.insert("email", ui->email_edit->text());
+	json_obj.insert("password", ui->pass_edit->text());
+	json_obj.insert("confirm", ui->pass2_edit->text());
+	json_obj.insert("verify_code", ui->token_edit->text());
+
+	showTip(tr("正在注册..."), true);
+	ui->confirm_button->setEnabled(false);
+
+	HttpManager::GetInstance().postHttpReq(QUrl(GATE_URL_PREFIX + "/user_register"),
 		json_obj,
 		ReqId::ID_REG_USER,
 		Modules::REGISTER_MOD);
 }
-

@@ -8,6 +8,7 @@
 #include <memory>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <QByteArray>
 #include <QNetworkReply>
 #include <QJsonObject>
@@ -21,6 +22,8 @@ extern std::function<void(QWidget*)> repolish;
 
 /**
  * @brief The ReqId enum 请求
+ * @note 客户端内部请求编号，与 ChatServer 线上 message_id 不是同一套编号，
+ *       两者的换算见 ChatProtocol::toMessageId / ChatProtocol::toReqId。
  */
 enum ReqId : std::uint16_t
 {
@@ -44,15 +47,19 @@ enum Modules : std::uint8_t
 
 /**
  * @brief The ErrorCodes enum 异常码
+ * @note 1 及以上的小数值为客户端本地错误码；1001 起与 ServerDocs/error-codes.md
+ *       完全一致，服务端 HTTP / gRPC / TCP 三种响应共用同一套编码，成功为 0。
  */
 enum ErrorCodes : std::uint16_t
 {
 	SUCCESS = 0, // 成功
 	ERR_JSON = 1, // json 解析失败
 	ERR_NETWORK = 2, // 网络错误
+	ERR_HTTP_STATUS = 3, // 服务端返回非 200（未知路径 404 / 不支持的方法 405）
+	ERR_REQUEST_TOO_LONG = 4, // 请求体超出服务端缓冲区上限
 
 	/// 服务器返回值
-	ERROR_JSON = 1001, // Json解析错误
+	ERROR_JSON = 1001, // Json解析错误或必填字段缺失
 	RPC_FAILED = 1002, // RPC请求失败
 	VERIFY_CODE_EXPIRED = 1003, // 验证码过期
 	VERIFY_CODE_ERROR = 1004, // 验证码错误
@@ -61,10 +68,54 @@ enum ErrorCodes : std::uint16_t
 	EMAIL_NOT_MATCH = 1007, // 邮箱不匹配
 	PASSWORD_UP_FAILED = 1008, // 密码修改失败
 	PASSWORD_INVALID = 1009, // 密码无效
-	REGISTER_USER_FAILED = 10010, // 用户注册失败
+	REGISTER_USER_FAILED = 1010, // 用户注册失败
+	USER_UID_INVALID = 1011, // 用户id非法或不存在
+	USER_TOKEN_INVALID = 1012, // token非法或已失效
+	SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis连接池超时或不可达）
 };
 
-/// 注册页面错误提示
+/**
+ * @brief ChatServer 私有 TCP 帧协议（详见 ServerDocs/api-tcp.md）
+ *
+ * 帧格式（双向一致）：
+ * +----------------+----------------+---------------------------+
+ * | message_id     | body_len       | body                      |
+ * | 2 字节，大端序 | 2 字节，大端序 | body_len 字节，JSON 文本  |
+ * +----------------+----------------+---------------------------+
+ */
+namespace ChatProtocol
+{
+inline constexpr int HEAD_ID_LEN = 2; // message_id 长度
+inline constexpr int HEAD_DATA_LEN = 2; // body_len 长度
+inline constexpr int HEAD_TOTAL_LEN = HEAD_ID_LEN + HEAD_DATA_LEN; // 头部总长
+inline constexpr int MAX_LENGTH = 2048; // body 最大长度，超出服务端会关闭会话
+
+/// 线上 message_id
+enum MessageId : std::uint16_t
+{
+	MESSAGE_CHAT_LOGIN = 0, // 客户端 -> 服务端：{"uid":<int>, "token":<string>}
+	MESSAGE_CHAT_LOGIN_RESP = 1, // 服务端 -> 客户端：{"error":<int>, ...}
+};
+
+/**
+ * @brief toMessageId 客户端请求编号 -> 线上 message_id
+ * @return 无对应线上编号时返回 std::nullopt
+ */
+[[nodiscard]] std::optional<std::uint16_t> toMessageId(ReqId req_id);
+
+/**
+ * @brief toReqId 线上 message_id -> 客户端请求编号
+ * @return 未知编号时返回 std::nullopt
+ */
+[[nodiscard]] std::optional<ReqId> toReqId(std::uint16_t message_id);
+} // namespace ChatProtocol
+
+/**
+ * @brief errorCodeToTip 服务器 error 字段 -> 用户可读提示
+ */
+[[nodiscard]] QString errorCodeToTip(int error_code);
+
+/// 登录页面错误提示
 enum class TipErr : std::uint8_t
 {
 	TIP_SUCCESS = 0,
@@ -72,7 +123,7 @@ enum class TipErr : std::uint8_t
 	TIP_PWD_ERR = 2,
 	TIP_CONFIRM_ERR = 3,
 	TIP_PWD_CONFIRM = 4,
-	TIP_VARIFY_ERR = 5,
+	TIP_VERIFY_ERR = 5,
 	TIP_USER_ERR = 6
 };
 
@@ -83,15 +134,16 @@ enum class ClickLabelState : std::uint8_t
 	SELECT = 1,
 };
 
+/// /user_login 响应中分配到的 ChatServer 信息
 struct ServerInfo
 {
-	int _uid;
+	int _uid = 0;
 	QString _token;
 	QString _host;
 	QString _port;
 };
 
 
-extern QString GATE_URL_PERFIX;
+extern QString GATE_URL_PREFIX;
 
 #endif // GLOBAL_H

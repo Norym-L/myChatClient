@@ -65,6 +65,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ClCompile>
+      <!-- 日志：Debug 构建输出全部级别（含 DEBUG）；QT_MESSAGELOGCONTEXT 保证日志前缀里的 文件:行 可用 -->
+      <PreprocessorDefinitions>CHATCLIENT_LOG_ENABLED;QT_MESSAGELOGCONTEXT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -83,6 +85,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
     <ClCompile>
+      <!-- 日志：Release 构建只输出 INFO 及以上，LOG_DEBUG 在编译期被消除（见 logger.h） -->
+      <PreprocessorDefinitions>CHATCLIENT_LOG_DISABLED;QT_MESSAGELOGCONTEXT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -105,6 +109,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="clicked_label.cpp" />
+    <ClCompile Include="logger.cpp" />
     <ClCompile Include="resetdialog.cpp" />
     <ClCompile Include="TCPManager.cpp" />
     <ClCompile Include="timer_button.cpp" />
@@ -121,6 +126,7 @@
     <QtUic Include="mainwindow.ui" />
     <QtUic Include="registerdialog.ui" />
     <ClInclude Include="global.h" />
+    <ClInclude Include="logger.h" />
     <QtMoc Include="httpmanager.h" />
     <QtMoc Include="logindialog.h" />
     <QtMoc Include="mainwindow.h" />

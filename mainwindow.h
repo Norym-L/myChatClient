@@ -25,16 +25,22 @@ public:
 public slots:
 	/// 切换注册页
 	void slotSwitchReg();
-	/// 切换登录页
+	/// 切换登录页（重置页返回时也走这里）
 	void slotSwitchLogin();
-	/// 重置页返回登录页
-	void slotSwitchLogin2();
 	/// 切换重置页
 	void slotSwitchReset();
+
 private:
+	/**
+	 * @brief switchPage 切换中央部件，并销毁不再使用的旧页面
+	 * @note 旧页面若不销毁，会继续响应 HttpManager / TCPManager 的信号，
+	 *       造成同一次请求被多个页面重复处理（重复发起 TCP 连接等）
+	 */
+	void switchPage(QWidget* page);
+
 	Ui::MainWindow* ui;
-	LoginDialog* m_login_dialog;
-	RegisterDialog* m_register_dialog;
-	ResetDialog* m_reset_dialog;
+	LoginDialog* m_login_dialog = nullptr;
+	RegisterDialog* m_register_dialog = nullptr;
+	ResetDialog* m_reset_dialog = nullptr;
 };
 #endif // MAINWINDOW_H
