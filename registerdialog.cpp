@@ -146,6 +146,12 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 			LOG_DEBUG() << "pass2label was released";
 		});
 
+	// 获取验证码按钮（get_token_button）不需要手动连接：
+	// setupUi() 里的 QMetaObject::connectSlotsByName 会按 on_<对象名>_<信号> 规则
+	// 自动把它连到 on_get_token_button_clicked()。
+	// 确认按钮（confirm_button）同理自动连到 on_confirm_button_clicked()，
+	// 绝不能再把 confirm_button 连到获取验证码的逻辑上。
+
 	// 注册定时器（定时返回登录界面）
 	m_timer = new QTimer(this);
 	m_timer->stop();
@@ -272,11 +278,12 @@ void RegisterDialog::initHttpHandlers()
 	// 获取验证码回调函数
 	m_handlers.insert(ReqId::ID_GET_VERIFY_CODE, [this](const QJsonObject& jsonObj)
 		{
-			ui->get_token_button->setEnabled(true);
-
 			const int error = jsonObj.value("error").toInt(ErrorCodes::ERROR_JSON);
 			if (error != ErrorCodes::SUCCESS)
 			{
+				// 只有失败才立刻恢复按钮让用户重试；成功时按钮交给 TimerButton 的 10 秒冷却
+				ui->get_token_button->setEnabled(true);
+
 				// 文档：1001 参数缺失；1002 转调验证码服务失败
 				showTip(errorCodeToTip(error), false);
 				LOG_WARN() << "[register] get verify code failed, error:" << error << "json:" << jsonObj;
@@ -343,6 +350,7 @@ void RegisterDialog::showTip(const QString& str, bool b_ok)
 
 void RegisterDialog::on_confirm_button_clicked()
 {
+	LOG_DEBUG() << "[ui] confirm_button_clicked";
 	if (!checkEmailImputValid() ||
 		!checkUserNameImputValid() ||
 		!checkPasswordImputValid() ||

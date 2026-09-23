@@ -6,3 +6,4 @@ ChatClient/
 *.opendb
 *.db
 *.ipch
+/ServerDocs

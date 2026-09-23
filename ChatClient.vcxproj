@@ -115,6 +115,12 @@
     <ClCompile Include="timer_button.cpp" />
     <ClCompile Include="UserManager.cpp" />
     <QtMoc Include="UserManager.h" />
+    <None Include="ServerDocs\api-changes.md" />
+    <None Include="ServerDocs\api-grpc.md" />
+    <None Include="ServerDocs\api-http.md" />
+    <None Include="ServerDocs\api-tcp.md" />
+    <None Include="ServerDocs\error-codes.md" />
+    <None Include="ServerDocs\README.md" />
     <None Include="style\stylesheet.qss" />
     <QtMoc Include="clicked_label.h" />
     <QtMoc Include="resetdialog.h" />

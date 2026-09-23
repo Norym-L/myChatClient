@@ -1,0 +1,28 @@
+===== 实验 1：裸 TimerButton 的 clicked() =====
+  点击前 enabled = true  text = 
+[ui] timer button clicked, start countdown
+  [sendClick] 已发送 左键 按下+释放 到 bare_timer_button 几何: QSize(200, 30)
+  点击后 enabled = false  text = 10 秒后重新获取验证码  clicked 次数 = 1
+
+===== 实验 2：RegisterDialog 里的真实按钮 =====
+QFontDatabase: Cannot find font directory C:/dev/Qt/6.11.2/msvc2022_64/lib/fonts.
+Note that Qt no longer ships fonts. Deploy some (from https://dejavu-fonts.github.io/ for example) or switch to fontconfig.
+  ui 指针是否可用（能取到控件）: 是
+  get_token_button 实际类名: QPushButton  文本: 获取验证码
+  confirm_button 文本: 确认
+
+  --- 2a：点击【获取验证码】按钮 ---
+  点击前: get_token_button enabled = true  err_tip = 
+[ui] timer button clicked, start countdown
+[http] post "/get_Verifycode" "{\"email\":\"someone@example.com\"}"
+  [sendClick] 已发送 左键 按下+释放 到 get_token_button 几何: QSize(80, 30)
+  点击后: clicked 次数 = 1  get_token_button enabled = false  text = 10 秒后重新获取验证码
+  点击后: err_tip = 正在获取验证码...
+
+  --- 2b：点击【确认】按钮 ---
+  点击前: err_tip 已清空, get_token_button enabled = true
+[ui] confirm_button_clicked
+  [sendClick] 已发送 左键 按下+释放 到 confirm_button 几何: QSize(100, 30)
+  点击后: err_tip = 用户名不能为空
+  点击后: get_token_button enabled = true （若变为 false，说明 handleGetVerify 被执行了）
+  点击后: confirm_button enabled = true

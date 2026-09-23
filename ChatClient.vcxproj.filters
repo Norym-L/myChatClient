@@ -43,6 +43,9 @@
     <Filter Include="Common\TCP">
       <UniqueIdentifier>{fa94a510-8744-431b-a01a-0ffd15186d8f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ServerDocs">
+      <UniqueIdentifier>{06c36c73-fde1-492f-9eaa-d9a59d35a5db}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -148,6 +151,24 @@
   <ItemGroup>
     <None Include="style\stylesheet.qss">
       <Filter>资源</Filter>
+    </None>
+    <None Include="ServerDocs\api-changes.md">
+      <Filter>ServerDocs</Filter>
+    </None>
+    <None Include="ServerDocs\api-grpc.md">
+      <Filter>ServerDocs</Filter>
+    </None>
+    <None Include="ServerDocs\api-http.md">
+      <Filter>ServerDocs</Filter>
+    </None>
+    <None Include="ServerDocs\api-tcp.md">
+      <Filter>ServerDocs</Filter>
+    </None>
+    <None Include="ServerDocs\error-codes.md">
+      <Filter>ServerDocs</Filter>
+    </None>
+    <None Include="ServerDocs\README.md">
+      <Filter>ServerDocs</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
