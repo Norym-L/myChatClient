@@ -46,6 +46,9 @@
     <Filter Include="ServerDocs">
       <UniqueIdentifier>{06c36c73-fde1-492f-9eaa-d9a59d35a5db}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pages\聊天页面">
+      <UniqueIdentifier>{b6accc23-e010-4e0c-adc3-d5fb84a9c896}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -84,6 +87,9 @@
     <ClCompile Include="UserManager.cpp">
       <Filter>Common</Filter>
     </ClCompile>
+    <ClCompile Include="chatpage.cpp">
+      <Filter>Pages\聊天页面</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -113,6 +119,9 @@
     <QtMoc Include="UserManager.h">
       <Filter>Common</Filter>
     </QtMoc>
+    <QtMoc Include="chatpage.h">
+      <Filter>Pages\聊天页面</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="logindialog.ui">
@@ -126,6 +135,9 @@
     </QtUic>
     <QtUic Include="resetdialog.ui">
       <Filter>Pages\重置密码页面</Filter>
+    </QtUic>
+    <QtUic Include="chatpage.ui">
+      <Filter>Pages\聊天页面</Filter>
     </QtUic>
   </ItemGroup>
   <ItemGroup>

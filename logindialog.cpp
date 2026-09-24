@@ -280,4 +280,6 @@ void LoginDialog::slot_switchToChatDialog()
 	enableLoginButton(false);
 	ui->account_edit->setEnabled(false);
 	ui->pass_edit->setEnabled(false);
+
+	emit sig_switchChatPage();
 }

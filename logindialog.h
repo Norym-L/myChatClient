@@ -47,6 +47,7 @@ private slots:
 signals:
     void switchRegister();
     void switchReset();
+    void sig_switchChatPage(void);
     void sig_connectTcp(ServerInfo);
 };
 

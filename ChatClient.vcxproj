@@ -108,6 +108,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="chatpage.cpp" />
     <ClCompile Include="clicked_label.cpp" />
     <ClCompile Include="logger.cpp" />
     <ClCompile Include="resetdialog.cpp" />
@@ -124,10 +125,12 @@
     <None Include="style\stylesheet.qss" />
     <QtMoc Include="clicked_label.h" />
     <QtMoc Include="resetdialog.h" />
+    <QtMoc Include="chatpage.h" />
     <ClInclude Include="resource.h" />
     <QtMoc Include="TCPManager.h" />
     <ClInclude Include="timer_button.h" />
     <QtRcc Include="rc.qrc" />
+    <QtUic Include="chatpage.ui" />
     <QtUic Include="logindialog.ui" />
     <QtUic Include="mainwindow.ui" />
     <QtUic Include="registerdialog.ui" />

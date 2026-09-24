@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "logger.h"
+#include "TCPManager.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -9,6 +10,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     slotSwitchLogin();
+
+#ifdef _DEBUG //TODO debug直接跳转chat页面做测试
+    slotSwitchChat();
+#endif
 }
 
 MainWindow::~MainWindow()
@@ -47,6 +52,10 @@ void MainWindow::switchPage(QWidget* page)
     {
         m_reset_dialog = nullptr;
     }
+    if (old_page == m_chat_page)
+    {
+        m_chat_page = nullptr;
+    }
 
     old_page->hide();
     old_page->deleteLater();
@@ -67,6 +76,10 @@ void MainWindow::slotSwitchReg()
 
 void MainWindow::slotSwitchLogin()
 {
+    this->setMinimumSize(QSize(350, 500));
+    this->setMaximumSize(QSize(350, 500));
+    this->resize(QSize(350, 500));
+
     if (m_login_dialog == nullptr)
     {
         auto* login_dialog = new LoginDialog(this);
@@ -75,6 +88,8 @@ void MainWindow::slotSwitchLogin()
         connect(login_dialog, &LoginDialog::switchRegister, this, &MainWindow::slotSwitchReg);
         // 连接登录界面忘记密码信号
         connect(login_dialog, &LoginDialog::switchReset, this, &MainWindow::slotSwitchReset);
+        // 连接登录成功进入聊天页面信号
+        connect(login_dialog, &LoginDialog::sig_switchChatPage, this, &MainWindow::slotSwitchChat);
         m_login_dialog = login_dialog;
     }
 
@@ -92,4 +107,21 @@ void MainWindow::slotSwitchReset()
     }
 
     switchPage(m_reset_dialog);
+}
+
+void MainWindow::slotSwitchChat()
+{
+    if (m_chat_page == nullptr)
+    {
+        auto* chat_page = new ChatPage(this);
+        chat_page->setWindowFlags(Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
+        // 连接聊天页面返回登录页面信号
+        connect(chat_page, &ChatPage::sigSwitchLoginPage, this, &MainWindow::slotSwitchLogin);
+        m_chat_page = chat_page;
+    }
+
+    this->setMinimumSize(QSize(650, 500));
+    this->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    this->resize(QSize(700, 600));
+    switchPage(m_chat_page);
 }
