@@ -224,7 +224,7 @@
           </spacer>
          </item>
          <item>
-          <widget class="QPushButton" name="seracg_button">
+          <widget class="ClickedButton" name="add_button">
            <property name="minimumSize">
             <size>
              <width>30</width>
@@ -520,6 +520,13 @@
   </layout>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>ClickedButton</class>
+   <extends>QPushButton</extends>
+   <header location="global">ClickedButton.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

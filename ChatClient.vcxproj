@@ -109,6 +109,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="chatpage.cpp" />
+    <ClCompile Include="ClickedButton.cpp" />
     <ClCompile Include="clicked_label.cpp" />
     <ClCompile Include="logger.cpp" />
     <ClCompile Include="resetdialog.cpp" />
@@ -126,6 +127,7 @@
     <QtMoc Include="clicked_label.h" />
     <QtMoc Include="resetdialog.h" />
     <QtMoc Include="chatpage.h" />
+    <ClInclude Include="ClickedButton.h" />
     <ClInclude Include="resource.h" />
     <QtMoc Include="TCPManager.h" />
     <ClInclude Include="timer_button.h" />

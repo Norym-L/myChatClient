@@ -73,3 +73,23 @@ QDialog#LoginDialog
 {
    border-image: url(:/res/visible_hover.png);
 }
+
+#side_bar
+{
+    background-color:rgb(34, 34, 34);
+}
+
+#add_button[state='normal']
+{
+    border-image: url(:/res/add-user.png);
+}
+
+#add_button[state='hover']
+{
+    border-image: url(:/res/add-user_hover.png);
+}
+
+#add_button[state='press']
+{
+    border-image: url(:/res/add-user_push.png);
+}

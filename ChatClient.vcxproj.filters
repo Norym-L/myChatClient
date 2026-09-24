@@ -19,9 +19,6 @@
     <Filter Include="Pages\注册页面">
       <UniqueIdentifier>{a0000004-0000-4000-8000-000000000004}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Pages\主页">
-      <UniqueIdentifier>{a0000005-0000-4000-8000-000000000005}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Pages\登录页面">
       <UniqueIdentifier>{a0000003-0000-4000-8000-000000000003}</UniqueIdentifier>
     </Filter>
@@ -49,6 +46,9 @@
     <Filter Include="Pages\聊天页面">
       <UniqueIdentifier>{b6accc23-e010-4e0c-adc3-d5fb84a9c896}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pages\MainWindow">
+      <UniqueIdentifier>{a0000005-0000-4000-8000-000000000005}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -61,7 +61,7 @@
       <Filter>Pages\注册页面</Filter>
     </ClCompile>
     <ClCompile Include="mainwindow.cpp">
-      <Filter>Pages\主页</Filter>
+      <Filter>Pages\MainWindow</Filter>
     </ClCompile>
     <ClCompile Include="httpmanager.cpp">
       <Filter>Common\Http</Filter>
@@ -90,6 +90,9 @@
     <ClCompile Include="chatpage.cpp">
       <Filter>Pages\聊天页面</Filter>
     </ClCompile>
+    <ClCompile Include="ClickedButton.cpp">
+      <Filter>Common\widgts</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="logindialog.h">
@@ -99,7 +102,7 @@
       <Filter>Pages\注册页面</Filter>
     </QtMoc>
     <QtMoc Include="mainwindow.h">
-      <Filter>Pages\主页</Filter>
+      <Filter>Pages\MainWindow</Filter>
     </QtMoc>
     <QtMoc Include="httpmanager.h">
       <Filter>Common\Http</Filter>
@@ -131,7 +134,7 @@
       <Filter>Pages\注册页面</Filter>
     </QtUic>
     <QtUic Include="mainwindow.ui">
-      <Filter>Pages\主页</Filter>
+      <Filter>Pages\MainWindow</Filter>
     </QtUic>
     <QtUic Include="resetdialog.ui">
       <Filter>Pages\重置密码页面</Filter>
@@ -159,6 +162,9 @@
       <Filter>Common\Core</Filter>
     </ClInclude>
     <ClInclude Include="resource.h" />
+    <ClInclude Include="ClickedButton.h">
+      <Filter>Common\widgts</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="style\stylesheet.qss">
