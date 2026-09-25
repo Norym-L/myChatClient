@@ -29,13 +29,13 @@
 
 #include <functional>
 
-#include "TCPManager.h"
-#include "UserManager.h"
-#include "global.h"
-#include "httpmanager.h"
-#include "logindialog.h"
-#include "registerdialog.h"
-#include "resetdialog.h"
+#include "network/TCPManager.h"
+#include "data/UserManager.h"
+#include "app/global.h"
+#include "network/httpmanager.h"
+#include "ui/page/login/logindialog.h"
+#include "ui/page/register/registerdialog.h"
+#include "ui/page/reset/resetdialog.h"
 
 namespace
 {

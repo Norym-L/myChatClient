@@ -20,38 +20,40 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(SRC_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
-set(CMAKE_AUTOUIC_SEARCH_PATHS ${SRC_ROOT})
+# 主工程源码按分层收在 src/ 下，这里同样以 src/ 为头文件搜索根
+set(SRC_DIR  ${SRC_ROOT}/src)
+set(CMAKE_AUTOUIC_SEARCH_PATHS ${SRC_DIR})
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 add_executable(protocol_conformance
     protocol_conformance.cpp
-    ${SRC_ROOT}/logger.h
-    ${SRC_ROOT}/logger.cpp
-    ${SRC_ROOT}/global.h
-    ${SRC_ROOT}/global.cpp
-    ${SRC_ROOT}/httpmanager.h
-    ${SRC_ROOT}/httpmanager.cpp
-    ${SRC_ROOT}/TCPManager.h
-    ${SRC_ROOT}/TCPManager.cpp
-    ${SRC_ROOT}/UserManager.h
-    ${SRC_ROOT}/UserManager.cpp
-    ${SRC_ROOT}/clicked_label.h
-    ${SRC_ROOT}/clicked_label.cpp
-    ${SRC_ROOT}/timer_button.h
-    ${SRC_ROOT}/timer_button.cpp
-    ${SRC_ROOT}/logindialog.h
-    ${SRC_ROOT}/logindialog.cpp
-    ${SRC_ROOT}/logindialog.ui
-    ${SRC_ROOT}/registerdialog.h
-    ${SRC_ROOT}/registerdialog.cpp
-    ${SRC_ROOT}/registerdialog.ui
-    ${SRC_ROOT}/resetdialog.h
-    ${SRC_ROOT}/resetdialog.cpp
-    ${SRC_ROOT}/resetdialog.ui
+    ${SRC_DIR}/core/logger.h
+    ${SRC_DIR}/core/logger.cpp
+    ${SRC_DIR}/app/global.h
+    ${SRC_DIR}/app/global.cpp
+    ${SRC_DIR}/network/httpmanager.h
+    ${SRC_DIR}/network/httpmanager.cpp
+    ${SRC_DIR}/network/TCPManager.h
+    ${SRC_DIR}/network/TCPManager.cpp
+    ${SRC_DIR}/data/UserManager.h
+    ${SRC_DIR}/data/UserManager.cpp
+    ${SRC_DIR}/ui/components/clicked_label.h
+    ${SRC_DIR}/ui/components/clicked_label.cpp
+    ${SRC_DIR}/ui/components/timer_button.h
+    ${SRC_DIR}/ui/components/timer_button.cpp
+    ${SRC_DIR}/ui/page/login/logindialog.h
+    ${SRC_DIR}/ui/page/login/logindialog.cpp
+    ${SRC_DIR}/ui/page/login/logindialog.ui
+    ${SRC_DIR}/ui/page/register/registerdialog.h
+    ${SRC_DIR}/ui/page/register/registerdialog.cpp
+    ${SRC_DIR}/ui/page/register/registerdialog.ui
+    ${SRC_DIR}/ui/page/reset/resetdialog.h
+    ${SRC_DIR}/ui/page/reset/resetdialog.cpp
+    ${SRC_DIR}/ui/page/reset/resetdialog.ui
 )
 
-target_include_directories(protocol_conformance PRIVATE ${SRC_ROOT})
+target_include_directories(protocol_conformance PRIVATE ${SRC_DIR})
 target_link_libraries(protocol_conformance PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network)
 
 # 与 ChatClient.vcxproj 保持一致的日志开关：Debug 输出全部级别，Release 只输出 INFO 及以上

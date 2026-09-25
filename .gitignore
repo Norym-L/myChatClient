@@ -6,4 +6,11 @@ ChatClient/
 *.opendb
 *.db
 *.ipch
-/ServerDocs
+
+/docs/ServerDocs
+
+# CMake / CLion 构建目录
+/build/
+/cmake-build-*/
+/CMakeUserPresets.json
+compile_commands.json

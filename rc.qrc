@@ -1,26 +1,33 @@
 <RCC>
+    <!--
+        资源实体已按分层挪到 assets/images 与 assets/styles 下。
+        这里用 alias 把资源 URI 固定为原来的 :/res/... 与 :/style/...，
+        因此源码与样式表里所有资源引用（QIcon(":/res/x.png")、
+        url(:/res/x.png)、":/style/stylesheet.qss"）均无需改动。
+        规则：<file alias="相对 prefix 的 URI">文件系统实际路径</file>
+    -->
     <qresource prefix="/">
-        <file>res/login.png</file>
-        <file>style/stylesheet.qss</file>
-        <file>res/unvisible.png</file>
-        <file>res/unvisible_hover.png</file>
-        <file>res/visible.png</file>
-        <file>res/visible_hover.png</file>
-        <file>res/add-user.png</file>
-        <file>res/add-user_hover.png</file>
-        <file>res/add-user_push.png</file>
-        <file>res/close.png</file>
-        <file>res/close_hover.png</file>
-        <file>res/close_push.png</file>
-        <file>res/file.png</file>
-        <file>res/file_hover.png</file>
-        <file>res/file_push.png</file>
-        <file>res/grinning-face.png</file>
-        <file>res/grinning-face_hover.png</file>
-        <file>res/grinning-face_push.png</file>
-        <file>res/loading.png</file>
-        <file>res/message.png</file>
-        <file>res/message_hover.png</file>
-        <file>res/message_push.png</file>
+        <file alias="style/stylesheet.qss">assets/styles/stylesheet.qss</file>
+        <file alias="res/login.png">assets/images/login.png</file>
+        <file alias="res/unvisible.png">assets/images/unvisible.png</file>
+        <file alias="res/unvisible_hover.png">assets/images/unvisible_hover.png</file>
+        <file alias="res/visible.png">assets/images/visible.png</file>
+        <file alias="res/visible_hover.png">assets/images/visible_hover.png</file>
+        <file alias="res/add-user.png">assets/images/add-user.png</file>
+        <file alias="res/add-user_hover.png">assets/images/add-user_hover.png</file>
+        <file alias="res/add-user_push.png">assets/images/add-user_push.png</file>
+        <file alias="res/close.png">assets/images/close.png</file>
+        <file alias="res/close_hover.png">assets/images/close_hover.png</file>
+        <file alias="res/close_push.png">assets/images/close_push.png</file>
+        <file alias="res/file.png">assets/images/file.png</file>
+        <file alias="res/file_hover.png">assets/images/file_hover.png</file>
+        <file alias="res/file_push.png">assets/images/file_push.png</file>
+        <file alias="res/grinning-face.png">assets/images/grinning-face.png</file>
+        <file alias="res/grinning-face_hover.png">assets/images/grinning-face_hover.png</file>
+        <file alias="res/grinning-face_push.png">assets/images/grinning-face_push.png</file>
+        <file alias="res/loading.png">assets/images/loading.png</file>
+        <file alias="res/message.png">assets/images/message.png</file>
+        <file alias="res/message_hover.png">assets/images/message_hover.png</file>
+        <file alias="res/message_push.png">assets/images/message_push.png</file>
     </qresource>
 </RCC>
