@@ -29,5 +29,8 @@
         <file alias="res/message.png">assets/images/message.png</file>
         <file alias="res/message_hover.png">assets/images/message_hover.png</file>
         <file alias="res/message_push.png">assets/images/message_push.png</file>
+        <file alias="res/search.png">assets/images/search.png</file>
+        <file alias="res/search_hover.png">assets/images/search_hover.png</file>
+        <file alias="res/search_push.png">assets/images/search_push.png</file>
     </qresource>
 </RCC>

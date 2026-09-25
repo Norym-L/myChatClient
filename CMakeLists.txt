@@ -42,8 +42,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)   # 产出 compile_commands.json，供 CLion 索引
 
 # Qt 代码生成全自动：AUTOMOC / AUTOUIC / AUTORCC 按源文件依赖自动调度，
-# 不再需要像 Qt VS Tools 那样手工维护 QtMoc / QtUic / QtRcc 清单
-# （SearchEdit.h 之前就是漏登记 QtMoc 而缺少 moc）
+# 不再需要像 Qt VS Tools 那样手工维护 QtMoc / QtUic / QtRcc 清单。
+# 手工清单最容易犯的错就是漏登记：新加的控件没进 QtMoc 清单时编译能过，
+# 但链接阶段报 `undefined reference to vtable for Xxx` / 信号函数未定义，
+# 排查方向很容易被带偏。
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
@@ -104,9 +106,10 @@ set(CHATCLIENT_SOURCES
     src/ui/page/reset/resetdialog.h          src/ui/page/reset/resetdialog.cpp          src/ui/page/reset/resetdialog.ui
     # 通用组件
     src/ui/components/ClickedButton.h   src/ui/components/ClickedButton.cpp
+    src/ui/components/TruncateEdit.h    src/ui/components/TruncateEdit.cpp
     src/ui/components/clicked_label.h   src/ui/components/clicked_label.cpp
     src/ui/components/timer_button.h    src/ui/components/timer_button.cpp
-    # src/ui/components/SearchEdit.{h,cpp} 暂不参与编译，见下方 CHATCLIENT_PENDING_SOURCES
+    src/ui/components/ChatUserList.h    src/ui/components/ChatUserList.cpp
 
     # ── 网络层 network ──
     src/network/httpmanager.h        src/network/httpmanager.cpp
@@ -127,35 +130,6 @@ set(CHATCLIENT_SOURCES
 )
 
 add_executable(ChatClient WIN32 ${CHATCLIENT_SOURCES})
-
-# -----------------------------------------------------------------------------
-# 尚未完成的源码 —— 保留在工程内供 IDE 显示，暂不参与编译
-#
-# SearchEdit.h 声明了构造函数 SearchEdit(QWidget*)、虚函数 focusOutEvent()
-# 以及 setMaxLength() / limitTextLength()，但 SearchEdit.cpp 目前只有一行
-# #include，四个成员都没有实现。AUTOMOC 生成的 moc 代码会引用构造函数与 vtable，
-# 因此在实现补齐之前链接必然失败：
-#   undefined reference to `SearchEdit::SearchEdit(QWidget*)'
-#   undefined reference to `SearchEdit::focusOutEvent(QFocusEvent*)'
-#
-# 注意这与本次迁移无关：源工程（Visual Studio / MSVC）用的是同一份未完成源码，
-# 同样无法链接通过。移出编译只是为了让工程先处于"可构建、可运行"的干净状态。
-#
-# ★ 继续开发 SearchEdit 时：补完实现后，把 SearchEdit.h / SearchEdit.cpp
-#   两行移回上面的 CHATCLIENT_SOURCES 即可，其余无需改动。
-# -----------------------------------------------------------------------------
-set(CHATCLIENT_PENDING_SOURCES
-    src/ui/components/SearchEdit.h
-    src/ui/components/SearchEdit.cpp
-)
-# HEADER_FILE_ONLY 只挡住"编译"，挡不住 AUTOMOC —— 后者照样会为 SearchEdit.h
-# 生成 moc_SearchEdit.cpp 并塞进 mocs_compilation.cpp，链接依旧报未定义引用。
-# 所以两个属性必须同时设。
-set_source_files_properties(${CHATCLIENT_PENDING_SOURCES} PROPERTIES
-    HEADER_FILE_ONLY TRUE   # 不参与编译
-    SKIP_AUTOMOC    TRUE    # 也不让 AUTOMOC 为它生成 moc
-)
-target_sources(ChatClient PRIVATE ${CHATCLIENT_PENDING_SOURCES})
 
 # -----------------------------------------------------------------------------
 # Win32 资源脚本 —— 保留在工程内供 IDE 显示，但不参与编译

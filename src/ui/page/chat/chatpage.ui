@@ -192,7 +192,7 @@
           <number>5</number>
          </property>
          <item>
-          <widget class="QLineEdit" name="serach_edit">
+          <widget class="TruncateEdit" name="serach_edit">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -246,10 +246,13 @@
        </widget>
       </item>
       <item>
-       <widget class="QListWidget" name="chat_users_list_widget"/>
+       <widget class="ChatUserList" name="chat_users_list"/>
       </item>
       <item>
        <widget class="QListWidget" name="search_list"/>
+      </item>
+      <item>
+       <widget class="QListWidget" name="con_user_list"/>
       </item>
      </layout>
     </widget>
@@ -525,6 +528,16 @@
    <class>ClickedButton</class>
    <extends>QPushButton</extends>
    <header location="global">ui/components/ClickedButton.h</header>
+  </customwidget>
+  <customwidget>
+   <class>TruncateEdit</class>
+   <extends>QLineEdit</extends>
+   <header location="global">ui/components/TruncateEdit.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatUserList</class>
+   <extends>QListWidget</extends>
+   <header location="global">ui/components/ChatUserList.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

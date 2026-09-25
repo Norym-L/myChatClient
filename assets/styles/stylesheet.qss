@@ -76,7 +76,7 @@ QDialog#LoginDialog
 
 #side_bar
 {
-    background-color:rgb(34, 34, 34);
+    background-color: rgb(34, 34, 34);
 }
 
 #add_button[state='normal']
@@ -92,4 +92,41 @@ QDialog#LoginDialog
 #add_button[state='press']
 {
     border-image: url(:/res/add-user_push.png);
+}
+
+#search_widget
+{
+    background-color: rgb(34, 34, 34);
+}
+
+#serach_edit
+{
+    background-color: rgb(47, 47, 47);
+    border: 1px solid rgb(47, 47, 47);
+}
+
+#chat_user_widget
+{
+    background-color: rgb(34, 34, 34);
+}
+
+#chat_users_list
+{
+    background-color: rgb(34, 34, 34);
+    border: none;
+    outline: none;
+}
+
+#chat_users_list::item:selected
+{
+    background-color: rgb(61, 61, 61);
+    border: none;
+    outline: none;
+}
+
+#chat_users_list::item:hover
+{
+    background-color: rgb(51, 51, 51);
+    border: none;
+    outline: none;
 }

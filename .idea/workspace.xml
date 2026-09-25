@@ -6,6 +6,7 @@
   <component name="BackendCodeEditorMiscSettings">
     <option name="/Default/Environment/StickyLines/Enabled/@EntryValue" value="false" type="bool" />
     <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
+    <option name="/Default/Housekeeping/OptionsDialog/SelectedPageId/@EntryValue" value="CppFormatterOtherPage" type="string" />
   </component>
   <component name="CMakePresetLoader"><![CDATA[{
   "useNewFormat": true
@@ -30,88 +31,34 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/ChatClient.rc" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ClickedButton.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ClickedButton.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TCPManager.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TCPManager.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/UserManager.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/UserManager.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/chatpage.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/chatpage.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/chatpage.ui" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/clicked_label.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/clicked_label.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/global.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/global.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/httpmanager.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/httpmanager.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logger.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logger.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logindialog.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logindialog.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logindialog.ui" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/mainwindow.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/mainwindow.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/mainwindow.ui" beforeDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="现在使用mingw+cmake构建项目">
+      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/components/ChatUserList.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/components/ChatUserList.h" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/components/TruncateEdit.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/components/TruncateEdit.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/styles/stylesheet.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/stylesheet.qss" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/registerdialog.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/registerdialog.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/registerdialog.ui" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/add-user.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/add-user_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/add-user_push.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/close.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/close_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/close_push.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/file.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/file_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/file_push.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/grinning-face.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/grinning-face_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/grinning-face_push.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/loading.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/login.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/message.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/message_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/message_push.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/unvisible.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/unvisible_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/visible.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/res/visible_hover.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/resetdialog.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/resetdialog.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/resetdialog.ui" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/resource.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/singleton.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/style/stylesheet.qss" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/tests/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/protocol_conformance.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/protocol_conformance.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/timer_button.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/timer_button.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/encodings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/indexLayout.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/memory/2026-09-23.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/CMakeLists.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/main.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_mingw_after_fix.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_mingw_before_fix.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_msvc_after_fix.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ChatClient.aps" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ChatClient.slnx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ChatClient.vcxproj" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ChatClient.vcxproj.filters" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/SearchEdit.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/SearchEdit.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ChangesViewManager">
+    <option name="groupingKeys">
+      <option value="directory" />
+      <option value="repository" />
+    </option>
   </component>
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
@@ -143,12 +90,16 @@
   "fromUser": false
 }]]></component>
   <component name="ProjectId" id="3JnxVezWdkM3vabVuuhDrhWJvsh" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="showExcludedFiles" value="false" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "CMake 应用程序.ChatClient.executor": "Run",
     "CidrDebugProfileConversion": "true",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
@@ -158,12 +109,14 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "main",
     "nodejs_package_manager_path": "npm",
-    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true"
+    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
+    "settings.editor.selected.configurable": "preferences.sourceCode.C++"
   }
 }]]></component>
   <component name="RunManager">
@@ -215,5 +168,24 @@
     <isAutomaticFoundErrors value="true" />
     <isAutomaticReloadCMake value="true" />
     <isAutomaticBootstrapAfterUpdate value="false" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="现在使用mingw+cmake构建项目" />
+    <option name="LAST_COMMIT_MESSAGE" value="现在使用mingw+cmake构建项目" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>
