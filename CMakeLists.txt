@@ -92,44 +92,44 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network)
 # 可执行文件
 #   WIN32 → 走 Windows 子系统，不弹控制台窗口（MSVC 下即 -mwindows / SubSystem:Windows）
 # -----------------------------------------------------------------------------
-set(CHATCLIENT_SOURCES
-    # 入口
-    src/main.cpp
 
-    # ── 表现层 ui ──
-    # 主窗口外壳（承载页面切换）
-    src/ui/mainwindow.h              src/ui/mainwindow.cpp              src/ui/mainwindow.ui
-    # 页面（每个页面一个子目录）
-    src/ui/page/chat/chatpage.h              src/ui/page/chat/chatpage.cpp              src/ui/page/chat/chatpage.ui
-    src/ui/page/login/logindialog.h          src/ui/page/login/logindialog.cpp          src/ui/page/login/logindialog.ui
-    src/ui/page/register/registerdialog.h    src/ui/page/register/registerdialog.cpp    src/ui/page/register/registerdialog.ui
-    src/ui/page/reset/resetdialog.h          src/ui/page/reset/resetdialog.cpp          src/ui/page/reset/resetdialog.ui
-    # 通用组件
-    src/ui/components/ClickedButton.h   src/ui/components/ClickedButton.cpp
-    src/ui/components/TruncateEdit.h    src/ui/components/TruncateEdit.cpp
-    src/ui/components/clicked_label.h   src/ui/components/clicked_label.cpp
-    src/ui/components/timer_button.h    src/ui/components/timer_button.cpp
-    src/ui/components/ChatUserList.h    src/ui/components/ChatUserList.cpp
-
-    # ── 网络层 network ──
-    src/network/httpmanager.h        src/network/httpmanager.cpp
-    src/network/TCPManager.h         src/network/TCPManager.cpp
-
-    # ── 数据层 data ──
-    src/data/UserManager.h           src/data/UserManager.cpp
-
-    # ── 基础设施 core ──
-    src/core/logger.h                src/core/logger.cpp
-
-    # ── 应用级 app（全局配置与单例）──
-    src/app/global.h                 src/app/global.cpp
-    src/app/singleton.h
-
-    # Qt 资源（图标 + stylesheet.qss；实体在 assets/ 下，由 rc.qrc 的 alias 映射）
-    rc.qrc
+# -----------------------------------------------------------------------------
+# 源文件自动收集
+#
+# 用 GLOB_RECURSE + CONFIGURE_DEPENDS 自动收集 src/ 下的 .cpp / .h，
+# 新增或删除源文件后**不需要**再手工改本文件 —— 构建时会检测到变化并自动重跑
+# CMake。.ui 不用列：AUTOUIC 会按同名 .cpp 在源文件所在目录自动查找。
+#
+# ⚠ 取舍说明：CMake 官方不推荐用 GLOB 收集源文件，理由是"新增文件时
+#   CMakeLists.txt 没变化，构建系统不知道要重新配置"。CONFIGURE_DEPENDS 正是
+#   用来补这个洞的 —— 它在每次构建时校验 glob 结果，有变化就自动重跑 CMake。
+#   代价只是每次构建多一次目录遍历（src/ 下约 40 个文件，开销可忽略）。
+#
+#   若哪天想回到"精确、可逐行审查"的显式列表，把这段换回手写清单即可，
+#   文件其余部分无需改动。
+#
+# 需要临时排除某个文件（例如实验性代码）时，在下面追加一行：
+#   list(REMOVE_ITEM CHATCLIENT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/xxx.cpp")
+# -----------------------------------------------------------------------------
+file(GLOB_RECURSE CHATCLIENT_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
 
+# 不在 src/ 下的资源需要显式列出
+list(APPEND CHATCLIENT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/rc.qrc"
+)
+
+# 排序只为让构建日志与 IDE 里的文件顺序稳定、便于比对（对构建结果无影响）
+list(SORT CHATCLIENT_SOURCES)
+
 add_executable(ChatClient WIN32 ${CHATCLIENT_SOURCES})
+
+target_compile_definitions(ChatClient PRIVATE
+        $<$<CONFIG:Debug>:CLIENT_DEBUG>
+)
+
 
 # -----------------------------------------------------------------------------
 # Win32 资源脚本 —— 保留在工程内供 IDE 显示，但不参与编译

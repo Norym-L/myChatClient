@@ -8,9 +8,9 @@
     <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
     <option name="/Default/Housekeeping/OptionsDialog/SelectedPageId/@EntryValue" value="CppFormatterOtherPage" type="string" />
   </component>
-  <component name="CMakePresetLoader"><![CDATA[{
-  "useNewFormat": true
-}]]></component>
+  <component name="CMakePresetLoader">{
+  &quot;useNewFormat&quot;: true
+}</component>
   <component name="CMakeProjectFlavorService">
     <option name="flavorId" value="CMakePlainProjectFlavor" />
   </component>
@@ -31,23 +31,18 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="现在使用mingw+cmake构建项目">
-      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/ChatUserList.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/ChatUserList.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/TruncateEdit.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/TruncateEdit.h" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="feat(ui): 新增聊天用户列表与截断输入框组件&#10;&#10;新增 ChatUserList 组件，支持鼠标悬浮显示滚动条并在滚动到底部时发出加载更多联系人信号。&#10;新增 TruncateEdit 组件，替代未完成的 SearchEdit 并按字节数截断输入。&#10;更新 CMakeLists 源文件清单，移除 SearchEdit 待编译配置。&#10;在 chatpage.ui 中注册新自定义控件并调整用户列表控件。&#10;新增搜索图标资源并更新 IDE 配置。">
+      <change afterPath="$PROJECT_DIR$/src/ui/components/ListItemBase.h" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.h" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/styles/stylesheet.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/stylesheet.qss" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/components/SearchEdit.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/components/SearchEdit.h" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,32 +62,35 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Norym-L"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Norym-L&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "git@github.com:Norym-L/myChatClient.git",
-    "accountId": "ea545061-b913-4d58-9ccb-b9d8291bc8e8"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;git@github.com:Norym-L/myChatClient.git&quot;,
+    &quot;accountId&quot;: &quot;ea545061-b913-4d58-9ccb-b9d8291bc8e8&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectApplicationVersion">
     <option name="ide" value="CLion" />
     <option name="majorVersion" value="2026" />
     <option name="minorVersion" value="2.2" />
     <option name="productBranch" value="Classic" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3JnxVezWdkM3vabVuuhDrhWJvsh" />
   <component name="ProjectLevelVcsManager">
     <ConfirmationsSetting value="2" id="Add" />
   </component>
+  <component name="ProjectStatusUIService">{
+  &quot;uiKindId&quot;: &quot;Widget&quot;
+}</component>
   <component name="ProjectViewState">
     <option name="showExcludedFiles" value="false" />
     <option name="showLibraryContents" value="true" />
@@ -116,7 +114,7 @@
     "git-widget-placeholder": "main",
     "nodejs_package_manager_path": "npm",
     "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
-    "settings.editor.selected.configurable": "preferences.sourceCode.C++"
+    "settings.editor.selected.configurable": "preferences.externalTools"
   }
 }]]></component>
   <component name="RunManager">
@@ -131,25 +129,25 @@
       </method>
     </configuration>
   </component>
-  <component name="SelectedDebugProfileService"><![CDATA[{
-  "profileIdByStamp": [
+  <component name="SelectedDebugProfileService">{
+  &quot;profileIdByStamp&quot;: [
     {
-      "first": {
-        "##RUN_CONFIGURATION##": "CMake 应用程序.ChatClient",
-        "cmake": "CMakeBuildProfile:mingw-release"
+      &quot;first&quot;: {
+        &quot;##RUN_CONFIGURATION##&quot;: &quot;CMake 应用程序.ChatClient&quot;,
+        &quot;cmake&quot;: &quot;CMakeBuildProfile:mingw-release&quot;
       },
-      "second": "402b20b2-2f26-4dfc-bd13-1cba81f9f5da"
+      &quot;second&quot;: &quot;402b20b2-2f26-4dfc-bd13-1cba81f9f5da&quot;
     },
     {
-      "first": {
-        "##RUN_CONFIGURATION##": "CMake 应用程序.ChatClient",
-        "cmake": "CMakeBuildProfile:mingw-debug"
+      &quot;first&quot;: {
+        &quot;##RUN_CONFIGURATION##&quot;: &quot;CMake 应用程序.ChatClient&quot;,
+        &quot;cmake&quot;: &quot;CMakeBuildProfile:mingw-debug&quot;
       },
-      "second": "402b20b2-2f26-4dfc-bd13-1cba81f9f5da"
+      &quot;second&quot;: &quot;402b20b2-2f26-4dfc-bd13-1cba81f9f5da&quot;
     }
   ],
-  "modificationCount": 3
-}]]></component>
+  &quot;modificationCount&quot;: 7
+}</component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="默认任务">
       <changelist id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="" />
@@ -182,7 +180,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="现在使用mingw+cmake构建项目" />
-    <option name="LAST_COMMIT_MESSAGE" value="现在使用mingw+cmake构建项目" />
+    <MESSAGE value="feat(ui): 新增聊天用户列表与截断输入框组件&#10;&#10;新增 ChatUserList 组件，支持鼠标悬浮显示滚动条并在滚动到底部时发出加载更多联系人信号。&#10;新增 TruncateEdit 组件，替代未完成的 SearchEdit 并按字节数截断输入。&#10;更新 CMakeLists 源文件清单，移除 SearchEdit 待编译配置。&#10;在 chatpage.ui 中注册新自定义控件并调整用户列表控件。&#10;新增搜索图标资源并更新 IDE 配置。" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(ui): 新增聊天用户列表与截断输入框组件&#10;&#10;新增 ChatUserList 组件，支持鼠标悬浮显示滚动条并在滚动到底部时发出加载更多联系人信号。&#10;新增 TruncateEdit 组件，替代未完成的 SearchEdit 并按字节数截断输入。&#10;更新 CMakeLists 源文件清单，移除 SearchEdit 待编译配置。&#10;在 chatpage.ui 中注册新自定义控件并调整用户列表控件。&#10;新增搜索图标资源并更新 IDE 配置。" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

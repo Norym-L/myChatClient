@@ -29,7 +29,6 @@ public:
 private:
     /// 是否展示搜索列表
     void showSerachList(bool is_searching = false);
-
     void initSearchEdit();
 
     Ui::ChatPageClass *ui;
@@ -37,6 +36,10 @@ private:
     ChatUiMode m_state{ChatUiMode::CHAT_MODE};
     ChatUiMode m_mode{ChatUiMode::CHAT_MODE};
     bool m_beLoading{false};
+
+#ifdef CLIENT_DEBUG
+    void test_addChatUserList() const;
+#endif
 
 signals:
     void sigSwitchLoginPage();
