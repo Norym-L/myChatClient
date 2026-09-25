@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="BackendCodeEditorMiscSettings">
+    <option name="/Default/Environment/StickyLines/Enabled/@EntryValue" value="false" type="bool" />
+    <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
+  </component>
+  <component name="CMakePresetLoader"><![CDATA[{
+  "useNewFormat": true
+}]]></component>
+  <component name="CMakeProjectFlavorService">
+    <option name="flavorId" value="CMakePlainProjectFlavor" />
+  </component>
+  <component name="CMakeReloadState">
+    <option name="reloaded" value="true" />
+  </component>
+  <component name="CMakeRunConfigurationManager">
+    <generated>
+      <config projectName="ChatClient" targetName="ChatClient" />
+    </generated>
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="mingw-release" PROFILE_DISPLAY_NAME="Release (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="true" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
+      <configuration PROFILE_NAME="mingw-debug" PROFILE_DISPLAY_NAME="Debug (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="true" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
+      <configuration PROFILE_NAME="mingw-release - mingw-release" PROFILE_DISPLAY_NAME="构建 Release" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
+      <configuration PROFILE_NAME="mingw-debug - mingw-debug" PROFILE_DISPLAY_NAME="构建 Debug" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/ChatClient.rc" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ClickedButton.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ClickedButton.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TCPManager.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TCPManager.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/UserManager.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/UserManager.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/chatpage.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/chatpage.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/chatpage.ui" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/clicked_label.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/clicked_label.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/global.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/global.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/httpmanager.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/httpmanager.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logger.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logger.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logindialog.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logindialog.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/logindialog.ui" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mainwindow.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mainwindow.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mainwindow.ui" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/registerdialog.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/registerdialog.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/registerdialog.ui" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/add-user.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/add-user_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/add-user_push.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/close.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/close_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/close_push.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/file.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/file_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/file_push.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/grinning-face.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/grinning-face_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/grinning-face_push.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/loading.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/login.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/message.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/message_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/message_push.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/unvisible.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/unvisible_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/visible.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/res/visible_hover.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/resetdialog.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/resetdialog.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/resetdialog.ui" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/resource.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/singleton.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/style/stylesheet.qss" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/tests/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/protocol_conformance.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/protocol_conformance.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/timer_button.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/timer_button.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/encodings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/indexLayout.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.ChatClient/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/memory/2026-09-23.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/CMakeLists.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/main.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_mingw_after_fix.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_mingw_before_fix.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.workbuddy/tmp/clickrepro/verify_msvc_after_fix.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ChatClient.aps" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ChatClient.slnx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ChatClient.vcxproj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ChatClient.vcxproj.filters" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:mingw-debug" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Norym-L"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "git@github.com:Norym-L/myChatClient.git",
+    "accountId": "ea545061-b913-4d58-9ccb-b9d8291bc8e8"
+  }
+}]]></component>
+  <component name="ProjectApplicationVersion">
+    <option name="ide" value="CLion" />
+    <option name="majorVersion" value="2026" />
+    <option name="minorVersion" value="2.2" />
+    <option name="productBranch" value="Classic" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 5,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3JnxVezWdkM3vabVuuhDrhWJvsh" />
+  <component name="ProjectViewState">
+    <option name="showExcludedFiles" value="false" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "CMake 应用程序.ChatClient.executor": "Run",
+    "CidrDebugProfileConversion": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.RadMigrateCodeStyle": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "main",
+    "nodejs_package_manager_path": "npm",
+    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true"
+  }
+}]]></component>
+  <component name="RunManager">
+    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="mingw-release" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SelectedDebugProfileService"><![CDATA[{
+  "profileIdByStamp": [
+    {
+      "first": {
+        "##RUN_CONFIGURATION##": "CMake 应用程序.ChatClient",
+        "cmake": "CMakeBuildProfile:mingw-release"
+      },
+      "second": "402b20b2-2f26-4dfc-bd13-1cba81f9f5da"
+    },
+    {
+      "first": {
+        "##RUN_CONFIGURATION##": "CMake 应用程序.ChatClient",
+        "cmake": "CMakeBuildProfile:mingw-debug"
+      },
+      "second": "402b20b2-2f26-4dfc-bd13-1cba81f9f5da"
+    }
+  ],
+  "modificationCount": 3
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="" />
+      <created>1790310660064</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1790310660064</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VCPKGProject">
+    <isAutomaticCheckingOnLaunch value="false" />
+    <isAutomaticFoundErrors value="true" />
+    <isAutomaticReloadCMake value="true" />
+    <isAutomaticBootstrapAfterUpdate value="false" />
+  </component>
+</project>

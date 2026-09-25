@@ -1,0 +1,52 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-base",
+      "hidden": true,
+      "displayName": "Windows / MinGW (Qt 6.11.2)",
+      "description": "CLion 打开本工程时选 mingw-debug 或 mingw-release。工具链必须配对：Qt 6.11.2/mingw_64 ←→ mingw1310_64 (GCC 13.1)，不可换用 GCC 11.2。",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/dev/Qt/6.11.2/mingw_64",
+        "CMAKE_CXX_COMPILER": "C:/dev/Qt/Tools/mingw1310_64/bin/g++.exe",
+        "CMAKE_RC_COMPILER": "C:/dev/Qt/Tools/mingw1310_64/bin/windres.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/dev/Qt/Tools/Ninja/ninja.exe"
+      }
+    },
+    {
+      "name": "mingw-release",
+      "inherits": "mingw-base",
+      "displayName": "Release (MinGW GCC 13.1 + Qt 6.11.2)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "mingw-debug",
+      "inherits": "mingw-base",
+      "displayName": "Debug (MinGW GCC 13.1 + Qt 6.11.2)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw-release",
+      "configurePreset": "mingw-release",
+      "displayName": "构建 Release"
+    },
+    {
+      "name": "mingw-debug",
+      "configurePreset": "mingw-debug",
+      "displayName": "构建 Debug"
+    }
+  ]
+}
