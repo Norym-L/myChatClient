@@ -46,56 +46,88 @@ QToolTip
     padding: 4px 8px;
 }
 
-/* ---- 细滚动条（QQ 深色风格：悬浮时才明显） ---- */
+/* ---- 细滚动条（QQ 深色风格：无轨道背景，仅显示滑块） ----
+   说明：若所用 Qt 样式（Windows11 / Fusion）仍绘制滚动条槽，
+   可将下方 width / height 改为 0px 以彻底隐藏滚动条。 */
 
 QScrollBar:vertical
 {
-    background: transparent;
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
     width: 8px;
-    margin: 0;
+    margin: 0px;
+    padding: 0px;
 }
 QScrollBar::handle:vertical
 {
     background: rgb(61,61,61);
-    border-radius: 4px;
+    background-image: none;
+    border: none;
+    border-radius: 3px;
     min-height: 30px;
+    margin: 0px 0px 0px 0px;
 }
-QScrollBar::handle:vertical:hover
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:vertical:pressed
 {
     background: rgb(85,85,85);
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
 {
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
     height: 0px;
 }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical
 {
-    background: transparent;
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
 }
 
 QScrollBar:horizontal
 {
-    background: transparent;
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
     height: 8px;
-    margin: 0;
+    margin: 0px;
+    padding: 0px;
 }
 QScrollBar::handle:horizontal
 {
     background: rgb(61,61,61);
-    border-radius: 4px;
+    background-image: none;
+    border: none;
+    border-radius: 3px;
     min-width: 30px;
+    margin: 2px 0px 2px 0px;
 }
-QScrollBar::handle:horizontal:hover
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:horizontal:pressed
 {
     background: rgb(85,85,85);
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal
 {
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
     width: 0px;
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal
 {
-    background: transparent;
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+}
+
+QScrollBar::corner
+{
+    background: rgba(0, 0, 0, 0);
+    border: none;
 }
 
 /* ---- 输入框（登录/注册/重置表单 + 搜索框 search_edit 统一套用） ---- */
