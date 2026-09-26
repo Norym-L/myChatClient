@@ -7,37 +7,38 @@
 #include <QAbstractScrollArea>
 
 #include "friendWidget/friendwidget.h"
+#include "loadingDialog/loadingdialog.h"
 
 namespace
 {
-    /// 滚动条宽度，需与 assets/styles/stylesheet.qss 中 QScrollBar 的 width / height 保持一致
-    constexpr int kScrollBarWidth = 8;
+/// 滚动条宽度，需与 assets/styles/stylesheet.qss 中 QScrollBar 的 width / height 保持一致
+constexpr int kScrollBarWidth = 8;
 
-    /**
-     * @brief 访问器：把 QAbstractScrollArea 的 protected setViewportMargins 提升为 public
-     *
-     * Qt 6 中 setViewportMargins 是 protected，外部代码无法直接调用，也不可
-     * 把基类指针强转成派生类再调用（对象实际不是派生类型，属未定义行为）。
-     * 这里通过 using 声明提升访问权限后取成员函数指针，所得指针类型仍是
-     * void (QAbstractScrollArea::*)(int, int, int, int)，可合法作用于任意滚动区域。
-     */
-    class ScrollAreaAccess : public QAbstractScrollArea
-    {
-    public:
-        using QAbstractScrollArea::setViewportMargins;
-    };
+/**
+ * @brief 访问器：把 QAbstractScrollArea 的 protected setViewportMargins 提升为 public
+ *
+ * Qt 6 中 setViewportMargins 是 protected，外部代码无法直接调用，也不可
+ * 把基类指针强转成派生类再调用（对象实际不是派生类型，属未定义行为）。
+ * 这里通过 using 声明提升访问权限后取成员函数指针，所得指针类型仍是
+ * void (QAbstractScrollArea::*)(int, int, int, int)，可合法作用于任意滚动区域。
+ */
+class ScrollAreaAccess : public QAbstractScrollArea
+{
+public:
+    using QAbstractScrollArea::setViewportMargins;
+};
 
-    /**
-     * @brief 让纵向滚动条悬浮在内容之上
-     * @param area 目标滚动区域；负值右边距使 viewport 延伸到滚动条区域下方，
-     *             配合 QSS 中透明的滚动条轨道，滚动条不再占用内容宽度
-     */
-    void overlayScrollBar(QAbstractScrollArea* area)
-    {
-        using SetViewportMarginsFn = void (QAbstractScrollArea::*)(int, int, int, int);
-        const SetViewportMarginsFn setter = &ScrollAreaAccess::setViewportMargins;
-        (area->*setter)(0, 0, -kScrollBarWidth, 0);
-    }
+/**
+ * @brief 让纵向滚动条悬浮在内容之上
+ * @param area 目标滚动区域；负值右边距使 viewport 延伸到滚动条区域下方，
+ *             配合 QSS 中透明的滚动条轨道，滚动条不再占用内容宽度
+ */
+void overlayScrollBar(QAbstractScrollArea* area)
+{
+    using SetViewportMarginsFn = void (QAbstractScrollArea::*)(int, int, int, int);
+    const SetViewportMarginsFn setter = &ScrollAreaAccess::setViewportMargins;
+    (area->*setter)(0, 0, -kScrollBarWidth, 0);
+}
 }
 
 ChatPage::ChatPage(QWidget* parent)
@@ -60,6 +61,7 @@ ChatPage::ChatPage(QWidget* parent)
 
     ui->add_button->setState("normal", "hover", "press");
     initSearchEdit();
+    initChatUserList();
 }
 
 ChatPage::~ChatPage()
@@ -128,10 +130,15 @@ void ChatPage::initSearchEdit()
     showSerachList(false);
 }
 
+void ChatPage::initChatUserList()
+{
+    // 收到信号加载更多联系人
+    connect(ui->chat_users_list, &ChatUserList::sigLoadingChatUser, this, &ChatPage::slotLoadingMoreChatUserInChatUserList);
+}
 
 
-#ifdef CLIENT_DEBUG
 #include <QRandomGenerator>
+
 void ChatPage::test_addChatUserList() const
 {
     std::vector<QString> strs = {
@@ -174,4 +181,19 @@ void ChatPage::test_addChatUserList() const
         ui->chat_users_list->setItemWidget(item, friend_widget);
     }
 }
-#endif
+
+void ChatPage::slotLoadingMoreChatUserInChatUserList()
+{
+    if (m_beLoadingMoreChatUser)
+    {
+        return;
+    }
+    m_beLoadingMoreChatUser = true;
+    auto* loading_dialog = new LoadingDialog(this);
+    loading_dialog->setModal(true);
+    loading_dialog->show();
+    LOG_DEBUG() << "[ui][chat page] loading more user function run";
+    test_addChatUserList();
+    loading_dialog->deleteLater();
+    m_beLoadingMoreChatUser = false;
+}

@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/">
+    <file>assets/images/loading.png</file>
+    <file>assets/images/loading.gif</file>
     <file>assets/images/add-user.png</file>
     <file>assets/images/add-user_hover.png</file>
     <file>assets/images/add-user_push.png</file>
@@ -17,7 +19,6 @@
     <file>assets/images/head_3.jpg</file>
     <file>assets/images/head_4.jpg</file>
     <file>assets/images/head_5.jpg</file>
-    <file>assets/images/loading.png</file>
     <file>assets/images/login.png</file>
     <file>assets/images/message.png</file>
     <file>assets/images/message_hover.png</file>
@@ -47,7 +48,6 @@
     <file alias="res/grinning-face.png">assets/images/grinning-face.png</file>
     <file alias="res/grinning-face_hover.png">assets/images/grinning-face_hover.png</file>
     <file alias="res/grinning-face_push.png">assets/images/grinning-face_push.png</file>
-    <file alias="res/loading.png">assets/images/loading.png</file>
     <file alias="res/message.png">assets/images/message.png</file>
     <file alias="res/message_hover.png">assets/images/message_hover.png</file>
     <file alias="res/message_push.png">assets/images/message_push.png</file>
