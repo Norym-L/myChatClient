@@ -14,15 +14,15 @@ ResetDialog::ResetDialog(QWidget* parent)
 
 	connect(ui->email_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkEmailImputValid();
+			checkEmailInputValid();
 		});
 	connect(ui->new_password_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkPasswordImputValid();
+			checkPasswordInputValid();
 		});
 	connect(ui->verify_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkVerifyImputValid();
+			checkVerifyInputValid();
 		});
 
 	initHandlers();
@@ -37,7 +37,7 @@ ResetDialog::ResetDialog(QWidget* parent)
 	// 发送验证码
 	connect(ui->get_verify_button, &QPushButton::clicked, this, [this]()
 		{
-			if (!checkEmailImputValid())
+			if (!checkEmailInputValid())
 			{
 				return;
 			}
@@ -58,10 +58,10 @@ ResetDialog::ResetDialog(QWidget* parent)
 	// 确认按钮
 	connect(ui->ok_button, &QPushButton::clicked, this, [this]()
 		{
-			if (!checkEmailImputValid() ||
-				!checkPasswordImputValid() ||
-				!checkVerifyImputValid() ||
-				!checkAccountImputValid())
+			if (!checkEmailInputValid() ||
+				!checkPasswordInputValid() ||
+				!checkVerifyInputValid() ||
+				!checkAccountInputValid())
 			{
 				return;
 			}
@@ -102,7 +102,7 @@ void ResetDialog::delTipErr(const TipErr tip)
 	showTip(m_tipErrs.first(), false);
 }
 
-bool ResetDialog::checkAccountImputValid()
+bool ResetDialog::checkAccountInputValid()
 {
 	auto account = ui->user_edit->text();
 	QRegularExpression regx(R"(^[1-9][0-9]{3,}$)");
@@ -117,7 +117,7 @@ bool ResetDialog::checkAccountImputValid()
 	return true;
 }
 
-bool ResetDialog::checkEmailImputValid()
+bool ResetDialog::checkEmailInputValid()
 {
 	auto email = ui->email_edit->text();
 	QRegularExpression regex(R"((\w+)(\.|_)?(\w*)@(\w+)(\.(\w+))+)");
@@ -132,7 +132,7 @@ bool ResetDialog::checkEmailImputValid()
 	return true;
 }
 
-bool ResetDialog::checkPasswordImputValid()
+bool ResetDialog::checkPasswordInputValid()
 {
 	auto pass = ui->new_password_edit->text();
 	if (pass.length() < 6 || pass.length() > 16)
@@ -153,7 +153,7 @@ bool ResetDialog::checkPasswordImputValid()
 	return true;
 }
 
-bool ResetDialog::checkVerifyImputValid()
+bool ResetDialog::checkVerifyInputValid()
 {
 	auto verify = ui->verify_edit->text();
 	if (verify.isEmpty())
@@ -193,7 +193,7 @@ void ResetDialog::initHandlers()
 				return;
 			}
 
-			showTip(tr("验证码已经发送到邮箱，注意查收"), true);
+			showTip(tr("验证码已发送到邮箱，注意查收"), true);
 			LOG_INFO() << "[reset] verify code sent to:" << json_object.value("email").toString();
 
 			// 文档：仅 Debug 构建（GATE_DEBUG）会返回 verify_code，用于本地联调

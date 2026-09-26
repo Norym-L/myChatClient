@@ -28,13 +28,13 @@ private:
 	void delTipErr(const TipErr tip);
 
 	/// 检查账号合法性
-	bool checkAccountImputValid();
+	bool checkAccountInputValid();
 	/// 检查邮箱合法性
-	bool checkEmailImputValid();
+	bool checkEmailInputValid();
 	/// 检查密码合法性
-	bool checkPasswordImputValid();
+	bool checkPasswordInputValid();
 	/// 检查验证码合法性
-	bool checkVerifyImputValid();
+	bool checkVerifyInputValid();
 	/// 显示错误提示
 	void showTip(const QString& str, bool b_ok) const;
 	/// 初始化处理函数

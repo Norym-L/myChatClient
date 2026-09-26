@@ -165,7 +165,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QWidget" name="serah_widget" native="true">
+       <widget class="QWidget" name="search_widget" native="true">
         <property name="minimumSize">
          <size>
           <width>0</width>
@@ -192,7 +192,7 @@
           <number>5</number>
          </property>
          <item>
-          <widget class="TruncateEdit" name="serach_edit">
+          <widget class="TruncateEdit" name="search_edit">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -315,7 +315,7 @@
            </property>
            <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
-             <widget class="QLabel" name="tutle_label">
+             <widget class="QLabel" name="title_label">
               <property name="minimumSize">
                <size>
                 <width>0</width>
@@ -373,7 +373,7 @@
           <number>2</number>
          </property>
          <item>
-          <widget class="QLabel" name="emoji_lable">
+          <widget class="QLabel" name="emoji_label">
            <property name="minimumSize">
             <size>
              <width>30</width>
@@ -392,7 +392,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="file_lable">
+          <widget class="QLabel" name="file_label">
            <property name="minimumSize">
             <size>
              <width>30</width>
@@ -491,7 +491,7 @@
             </size>
            </property>
            <property name="text">
-            <string>接受(debug)</string>
+            <string>接收(debug)</string>
            </property>
           </widget>
          </item>

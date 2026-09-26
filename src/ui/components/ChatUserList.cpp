@@ -21,7 +21,7 @@ bool ChatUserList::eventFilter(QObject *object, QEvent *event)
     // 检查鼠标悬浮进入或离开
     if (object == this->viewport())
     {
-        if (event->type() == QEvent::Enter) // 是否显示进度条
+        if (event->type() == QEvent::Enter) // 是否显示滚动条
         {
             this->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         }
@@ -35,8 +35,8 @@ bool ChatUserList::eventFilter(QObject *object, QEvent *event)
     if (object == this->viewport() && event->type() == QEvent::Wheel)
     {
         const auto *wheel_event = dynamic_cast<QWheelEvent*>(event);
-        const int num_degress = wheel_event->angleDelta().y() / 8;
-        const int num_steps = num_degress / 15; // 计算滚动步数
+        const int num_degrees = wheel_event->angleDelta().y() / 8;
+        const int num_steps = num_degrees / 15; // 计算滚动步数
         // 设置幅度
         this->verticalScrollBar()->setValue(this->verticalScrollBar()->value() - num_steps);
         // 检查是否滚动到底部

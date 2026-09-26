@@ -8,7 +8,7 @@
 #include "ui/components/clicked_label.h"
 #include "core/logger.h"
 
-bool RegisterDialog::checkUserNameImputValid()
+bool RegisterDialog::checkUserNameInputValid()
 {
 	if (ui->user_name_edit->text().isEmpty())
 	{
@@ -20,7 +20,7 @@ bool RegisterDialog::checkUserNameImputValid()
 	return true;
 }
 
-bool RegisterDialog::checkEmailImputValid()
+bool RegisterDialog::checkEmailInputValid()
 {
 	auto email = ui->email_edit->text();
 	QRegularExpression regex(R"((\w+)(\.|_)?(\w*)@(\w+)(\.(\w+))+)");
@@ -35,7 +35,7 @@ bool RegisterDialog::checkEmailImputValid()
 	return true;
 }
 
-bool RegisterDialog::checkPasswordImputValid()
+bool RegisterDialog::checkPasswordInputValid()
 {
 	auto pass = ui->pass_edit->text();
 	if (pass.length() < 6 || pass.length() > 16)
@@ -56,7 +56,7 @@ bool RegisterDialog::checkPasswordImputValid()
 	return true;
 }
 
-bool RegisterDialog::checkPassword2ImputValid()
+bool RegisterDialog::checkPassword2InputValid()
 {
 	if (ui->pass_edit->text() != ui->pass2_edit->text())
 	{
@@ -68,7 +68,7 @@ bool RegisterDialog::checkPassword2ImputValid()
 	return true;
 }
 
-bool RegisterDialog::checkVerifyImputValid()
+bool RegisterDialog::checkVerifyInputValid()
 {
 	auto verify = ui->token_edit->text();
 	if (verify.isEmpty())
@@ -93,34 +93,34 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 
 	connect(ui->user_name_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkUserNameImputValid();
+			checkUserNameInputValid();
 		});
 
 	connect(ui->email_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkEmailImputValid();
+			checkEmailInputValid();
 		});
 
 	connect(ui->pass_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkPasswordImputValid();
+			checkPasswordInputValid();
 		});
 
 	connect(ui->pass2_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkPassword2ImputValid();
+			checkPassword2InputValid();
 		});
 
 	connect(ui->token_edit, &QLineEdit::editingFinished, this, [this]()
 		{
-			checkVerifyImputValid();
+			checkVerifyInputValid();
 		});
 
 	// 设置显示隐藏按钮
 	ui->pass_visible->setCursor(Qt::PointingHandCursor);
 	ui->pass2_visible->setCursor(Qt::PointingHandCursor);
-	ui->pass_visible->setState("unvisible", "unvisible_hover", "visible_hover", "visible", "visible_hover", "unvisible_hover");
-	ui->pass2_visible->setState("unvisible", "unvisible_hover", "visible_hover", "visible", "visible_hover", "unvisible_hover");
+	ui->pass_visible->setState("invisible", "invisible_hover", "visible_hover", "visible", "visible_hover", "invisible_hover");
+	ui->pass2_visible->setState("invisible", "invisible_hover", "visible_hover", "visible", "visible_hover", "invisible_hover");
 
 	connect(ui->pass_visible, &ClickedLabel::clicked, this, [this]()
 		{
@@ -221,7 +221,7 @@ void RegisterDialog::on_get_token_button_clicked()
 	bool match = regex.match(email).hasMatch();
 	if (!match)
 	{
-		showTip(tr("邮箱地址不准确"), false);
+		showTip(tr("邮箱地址不正确"), false);
 		return;
 	}
 
@@ -351,11 +351,11 @@ void RegisterDialog::showTip(const QString& str, bool b_ok)
 void RegisterDialog::on_confirm_button_clicked()
 {
 	LOG_DEBUG() << "[ui] confirm_button_clicked";
-	if (!checkEmailImputValid() ||
-		!checkUserNameImputValid() ||
-		!checkPasswordImputValid() ||
-		!checkPassword2ImputValid() ||
-		!checkVerifyImputValid())
+	if (!checkEmailInputValid() ||
+		!checkUserNameInputValid() ||
+		!checkPasswordInputValid() ||
+		!checkPassword2InputValid() ||
+		!checkVerifyInputValid())
 	{
 		return;
 	}

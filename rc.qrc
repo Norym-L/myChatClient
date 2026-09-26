@@ -25,14 +25,14 @@
     <file>assets/images/search.png</file>
     <file>assets/images/search_hover.png</file>
     <file>assets/images/search_push.png</file>
-    <file>assets/images/unvisible.png</file>
-    <file>assets/images/unvisible_hover.png</file>
+    <file>assets/images/invisible.png</file>
+    <file>assets/images/invisible_hover.png</file>
     <file>assets/images/visible.png</file>
     <file>assets/images/visible_hover.png</file>
     <file alias="style/stylesheet.qss">assets/styles/stylesheet.qss</file>
     <file alias="res/login.png">assets/images/login.png</file>
-    <file alias="res/unvisible.png">assets/images/unvisible.png</file>
-    <file alias="res/unvisible_hover.png">assets/images/unvisible_hover.png</file>
+    <file alias="res/invisible.png">assets/images/invisible.png</file>
+    <file alias="res/invisible_hover.png">assets/images/invisible_hover.png</file>
     <file alias="res/visible.png">assets/images/visible.png</file>
     <file alias="res/visible_hover.png">assets/images/visible_hover.png</file>
     <file alias="res/add-user.png">assets/images/add-user.png</file>

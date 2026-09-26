@@ -17,8 +17,8 @@ class LoginDialog : public QDialog
 public:
     explicit LoginDialog(QWidget *parent = nullptr);
     ~LoginDialog() override;
-    bool checkAccountImputValid();
-    bool checkPasswordImputValid();
+    bool checkAccountInputValid();
+    bool checkPasswordInputValid();
     void addTipErr(TipErr tip, const QString& notice);
     void delTipErr(TipErr tip);
     void showTip(const QString& str, bool b_ok) const;

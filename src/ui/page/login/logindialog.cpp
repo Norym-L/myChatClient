@@ -42,11 +42,11 @@ LoginDialog::LoginDialog(QWidget* parent)
 	/// 错误提示
 	connect(ui->pass_edit, &QLineEdit::editingFinished, this, [this]()
 	{
-		checkPasswordImputValid();
+		checkPasswordInputValid();
 	});
 	connect(ui->account_edit, &QLineEdit::editingFinished, this, [this]()
 	{
-		checkAccountImputValid();
+		checkAccountInputValid();
 	});
 
 	/// 消息处理
@@ -68,7 +68,7 @@ LoginDialog::~LoginDialog()
 	delete ui;
 }
 
-bool LoginDialog::checkAccountImputValid()
+bool LoginDialog::checkAccountInputValid()
 {
 	auto account = ui->account_edit->text();
 	QRegularExpression regx(R"(^[1-9][0-9]{3,}$)");
@@ -83,7 +83,7 @@ bool LoginDialog::checkAccountImputValid()
 	return true;
 }
 
-bool LoginDialog::checkPasswordImputValid()
+bool LoginDialog::checkPasswordInputValid()
 {
 	auto pass = ui->pass_edit->text();
 	if (pass.length() < 6 || pass.length() > 16)
@@ -139,8 +139,8 @@ void LoginDialog::showTip(const QString& str, bool b_ok) const
 
 void LoginDialog::login()
 {
-	if (!checkAccountImputValid() ||
-		!checkPasswordImputValid())
+	if (!checkAccountInputValid() ||
+		!checkPasswordInputValid())
 	{
 		return;
 	}

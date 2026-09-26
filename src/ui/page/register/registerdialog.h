@@ -34,15 +34,15 @@ private:
 	void delTipErr(const TipErr tip);
 
 	/// 检查用户名合法性
-	bool checkUserNameImputValid();
+	bool checkUserNameInputValid();
 	/// 检查邮箱合法性
-	bool checkEmailImputValid();
+	bool checkEmailInputValid();
 	/// 检查密码合法性
-	bool checkPasswordImputValid();
+	bool checkPasswordInputValid();
 	/// 检查再次输入密码合法性
-	bool checkPassword2ImputValid();
+	bool checkPassword2InputValid();
 	/// 检查验证码合法性
-	bool checkVerifyImputValid();
+	bool checkVerifyInputValid();
 
 private slots:
 	void on_get_token_button_clicked();

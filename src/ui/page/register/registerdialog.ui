@@ -446,7 +446,7 @@
            <item>
             <widget class="QLabel" name="reg_success_tip_label">
              <property name="text">
-              <string>注册成功，5秒后返回登录</string>
+              <string>注册成功，5 秒后返回登录</string>
              </property>
             </widget>
            </item>
