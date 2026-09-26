@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QStringList>
 
 #include "app/global.h"
 #include "core/logger.h"
@@ -20,18 +21,46 @@ int main(int argc, char *argv[])
 
     QApplication a(argc, argv);
 
-    QFile qss(":/style/stylesheet.qss");
+    // 样式表按 ui/page 拆分为多个 .qss（见 assets/styles/），此处按原
+    // stylesheet.qss 的段落顺序拼接加载——顺序决定同名选择器的覆盖结果，
+    // 与拆分前行为保持一致，新增页面样式请追加到列表末尾或对应位置。
+    const QStringList kQssFiles = {
+        ":/style/common.qss",
+        ":/style/login/logindialog.qss",
+        ":/style/register/registerdialog.qss",
+        ":/style/reset/resetdialog.qss",
+        ":/style/chat/chatpage.qss",
+        ":/style/chat/chatPage/interchatpage.qss",
+        ":/style/chat/friendWidget/friendwidget.qss",
+    };
 
-    if (qss.open(QFile::ReadOnly))
+    QString style;
+    qint64 total_size = 0;
+    int loaded_count = 0;
+
+    for (const QString &qss_path : kQssFiles)
     {
-        LOG_DEBUG() << "[ui] stylesheet loaded, size:" << qss.size();
-        QString style = QLatin1String(qss.readAll());
-        a.setStyleSheet(style);
-        qss.close();
+        QFile qss(qss_path);
+
+        if (qss.open(QFile::ReadOnly))
+        {
+            const QByteArray data = qss.readAll();
+            style.append(QString::fromUtf8(data));
+            total_size += data.size();
+            ++loaded_count;
+            qss.close();
+        }
+        else
+        {
+            LOG_WARN() << "[ui] stylesheet open failed:" << qss.fileName();
+        }
     }
-    else
+
+    if (loaded_count > 0)
     {
-        LOG_WARN() << "[ui] stylesheet open failed:" << qss.fileName();
+        LOG_DEBUG() << "[ui] stylesheets loaded," << loaded_count << "/"
+                    << kQssFiles.size() << "files," << total_size << "bytes";
+        a.setStyleSheet(style);
     }
 
     // 配置来源：可执行文件目录下的 config.ini

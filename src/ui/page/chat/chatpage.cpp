@@ -11,7 +11,7 @@
 
 namespace
 {
-/// 滚动条宽度，需与 assets/styles/stylesheet.qss 中 QScrollBar 的 width / height 保持一致
+/// 滚动条宽度，需与 assets/styles/common.qss 中 QScrollBar 的 width / height 保持一致
 constexpr int kScrollBarWidth = 8;
 
 /**
@@ -50,14 +50,13 @@ ChatPage::ChatPage(QWidget* parent)
 #ifdef CLIENT_DEBUG // 仅在debug下显示接收按钮
     test_addChatUserList();
 #else
-    ui->receive_button->hide();
+
 #endif
 
-    // 会话列表 / 搜索列表 / 联系人列表 / 消息输入框：滚动条统一改为悬浮
+    // 会话列表 / 搜索列表 / 联系人列表：滚动条统一改为悬浮
     overlayScrollBar(ui->chat_users_list);
     overlayScrollBar(ui->search_list);
     overlayScrollBar(ui->con_user_list);
-    overlayScrollBar(ui->chat_edit);
 
     ui->add_button->setState("normal", "hover", "press");
     initSearchEdit();

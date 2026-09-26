@@ -140,7 +140,7 @@ target_compile_definitions(ChatClient PRIVATE
 # 却会以 "no resources" 报错退出（实测 2.39 与 2.47 两个版本均如此），
 # 直接导致 MinGW 构建在这一步中断。
 #
-# 该文件本就零资源贡献（图标与 stylesheet.qss 全部由 rc.qrc 经 Qt 资源系统打包），
+# 该文件本就零资源贡献（图标与各 .qss 全部由 rc.qrc 经 Qt 资源系统打包），
 # 因此移出编译列表；文件仍留在源码目录，不删不改。
 # 将来需要版本信息 / 应用图标等 Win32 资源时：在 ChatClient.rc 里补上真实资源定义，
 # 再把它加回上面的 CHATCLIENT_SOURCES 即可（届时 windres 有资源可编，自然通过）。
