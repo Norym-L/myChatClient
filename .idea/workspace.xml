@@ -32,24 +32,11 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="feat(chat): 新增聊天消息视图组件&#10;&#10;新增 ChatView 组件用于展示聊天消息，支持尾插消息项、悬浮滚动条自动隐藏与追加消息时自动滚动到底部。同步更新 interchatpage 使用该组件">
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="聊天气泡">
       <change afterPath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.cpp" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/TextBubble.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/TextBubble.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.ui" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/global.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/global.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -205,7 +192,8 @@
     <MESSAGE value="[chat page]悬浮发送按钮" />
     <MESSAGE value="小修补" />
     <MESSAGE value="feat(chat): 新增聊天消息视图组件&#10;&#10;新增 ChatView 组件用于展示聊天消息，支持尾插消息项、悬浮滚动条自动隐藏与追加消息时自动滚动到底部。同步更新 interchatpage 使用该组件" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(chat): 新增聊天消息视图组件&#10;&#10;新增 ChatView 组件用于展示聊天消息，支持尾插消息项、悬浮滚动条自动隐藏与追加消息时自动滚动到底部。同步更新 interchatpage 使用该组件" />
+    <MESSAGE value="聊天气泡" />
+    <option name="LAST_COMMIT_MESSAGE" value="聊天气泡" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
