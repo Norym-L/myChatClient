@@ -22,13 +22,13 @@ class InterChatPage : public QWidget
 public:
     explicit InterChatPage(QWidget* parent = nullptr);
     ~InterChatPage() override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    void initButton();
+    void initChatInputEditAndRecvSendButton();
     /// 把按钮区摆到输入框右下角（输入框尺寸变化后需重新调用）
     void updateButtonPos() const;
 

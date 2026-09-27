@@ -14,7 +14,7 @@ InterChatPage::InterChatPage(QWidget* parent)
     ui->receive_button->hide();
 #endif
 
-    initButton();
+    initChatInputEditAndRecvSendButton();
 }
 
 InterChatPage::~InterChatPage()
@@ -31,8 +31,9 @@ void InterChatPage::paintEvent(QPaintEvent* event)
     style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
 }
 
-void InterChatPage::initButton()
+void InterChatPage::initChatInputEditAndRecvSendButton()
 {
+    // 设置按钮悬浮在输入框上的样式
     // 按钮区脱离页面布局，改挂到输入框之下，手动摆到右下角。
     // 不放入布局，避免它被拉伸成整块而拦掉输入框的鼠标事件。
     ui->verticalLayout->removeWidget(ui->button_widget);
