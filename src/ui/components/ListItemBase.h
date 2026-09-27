@@ -12,6 +12,8 @@ enum class ListItemType
 };
 
 #include <QWidget>
+#include <QPainter>
+#include <QStyleOption>
 
 class ListItemBase : public QWidget
 {
@@ -20,7 +22,16 @@ class ListItemBase : public QWidget
 public:
     explicit ListItemBase(QWidget *parent = nullptr) : QWidget(parent) {}
     void setItemType(const ListItemType item_type) { m_type = item_type; }
-    ListItemType getType() const { return m_type; }
+    [[nodiscard]] ListItemType getType() const { return m_type; }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QStyleOption option;
+        option.initFrom(this);
+        QPainter painter(this);
+        style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
+    }
 
 private:
     ListItemType m_type{};

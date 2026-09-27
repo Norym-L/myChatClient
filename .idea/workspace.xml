@@ -32,15 +32,9 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="样式拆分">
-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="小修补">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/chat/chatPage/interchatpage.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/chat/chatPage/interchatpage.qss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/chat/chatpage.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/chat/chatpage.qss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/ListItemBase.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/components/ListItemBase.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -188,7 +182,9 @@
     <MESSAGE value="加载动画" />
     <MESSAGE value="聊天页面右边栏拆分进stackedWidget实现多页面切换&#10;样式拆分" />
     <MESSAGE value="样式拆分" />
-    <option name="LAST_COMMIT_MESSAGE" value="样式拆分" />
+    <MESSAGE value="[chat page]悬浮发送按钮" />
+    <MESSAGE value="小修补" />
+    <option name="LAST_COMMIT_MESSAGE" value="小修补" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

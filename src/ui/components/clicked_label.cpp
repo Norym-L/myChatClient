@@ -19,12 +19,12 @@ void ClickedLabel::mousePressEvent(QMouseEvent* event)
 
 		if (m_currentState == ClickLabelState::NORMAL)
 		{
-			LOG_DEBUG() << "[ui] clicked label pressed, normal state:" << m_normalPress;
+			// LOG_DEBUG() << "[ui] clicked label pressed, normal state:" << m_normalPress;
 			setProperty("state", m_normalPress);
 		}
 		else
 		{
-			LOG_DEBUG() << "[ui] clicked label pressed, select state:" << m_selectedPress;
+			// LOG_DEBUG() << "[ui] clicked label pressed, select state:" << m_selectedPress;
 			setProperty("state", m_selectedPress);
 		}
 
@@ -46,13 +46,13 @@ void ClickedLabel::mouseReleaseEvent(QMouseEvent* event)
 
 		if (m_currentState == ClickLabelState::NORMAL)
 		{
-			LOG_DEBUG() << "[ui] clicked label released, select hover:" << m_selectedHover;
+			// LOG_DEBUG() << "[ui] clicked label released, select hover:" << m_selectedHover;
 			m_currentState = ClickLabelState::SELECT;
 			setProperty("state", m_selectedHover);
 		}
 		else
 		{
-			LOG_DEBUG() << "[ui] clicked label released, normal hover:" << m_normalHover;
+			// LOG_DEBUG() << "[ui] clicked label released, normal hover:" << m_normalHover;
 			m_currentState = ClickLabelState::NORMAL;
 			setProperty("state", m_normalHover);
 		}
@@ -73,12 +73,12 @@ void ClickedLabel::enterEvent(QEnterEvent* event)
 
 	if (m_currentState == ClickLabelState::NORMAL)
 	{
-		LOG_DEBUG() << "[ui] clicked label entered, normal hover:" << m_normalHover;
+		// LOG_DEBUG() << "[ui] clicked label entered, normal hover:" << m_normalHover;
 		setProperty("state", m_normalHover);
 	}
 	else
 	{
-		LOG_DEBUG() << "[ui] clicked label entered, select hover:" << m_selectedHover;
+		// LOG_DEBUG() << "[ui] clicked label entered, select hover:" << m_selectedHover;
 		setProperty("state", m_selectedHover);
 	}
 
@@ -97,12 +97,12 @@ void ClickedLabel::leaveEvent(QEvent* event)
 
 	if (m_currentState == ClickLabelState::NORMAL)
 	{
-		LOG_DEBUG() << "[ui] clicked label leaved, normal:" << m_normal;
+		// LOG_DEBUG() << "[ui] clicked label leaved, normal:" << m_normal;
 		setProperty("state", m_normal);
 	}
 	else
 	{
-		LOG_DEBUG() << "[ui] clicked label leaved, select:" << m_selected;
+		// LOG_DEBUG() << "[ui] clicked label leaved, select:" << m_selected;
 		setProperty("state", m_selected);
 	}
 
