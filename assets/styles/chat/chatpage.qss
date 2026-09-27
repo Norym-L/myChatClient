@@ -118,6 +118,7 @@ QStackedWidget#stackedWidget
 {
     background-color: rgb(34, 34, 34);
     border-left: 1px solid rgb(47, 47, 47);
+    padding-left: 1px
 }
 
 /* 聊天页（InterChatPage 实例）与好友信息页：统一主背景 */

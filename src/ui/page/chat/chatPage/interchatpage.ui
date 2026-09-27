@@ -97,17 +97,17 @@
     <widget class="QWidget" name="chat_data_list" native="true"/>
    </item>
    <item>
-    <widget class="QWidget" name="tool_widget_2" native="true">
+    <widget class="QWidget" name="tool_widget" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>35</height>
+       <height>30</height>
       </size>
      </property>
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>25</height>
+       <height>30</height>
       </size>
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_11">
@@ -130,14 +130,14 @@
        <widget class="ClickedLabel" name="emoji_label">
         <property name="minimumSize">
          <size>
-          <width>30</width>
-          <height>30</height>
+          <width>20</width>
+          <height>20</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>30</width>
-          <height>30</height>
+          <width>20</width>
+          <height>20</height>
          </size>
         </property>
         <property name="text">
@@ -149,14 +149,14 @@
        <widget class="ClickedLabel" name="file_label">
         <property name="minimumSize">
          <size>
-          <width>30</width>
-          <height>30</height>
+          <width>20</width>
+          <height>20</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>30</width>
-          <height>30</height>
+          <width>20</width>
+          <height>20</height>
          </size>
         </property>
         <property name="text">
@@ -185,19 +185,19 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>120</height>
+       <height>150</height>
       </size>
      </property>
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>120</height>
+       <height>150</height>
       </size>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="button_widget_2" native="true">
+    <widget class="QWidget" name="button_widget" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -217,19 +217,6 @@
       <property name="bottomMargin">
        <number>0</number>
       </property>
-      <item>
-       <spacer name="horizontalSpacer_6">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
       <item>
        <widget class="ClickedButton" name="receive_button">
         <property name="minimumSize">
@@ -285,6 +272,8 @@
    <header location="global">ui/components/ClickedButton.h</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="../../../../../rc.qrc"/>
+ </resources>
  <connections/>
 </ui>
