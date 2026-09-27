@@ -5,6 +5,10 @@
 #include <QPainter>
 #include <QEvent>
 
+#include "chatItem/TextBubble.h"
+#include "chatItem/PictureBubble.h"
+#include "app/global.h"
+
 InterChatPage::InterChatPage(QWidget* parent)
     : QWidget(parent), ui(new Ui::InterChatPage)
 {
@@ -51,6 +55,9 @@ void InterChatPage::initChatInputEditAndRecvSendButton()
     // 快捷栏样式
     ui->emoji_label->setState("normal", "hover", "press", "normal", "hover", "press");
     ui->file_label->setState("normal", "hover", "press", "normal", "hover", "press");
+
+    // 连接发送事件
+    connect(ui->send_button, &ClickedButton::released, this, &InterChatPage::slotSendButtonPushed);
 }
 
 bool InterChatPage::eventFilter(QObject* watched, QEvent* event)
@@ -72,4 +79,10 @@ void InterChatPage::updateButtonPos() const
                                    ui->chat_edit->height() - hint.height() - kMargin,
                                    hint.width(),
                                    hint.height());
+}
+
+void InterChatPage::slotSendButtonPushed()
+{
+    auto text_edit = ui->chat_edit;
+    const QVector<MessageInfo>& message_list = text_edit->getMessageList();
 }

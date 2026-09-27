@@ -33,6 +33,9 @@ private:
     void updateButtonPos() const;
 
     Ui::InterChatPage* ui;
+
+private slots:
+    void slotSendButtonPushed();
 };
 
 

@@ -143,6 +143,23 @@ struct ServerInfo
 	QString _port;
 };
 
+struct MessageInfo
+{
+    enum class MessageFlag
+    {
+        TEXT,
+        IMAGE,
+        FILE
+    }; // text, image, file
+
+    MessageFlag messageFlag;
+    QString content; // 文件、图片的url， 文本信息
+    QPixmap pixmap; // 文件、图片缩略图
+};
+
+#define PICTURE_MAX_WIDTH   200
+#define PICTURE_MAX_HEIGHT  100
+
 
 extern QString GATE_URL_PREFIX;
 

@@ -26,8 +26,9 @@ public:
     void appendChatItemAtHead(QWidget* item);           // 头插
     void insertChatItem(QWidget* befor, QWidget* item); // 中间插
 
-protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+
+protected:
     void paintEvent(QPaintEvent* event) override;
 
 private slots:
