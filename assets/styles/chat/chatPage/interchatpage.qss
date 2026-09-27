@@ -1,0 +1,92 @@
+/* ============================================================
+   会话聊天页 InterChatPage（chat/chatPage/interchatpage.qss）
+   作为 chatpage.qss 中 stackedWidget 的 chat_page 页实例化。
+   全局基础见 ../../../common.qss
+   ============================================================ */
+
+/* 标题 */
+QLabel#title_label
+{
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    padding-left: 8px;
+}
+
+/* 消息展示区 */
+QWidget#chat_data_list
+{
+    background-color: rgb(34, 34, 34);
+    border-top: 1px solid rgb(47, 47, 47);
+    border-bottom: 1px solid rgb(47, 47, 47);
+}
+
+/* 工具栏 / 按钮区：透明容器，沿用页面主背景 */
+QWidget#tool_widget_2,
+QWidget#button_widget_2
+{
+    background-color: transparent;
+}
+
+/* 消息输入框：与搜索框同一套控件底色，保证边界可见 */
+QTextEdit#chat_edit
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(47,47,47);
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    padding: 6px 8px;
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+QTextEdit#chat_edit:hover
+{
+    border: 1px solid rgb(61,61,61);
+}
+
+QTextEdit#chat_edit:focus
+{
+    border: 1px solid rgb(0,153,255);
+}
+
+/* 发送：QQ 蓝主按钮 */
+QPushButton#send_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#send_button:hover
+{
+    background-color: rgb(26,168,255);
+}
+
+QPushButton#send_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#send_button:disabled
+{
+    background-color: rgba(0,153,255,90);
+    color: rgba(255,255,255,150);
+}
+
+/* 接收(debug)：次级按钮 */
+QPushButton#receive_button
+{
+    background-color: rgb(47,47,47);
+    color: rgb(220,220,220);
+}
+
+QPushButton#receive_button:hover
+{
+    background-color: rgb(61,61,61);
+}
+
+QPushButton#receive_button:pressed
+{
+    background-color: rgb(51,51,51);
+}

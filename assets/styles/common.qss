@@ -1,0 +1,206 @@
+/* ============================================================
+   MyChat 深色主题 —— 公共基础样式（common.qss）
+   ------------------------------------------------------------
+   色板：
+   - 主背景    rgb(23,21,22)    窗口 / 对话框 / 聊天区
+   - 面板背景  rgb(34,34,34)    侧栏 / 会话列表 / 搜索区
+   - 控件背景  rgb(47,47,47)    输入框 / 次级按钮
+   - 悬停      rgb(51,51,51)
+   - 选中      rgb(61,61,61)
+   - 强调色    rgb(0,153,255)   QQ 蓝（主按钮 / 焦点 / 高亮）
+   - 次要文字  rgb(153,153,153)
+   - 禁用文字  rgb(120,120,120)
+   - 边框颜色  rgb(47, 47, 47)
+
+   页面级样式按 ui/page 拆分在同级子目录：
+     login/logindialog.qss              登录页
+     register/registerdialog.qss        注册页
+     reset/resetdialog.qss              重置页
+     chat/chatpage.qss                  聊天主页
+     chat/chatPage/interchatpage.qss    会话聊天页
+     chat/friendWidget/friendwidget.qss 会话列表项
+   加载顺序见 main.cpp：common 在最前，页面样式在后。
+   ============================================================ */
+
+/* ==================== 全局基础 ==================== */
+
+/* 对话框统一主背景（覆盖登录/注册/重置三页） */
+QDialog
+{
+    background-color: rgb(23,21,22);
+    color: white;
+    font-size: 14px;
+}
+
+QMainWindow
+{
+    background-color: rgb(23,21,22);
+    color: white;
+}
+
+QToolTip
+{
+    background-color: rgb(47,47,47);
+    color: white;
+    border: 1px solid rgb(61,61,61);
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+/* ---- 滚动条（悬浮式：无轨道背景，仅显示滑块） ----
+   滑块宽度需与 chatpage.cpp 中 kScrollBarWidth 保持一致（负值 viewport 边距）。
+   若所用 Qt 样式仍绘制滚动条槽，可将 width / height 改为 0px 彻底隐藏。 */
+
+QScrollBar:vertical
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+    width: 8px;
+    margin: 0px;
+    padding: 0px;
+}
+QScrollBar::handle:vertical
+{
+    background: rgb(61,61,61);
+    background-image: none;
+    border: none;
+    border-radius: 3px;
+    min-height: 30px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:vertical:pressed
+{
+    background: rgb(85,85,85);
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+    height: 0px;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+}
+
+QScrollBar:horizontal
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+    height: 8px;
+    margin: 0px;
+    padding: 0px;
+}
+QScrollBar::handle:horizontal
+{
+    background: rgb(61,61,61);
+    background-image: none;
+    border: none;
+    border-radius: 3px;
+    min-width: 30px;
+    margin: 2px 0px 2px 0px;
+}
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:horizontal:pressed
+{
+    background: rgb(85,85,85);
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+    width: 0px;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal
+{
+    background: rgba(0, 0, 0, 0);
+    background-image: none;
+    border: none;
+}
+
+QScrollBar::corner
+{
+    background: rgba(0, 0, 0, 0);
+    border: none;
+}
+
+/* ---- 输入框（登录/注册/重置表单 + 搜索框 search_edit 统一套用） ---- */
+
+QLineEdit
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(47,47,47);
+    border-radius: 4px;
+    color: white;
+    padding: 2px 8px;
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+QLineEdit:hover
+{
+    border: 1px solid rgb(61,61,61);
+}
+
+QLineEdit:focus
+{
+    border: 1px solid rgb(0,153,255);
+}
+
+/* ---- 按钮基础样式 ---- */
+
+QPushButton
+{
+    background-color: rgb(47,47,47);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    padding: 5px 16px;
+    font-size: 14px;
+}
+
+QPushButton:disabled
+{
+    background-color: rgb(47,47,47);
+    color: rgb(120,120,120);
+}
+
+/* ==================== 跨页面复用控件 ==================== */
+
+/* 错误/成功提示（state 由代码设置）：
+   登录页与重置页为 error_tip，注册页为 err_tip，三页共用本组规则 */
+QLabel#error_tip[state='normal'],
+QLabel#err_tip[state='normal']
+{
+    color: green;
+}
+
+QLabel#error_tip[state='err'],
+QLabel#err_tip[state='err']
+{
+    color: red;
+}
+
+/* 取消按钮：次级按钮（注册页、重置页共用） */
+QPushButton#cancel_button
+{
+    background-color: rgb(47,47,47);
+    color: rgb(220,220,220);
+}
+
+QPushButton#cancel_button:hover
+{
+    background-color: rgb(61,61,61);
+}
+
+QPushButton#cancel_button:pressed
+{
+    background-color: rgb(51,51,51);
+}

@@ -1,0 +1,28 @@
+/* ============================================================
+   会话列表项 FriendWidget（chat/friendWidget/friendwidget.qss）
+   作为 item widget 嵌入 chatpage.qss 中的会话/联系人列表。
+   ============================================================ */
+
+/* 作为 item widget 嵌入会话列表，背景透明以透出列表的选择/悬停高亮 */
+QWidget#FriendWidget
+{
+    background-color: transparent;
+}
+
+QWidget#FriendWidget QLabel#user_name
+{
+    color: white;
+    font-size: 14px;
+}
+
+QWidget#FriendWidget QLabel#time
+{
+    color: rgb(153,153,153);
+    font-size: 11px;
+}
+
+QWidget#FriendWidget QLabel#user_chat
+{
+    color: rgb(153,153,153);
+    font-size: 12px;
+}

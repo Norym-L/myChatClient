@@ -31,17 +31,8 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="加载动画">
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="聊天页面右边栏拆分进stackedWidget实现多页面切换&#10;样式拆分">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/stylesheet.qss" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -57,7 +48,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:mingw-release" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:mingw-debug" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -121,15 +112,10 @@
     "nodejs_package_manager_path": "npm",
     "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
     "run.code.analysis.last.selected.profile": "pProject Default",
-    "settings.editor.selected.configurable": "preferences.externalTools"
+    "settings.editor.selected.configurable": "preferences.sourceCode.C++"
   }
 }]]></component>
   <component name="RunManager">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
-      </method>
-    </configuration>
     <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="mingw-release" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -192,7 +178,8 @@
     <MESSAGE value="样式设计+拼写更改" />
     <MESSAGE value="悬浮滑动条" />
     <MESSAGE value="加载动画" />
-    <option name="LAST_COMMIT_MESSAGE" value="加载动画" />
+    <MESSAGE value="聊天页面右边栏拆分进stackedWidget实现多页面切换&#10;样式拆分" />
+    <option name="LAST_COMMIT_MESSAGE" value="聊天页面右边栏拆分进stackedWidget实现多页面切换&#10;样式拆分" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
