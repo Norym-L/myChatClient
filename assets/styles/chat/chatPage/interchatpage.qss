@@ -14,11 +14,19 @@ QLabel#title_label
 }
 
 /* 消息展示区 */
-QWidget#chat_data_list
+QScrollArea#chat_area
 {
     background-color: rgb(34, 34, 34);
     border-top: 1px solid rgb(47, 47, 47);
     border-bottom: 1px solid rgb(47, 47, 47);
+}
+
+QWidget#null_widget,
+QWidget#widget,
+QWidget#scrollAreaWidgetContents
+{
+    border: none;
+    background-color: rgb(34, 34, 34);
 }
 
 /* 工具栏 / 按钮区：透明容器，沿用页面主背景
