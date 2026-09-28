@@ -30,6 +30,9 @@ public:
     void setMargin(int margin);
     void setWidget(QWidget* widget) const;
 
+    /// mainLayout 的 contentsMargins（含气泡三角预留），供子类计算内容尺寸
+    QMargins bubbleMargins() const;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
 

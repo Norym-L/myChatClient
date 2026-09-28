@@ -52,13 +52,16 @@
          <property name="autoFillBackground">
           <bool>true</bool>
          </property>
-         <layout class="QVBoxLayout" name="verticalLayout_3">
+         <layout class="QVBoxLayout" name="verticalLayout_3" stretch="100">
+          <property name="spacing">
+           <number>6</number>
+          </property>
           <item>
            <layout class="QVBoxLayout" name="verticalLayout1">
             <item>
              <widget class="QWidget" name="null_widget" native="true">
               <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                 <horstretch>0</horstretch>
                 <verstretch>100</verstretch>
                </sizepolicy>

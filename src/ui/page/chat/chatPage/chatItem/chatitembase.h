@@ -26,7 +26,7 @@ public:
 
     void setUserName(const QString& name) const;
     void setUserIcon(const QPixmap& icon) const;
-    void setWidget(QWidget* widget);
+    void setWidget(QWidget* widget) const;
 
 private:
     ChatRole m_role;

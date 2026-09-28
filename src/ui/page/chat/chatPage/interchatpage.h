@@ -36,6 +36,7 @@ private:
 
 private slots:
     void slotSendButtonPushed() const;
+    void slotRecvButtonPushed() const;
 };
 
 

@@ -151,7 +151,23 @@ bool MessageTextEdit::canInsertFromMimeData(const QMimeData* source) const
 
 void MessageTextEdit::insertFromMimeData(const QMimeData* source)
 {
-    QStringList urls = GetUrl(source->text());
+    // 资源管理器等来源的文件拖拽走 Qt 原生 URL 通道；
+    // 纯文本中的自定义 "x///y///url" 格式仍由 GetUrl 解析
+    QStringList urls;
+    if (source->hasUrls())
+    {
+        for (const QUrl& url : source->urls())
+        {
+            if (url.isLocalFile())
+            {
+                urls.append(url.toLocalFile());
+            }
+        }
+    }
+    if (urls.isEmpty())
+    {
+        urls = GetUrl(source->text());
+    }
     if (urls.isEmpty())
     {
         return;
@@ -206,7 +222,9 @@ QStringList MessageTextEdit::GetUrl(const QString& text)
         if (!url.isEmpty())
         {
             QStringList str = url.split("///");
-            if (str.size() >= 2)
+            // 三段式 "x///y///url"，at(2) 需要 size >= 3；
+            // 此前守卫写成 >= 2，"file:///..." 恰好两段时会越界崩溃
+            if (str.size() >= 3)
             {
                 urls.append(str.at(2));
             }

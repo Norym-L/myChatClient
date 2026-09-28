@@ -60,6 +60,8 @@ void InterChatPage::initChatInputEditAndRecvSendButton()
 
     // 连接发送事件
     connect(ui->send_button, &ClickedButton::released, this, &InterChatPage::slotSendButtonPushed);
+    // 测试用接收按钮
+    connect(ui->receive_button, &ClickedButton::released, this, &InterChatPage::slotRecvButtonPushed);
 }
 
 bool InterChatPage::eventFilter(QObject* watched, QEvent* event)
@@ -88,6 +90,53 @@ void InterChatPage::slotSendButtonPushed() const
     const QString user_name = "norym";
     const QString icon_url = ":/assets/images/head_4.jpg";
     constexpr auto role = ChatRole::USER_SLEF;
+
+    const auto text_edit = ui->chat_edit;
+    const QVector<MessageInfo>& message_list = text_edit->getMessageList();
+
+    for (auto i = 0; i < message_list.length(); ++i)
+    {
+        auto type = message_list[i].messageFlag;
+        auto* chat_item = new ChatItemBase(role);
+        chat_item->setUserName(user_name);
+        chat_item->setUserIcon(QPixmap(icon_url));
+        QWidget* bubble = nullptr;
+        switch (type)
+        {
+            case MessageInfo::MessageFlag::TEXT:
+            {
+                bubble = new TextBubble(role, message_list[i].content);
+                break;
+            }
+            case MessageInfo::MessageFlag::IMAGE:
+            {
+                bubble = new PictureBubble(role, message_list[i].content);
+                break;
+            }
+            case MessageInfo::MessageFlag::FILE:
+            {
+                // TODO
+                break;
+            }
+            default:
+            {
+                LOG_WARN() << "[chat page][send button] unknow message type!";
+                break;
+            }
+        }
+        if (bubble != nullptr)
+        {
+            chat_item->setWidget(bubble);
+            ui->chat_data_list->appendChatItemAtTail(chat_item);
+        }
+    }
+}
+
+void InterChatPage::slotRecvButtonPushed() const
+{
+    const QString user_name = "friend";
+    const QString icon_url = ":/assets/images/head_2.jpg";
+    constexpr auto role = ChatRole::OTHER;
 
     const auto text_edit = ui->chat_edit;
     const QVector<MessageInfo>& message_list = text_edit->getMessageList();

@@ -41,16 +41,20 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。">
-      <change beforePath="$PROJECT_DIR$/.idea/QtSettings.xml" beforeDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="按钮可以发送消息进行测试&#10;but&#10;好多bug。。。">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakePresets.json" beforeDir="false" afterPath="$PROJECT_DIR$/CMakePresets.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake/DeployQtRuntime.cmake" beforeDir="false" afterPath="$PROJECT_DIR$/cmake/DeployQtRuntime.cmake" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/TextBubble.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/TextBubble.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/bubbleframe.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/chatitembase.ui" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatview.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -196,7 +200,8 @@
     <MESSAGE value="feat(chat): 新增聊天消息视图组件&#10;&#10;新增 ChatView 组件用于展示聊天消息，支持尾插消息项、悬浮滚动条自动隐藏与追加消息时自动滚动到底部。同步更新 interchatpage 使用该组件" />
     <MESSAGE value="聊天气泡" />
     <MESSAGE value="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。" />
+    <MESSAGE value="按钮可以发送消息进行测试&#10;but&#10;好多bug。。。" />
+    <option name="LAST_COMMIT_MESSAGE" value="按钮可以发送消息进行测试&#10;but&#10;好多bug。。。" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

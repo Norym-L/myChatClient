@@ -37,6 +37,11 @@ void BubbleFrame::setWidget(QWidget* widget) const
     ui->mainLayout->addWidget(widget);
 }
 
+QMargins BubbleFrame::bubbleMargins() const
+{
+    return ui->mainLayout->contentsMargins();
+}
+
 void BubbleFrame::paintEvent(QPaintEvent* event)
 {
     // 画气泡

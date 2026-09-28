@@ -2,6 +2,8 @@
 
 #include <qlayout.h>
 #include <QTextBlock>
+#include <QMargins>
+#include <QtMath>
 
 TextBubble::TextBubble(const ChatRole role, const QString& text, const QString& font, QWidget* parent)
     : BubbleFrame(role, parent)
@@ -36,16 +38,16 @@ void TextBubble::adjustTextHeight()
     {
         text_height += it.layout()->boundingRect().height();
     }
-    const int margin = this->layout()->contentsMargins().top();
-    setFixedHeight(text_height + doc_margin * 2 + margin * 2);
+    // 用 mainLayout 的真实上下边距（this->layout() 是外层匿名布局，margins 为 0）
+    const QMargins margins = bubbleMargins();
+    setFixedHeight(qCeil(text_height) + doc_margin * 2 + margins.top() + margins.bottom());
 }
 
 void TextBubble::setPlainText(const QString& text)
 {
     m_textEdit->setPlainText(text);
     const auto doc_margin = m_textEdit->document()->documentMargin();
-    const int margin_lift = this->layout()->contentsMargins().left();
-    const int margin_right = this->layout()->contentsMargins().right();
+    const QMargins margins = bubbleMargins();
     const QFontMetricsF fm(m_textEdit->font());
     const auto* doc = m_textEdit->document();
     int max_width = 0;
@@ -55,7 +57,7 @@ void TextBubble::setPlainText(const QString& text)
         max_width = std::max(max_width, static_cast<int>(fm.horizontalAdvance(it.text())));
     }
 
-    setMaximumWidth(max_width + doc_margin * 2 + margin_lift + margin_right + 1);
+    setMaximumWidth(max_width + doc_margin * 2 + margins.left() + margins.right() + 1);
 }
 
 void TextBubble::initStyleSheet() const

@@ -1,7 +1,6 @@
 #include "chatview.h"
 
 #include <QTimer>
-#include <QEvent>
 #include <QStyleOption>
 #include <QPainter>
 #include <QScrollBar>
@@ -36,19 +35,6 @@ void ChatView::appendChatItemAtHead(QWidget* item)
 void ChatView::insertChatItem(QWidget* befor, QWidget* item)
 {}
 
-bool ChatView::eventFilter(QObject* watched, QEvent* event)
-{
-    if (event->type() == QEvent::Enter && watched == ui->chat_area)
-    {
-        ui->chat_area->verticalScrollBar()->setHidden(ui->chat_area->verticalScrollBar()->maximum() == 0);
-    }
-    else if (event->type() == QEvent::Leave && watched == ui->chat_area)
-    {
-        ui->chat_area->verticalScrollBar()->setHidden(true);
-    }
-    return QWidget::eventFilter(watched, event);
-}
-
 void ChatView::paintEvent(QPaintEvent* event)
 {
     QStyleOption option;
@@ -74,22 +60,14 @@ void ChatView::slotOnVScrollBarMoved(int min, int max)
 
 void ChatView::initScrollBar()
 {
-    ui->chat_area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // 滚动条常驻占位：AsNeeded 下滚动条出现/消失会改变视口宽度，
+    // 所有条目横向重排，视觉上"弹一下"；AlwaysOn 宽度恒定不重排。
+    // （Qt Widgets 无原生 overlay 滚动条，"悬浮条"方案已在 Qt 6.11 实测不可行）
+    ui->chat_area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+
     auto* scroll_bar = ui->chat_area->verticalScrollBar();
     // 连接滚动处理函数
     connect(scroll_bar, &QScrollBar::rangeChanged, this, &ChatView::slotOnVScrollBarMoved);
-
-    auto* scroll_area = ui->chat_area;
-
-    // 悬浮滚动条
-    auto* qHLayout = new QHBoxLayout();
-    qHLayout->addWidget(scroll_bar, 0, Qt::AlignRight);
-    qHLayout->setContentsMargins(QMargins(0, 0, 0, 0));
-    scroll_area->setLayout(qHLayout);
-    scroll_bar->setHidden(true);
-
-    scroll_area->setWidgetResizable(true);
-    scroll_area->installEventFilter(this);
 }
 
 void ChatView::initStyleSheet() {}
