@@ -35,7 +35,7 @@ private:
     Ui::InterChatPage* ui;
 
 private slots:
-    void slotSendButtonPushed();
+    void slotSendButtonPushed() const;
 };
 
 

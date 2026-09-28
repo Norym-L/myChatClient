@@ -18,13 +18,16 @@
 #  （会被优先加载，造成版本冲突与 DLL 劫持风险）。
 #
 #  ── 本脚本的做法 ────────────────────────────────────────────────────────
-#  用 objdump 读 PE 导入表，并且只沿着"位于 Qt / 工具链目录下的 DLL"继续递归。
+#  用导入表读取工具（MinGW: objdump -p，MSVC: dumpbin /dependents）扫依赖，
+#  并且只沿着"位于 Qt / 工具链目录下的 DLL"继续递归。
 #  系统 DLL 不在我们这两个目录里，直接跳过、不递归 —— 既快（毫秒级）又天然是
 #  白名单，与路径分隔符、大小写都无关。
 #
 #  ── 参数（由 CMakeLists.txt 在 configure 期拼好后传入）──────────────────
 #    EXE            目标可执行文件路径
-#    OBJDUMP        objdump 路径（MinGW 工具链自带）
+#    TOOL           导入表读取工具路径（objdump / dumpbin，与编译器同目录）
+#    TOOL_KIND      objdump | dumpbin，省略时按 TOOL 文件名自动判定
+#                   （旧参数名 OBJDUMP 仍可用，等价于 TOOL + TOOL_KIND=objdump）
 #    QT_BIN         Qt 的 bin 目录（提供 Qt6*.dll）
 #    TOOLCHAIN_BIN  编译器 bin 目录（提供 libgcc_s_*.dll / libstdc++-6.dll /
 #                   libwinpthread-1.dll）
@@ -33,7 +36,20 @@
 
 cmake_minimum_required(VERSION 3.21)
 
-foreach(_required EXE OBJDUMP QT_BIN QT_PLUGINS)
+# 兼容旧调用：只传了 OBJDUMP 时，等价于 TOOL=OBJDUMP / TOOL_KIND=objdump
+if(NOT DEFINED TOOL AND DEFINED OBJDUMP)
+    set(TOOL "${OBJDUMP}")
+endif()
+if(NOT DEFINED TOOL_KIND OR "${TOOL_KIND}" STREQUAL "")
+    get_filename_component(_tool_name "${TOOL}" NAME_WE)
+    if(_tool_name STREQUAL "dumpbin")
+        set(TOOL_KIND "dumpbin")
+    else()
+        set(TOOL_KIND "objdump")
+    endif()
+endif()
+
+foreach(_required EXE TOOL QT_BIN QT_PLUGINS)
     if(NOT DEFINED ${_required} OR "${${_required}}" STREQUAL "")
         message(FATAL_ERROR "DeployQtRuntime: 缺少必需参数 ${_required}")
     endif()
@@ -56,21 +72,41 @@ set(_count   0)
 while(_queue)
     list(POP_FRONT _queue _current)
 
-    execute_process(
-        COMMAND "${OBJDUMP}" -p "${_current}"
-        OUTPUT_VARIABLE _dump
-        ERROR_QUIET
-        RESULT_VARIABLE _rc
-    )
+    if(TOOL_KIND STREQUAL "dumpbin")
+        execute_process(
+            COMMAND "${TOOL}" /dependents "${_current}"
+            OUTPUT_VARIABLE _dump
+            ERROR_QUIET
+            RESULT_VARIABLE _rc
+        )
+    else()
+        execute_process(
+            COMMAND "${TOOL}" -p "${_current}"
+            OUTPUT_VARIABLE _dump
+            ERROR_QUIET
+            RESULT_VARIABLE _rc
+        )
+    endif()
     if(NOT _rc EQUAL 0)
         continue()
     endif()
 
-    # objdump -p 的导入表形如 "	DLL Name: Qt6Widgets.dll"
-    string(REGEX MATCHALL "DLL Name: [^ \t\r\n]+" _entries "${_dump}")
+    if(TOOL_KIND STREQUAL "dumpbin")
+        # dumpbin /dependents 的输出形如 "    Qt6Widgets.dll"（纯文件名一行一个）。
+        # 这里放宽成"任意 *.dll 词"：误报的代价为零 —— 后面只会在 Qt / 工具链目录里
+        # 按名字找，找不到的（含 System32 的系统 DLL）直接跳过。
+        string(REGEX MATCHALL "[^ \t\r\n\\/:]+\\.[Dd][Ll][Ll]" _names "${_dump}")
+    else()
+        # objdump -p 的导入表形如 "	DLL Name: Qt6Widgets.dll"
+        string(REGEX MATCHALL "DLL Name: [^ \t\r\n]+" _entries "${_dump}")
+        set(_names "")
+        foreach(_entry IN LISTS _entries)
+            string(REPLACE "DLL Name: " "" _n "${_entry}")
+            list(APPEND _names "${_n}")
+        endforeach()
+    endif()
 
-    foreach(_entry IN LISTS _entries)
-        string(REPLACE "DLL Name: " "" _name "${_entry}")
+    foreach(_name IN LISTS _names)
         string(TOLOWER "${_name}" _name_lc)
 
         if(_name_lc STREQUAL "")

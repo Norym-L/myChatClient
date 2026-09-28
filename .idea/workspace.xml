@@ -25,18 +25,32 @@
   </component>
   <component name="CMakeSettings">
     <configurations>
-      <configuration PROFILE_NAME="mingw-release" PROFILE_DISPLAY_NAME="Release (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="true" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
-      <configuration PROFILE_NAME="mingw-debug" PROFILE_DISPLAY_NAME="Debug (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="true" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
-      <configuration PROFILE_NAME="mingw-release - mingw-release" PROFILE_DISPLAY_NAME="构建 Release" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
-      <configuration PROFILE_NAME="mingw-debug - mingw-debug" PROFILE_DISPLAY_NAME="构建 Debug" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
+      <configuration PROFILE_NAME="Debug" ENABLED="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" CONFIG_NAME="Debug" TOOLCHAIN_NAME="QT MinGW" GENERATION_OPTIONS="--preset &quot;mingw-debug&quot;" NO_GENERATOR="true" />
+      <configuration PROFILE_NAME="Release" ENABLED="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" CONFIG_NAME="Release" TOOLCHAIN_NAME="QT MinGW" GENERATION_OPTIONS="--preset &quot;mingw-debug&quot;" NO_GENERATOR="true" />
+      <configuration PROFILE_NAME="Debug(MSVC 2026 + Qt 6.11.2)" ENABLED="true" GENERATION_DIR="$PROJECT_DIR$/build/msvc-debug" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="--preset &quot;msvc-debug&quot;" NO_GENERATOR="true" />
+      <configuration PROFILE_NAME="Qt-Debug" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/out/build/debug" />
+      <configuration PROFILE_NAME="Qt-Release" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/out/build/release" />
+      <configuration PROFILE_NAME="mingw-release" PROFILE_DISPLAY_NAME="Release (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
+      <configuration PROFILE_NAME="mingw-debug" PROFILE_DISPLAY_NAME="Debug (MinGW GCC 13.1 + Qt 6.11.2)" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
+      <configuration PROFILE_NAME="msvc-release" PROFILE_DISPLAY_NAME="Release (MSVC 2026 + Qt 6.11.2)" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/msvc-release" />
+      <configuration PROFILE_NAME="msvc-debug" PROFILE_DISPLAY_NAME="Debug (MSVC 2026 + Qt 6.11.2)" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/msvc-debug" />
+      <configuration PROFILE_NAME="mingw-release - mingw-release" PROFILE_DISPLAY_NAME="构建 Release [mingw-release - mingw-release]" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-release" />
+      <configuration PROFILE_NAME="mingw-debug - mingw-debug" PROFILE_DISPLAY_NAME="构建 Debug [mingw-debug - mingw-debug]" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/mingw-debug" />
+      <configuration PROFILE_NAME="msvc-release - msvc-release" PROFILE_DISPLAY_NAME="构建 Release [msvc-release - msvc-release]" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/msvc-release" />
+      <configuration PROFILE_NAME="msvc-debug - msvc-debug" PROFILE_DISPLAY_NAME="构建 Debug [msvc-debug - msvc-debug]" ENABLED="false" FROM_PRESET="true" GENERATION_DIR="$PROJECT_DIR$/build/msvc-debug" />
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="聊天气泡">
-      <change afterPath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/MessageTextEdit.h" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。">
+      <change beforePath="$PROJECT_DIR$/.idea/QtSettings.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.ui" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakePresets.json" beforeDir="false" afterPath="$PROJECT_DIR$/CMakePresets.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cmake/DeployQtRuntime.cmake" beforeDir="false" afterPath="$PROJECT_DIR$/cmake/DeployQtRuntime.cmake" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/chatItem/PictureBubble.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatPage/interchatpage.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -52,7 +66,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:mingw-debug" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -116,16 +130,11 @@
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
     &quot;run.code.analysis.last.selected.profile&quot;: &quot;pProject Default&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.sourceCode.C++&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;cidr.DebugProfilesConfigurable&quot;
   }
 }</component>
   <component name="RunManager">
-    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="mingw-release" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -136,19 +145,12 @@
     {
       &quot;first&quot;: {
         &quot;##RUN_CONFIGURATION##&quot;: &quot;CMake 应用程序.ChatClient&quot;,
-        &quot;cmake&quot;: &quot;CMakeBuildProfile:mingw-release&quot;
-      },
-      &quot;second&quot;: &quot;402b20b2-2f26-4dfc-bd13-1cba81f9f5da&quot;
-    },
-    {
-      &quot;first&quot;: {
-        &quot;##RUN_CONFIGURATION##&quot;: &quot;CMake 应用程序.ChatClient&quot;,
-        &quot;cmake&quot;: &quot;CMakeBuildProfile:mingw-debug&quot;
+        &quot;cmake&quot;: &quot;CMakeBuildProfile:Debug&quot;
       },
       &quot;second&quot;: &quot;402b20b2-2f26-4dfc-bd13-1cba81f9f5da&quot;
     }
   ],
-  &quot;modificationCount&quot;: 7
+  &quot;modificationCount&quot;: 17
 }</component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="默认任务">
@@ -193,7 +195,8 @@
     <MESSAGE value="小修补" />
     <MESSAGE value="feat(chat): 新增聊天消息视图组件&#10;&#10;新增 ChatView 组件用于展示聊天消息，支持尾插消息项、悬浮滚动条自动隐藏与追加消息时自动滚动到底部。同步更新 interchatpage 使用该组件" />
     <MESSAGE value="聊天气泡" />
-    <option name="LAST_COMMIT_MESSAGE" value="聊天气泡" />
+    <MESSAGE value="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

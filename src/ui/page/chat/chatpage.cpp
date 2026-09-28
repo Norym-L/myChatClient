@@ -15,17 +15,32 @@ namespace
 constexpr int kScrollBarWidth = 8;
 
 /**
- * @brief 访问器：把 QAbstractScrollArea 的 protected setViewportMargins 提升为 public
+ * @brief 访问器：把 QAbstractScrollArea 的 protected setViewportMargins 提升为可调用
  *
  * Qt 6 中 setViewportMargins 是 protected，外部代码无法直接调用，也不可
  * 把基类指针强转成派生类再调用（对象实际不是派生类型，属未定义行为）。
- * 这里通过 using 声明提升访问权限后取成员函数指针，所得指针类型仍是
+ * 这里在派生类内部取该成员的成员函数指针 —— 派生类内部访问基类 protected
+ * 成员是标准允许的，且指针类型仍是
  * void (QAbstractScrollArea::*)(int, int, int, int)，可合法作用于任意滚动区域。
+ *
+ * ⚠ 别写成 &ScrollAreaAccess::setViewportMargins：用派生类名限定后，
+ *   MSVC 认为该指针的类型是 void (ScrollAreaAccess::*)(...)，而成员函数指针
+ *   只允许 基类→派生类 的转换、反过来不存在，于是报 C2440
+ *   （GCC 会把它判成基类指针类型而放行，这就是同一段代码两套编译器表现不同的原因）。
+ *   直接用基类名 QAbstractScrollArea:: 限定，类型天然就是基类的，两套编译器一致。
  */
 class ScrollAreaAccess : public QAbstractScrollArea
 {
 public:
-    using QAbstractScrollArea::setViewportMargins;
+    static void setViewportMargins(QAbstractScrollArea* area,
+                                   const int left, const int top,
+                                   const int right, const int bottom)
+    {
+        using SetViewportMarginsFn = void (QAbstractScrollArea::*)(int, int, int, int);
+        // 该名字有 (int,int,int,int) 与 (QMargins) 两个重载，由目标类型选定前者
+        const SetViewportMarginsFn setter = &QAbstractScrollArea::setViewportMargins;
+        (area->*setter)(left, top, right, bottom);
+    }
 };
 
 /**
@@ -35,9 +50,7 @@ public:
  */
 void overlayScrollBar(QAbstractScrollArea* area)
 {
-    using SetViewportMarginsFn = void (QAbstractScrollArea::*)(int, int, int, int);
-    const SetViewportMarginsFn setter = &ScrollAreaAccess::setViewportMargins;
-    (area->*setter)(0, 0, -kScrollBarWidth, 0);
+    ScrollAreaAccess::setViewportMargins(area, 0, 0, -kScrollBarWidth, 0);
 }
 }
 

@@ -5,9 +5,11 @@
 #  工具链  ：Qt 6.11.2 MinGW 版 + MinGW-w64 GCC 13.1（x86_64-posix-seh）
 #
 #  命令行验证：
-#    cmake --preset mingw-release
+#    cmake --preset mingw-release            # MinGW：单配置，构建类型在配置期定
 #    cmake --build --preset mingw-release
-#  CLion：直接"打开"本目录，构建预设选 mingw-debug / mingw-release
+#    cmake --preset msvc-debug               # MSVC：多配置，构建类型在构建期定
+#    cmake --build --preset msvc-debug
+#  CLion：直接"打开"本目录，构建预设选 mingw-debug / mingw-release / msvc-*
 #         （预设定义见同目录 CMakePresets.json，已写死编译器与 Qt 路径）
 #
 #  ⚠ 工具链必须成对配：Qt 的 MinGW 预编译包与 MinGW 版本是绑死的，
@@ -36,7 +38,7 @@ endif()
 # -----------------------------------------------------------------------------
 # 全局编译设置
 # -----------------------------------------------------------------------------
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)   # 产出 compile_commands.json，供 CLion 索引
@@ -71,6 +73,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 if(NOT CMAKE_PREFIX_PATH AND NOT DEFINED Qt6_DIR AND NOT DEFINED ENV{Qt6_DIR})
     if(MSVC)
         set(_chatclient_qt_hints
+            "C:/dev/Qt/6.11.2/msvc2026_64"
             "C:/dev/Qt/6.11.2/msvc2022_64"
             "C:/dev/Qt/6.5.3/msvc2019_64")
     else()
@@ -86,7 +89,7 @@ if(NOT CMAKE_PREFIX_PATH AND NOT DEFINED Qt6_DIR AND NOT DEFINED ENV{Qt6_DIR})
     endforeach()
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.11.2 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # -----------------------------------------------------------------------------
 # 可执行文件
@@ -224,17 +227,24 @@ if(WIN32 AND CHATCLIENT_DEPLOY_QT)
     set(_chatclient_qt_plugins "${_chatclient_qt_prefix}/plugins")
 
     # 编译器所在目录：MinGW 下这里有 libgcc_s_seh-1.dll / libstdc++-6.dll /
-    # libwinpthread-1.dll，以及部署脚本要用的 objdump。
+    # libwinpthread-1.dll，以及依赖扫描工具（objdump）；MSVC 下是 dumpbin。
     get_filename_component(_chatclient_toolchain_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    find_program(CHATCLIENT_OBJDUMP_EXECUTABLE
-        NAMES objdump
+    # 读 PE 导入表的工具随工具链走：MinGW 是 objdump -p，MSVC 是 dumpbin /dependents。
+    # 两者都和编译器在同一个 bin 目录里，用同一条 HINTS 就能找到。
+    if(MSVC)
+        set(_chatclient_deps_tool_names dumpbin)
+    else()
+        set(_chatclient_deps_tool_names objdump)
+    endif()
+    find_program(CHATCLIENT_DEPENDENCY_TOOL
+        NAMES ${_chatclient_deps_tool_names}
         HINTS "${_chatclient_toolchain_bin}"
     )
 
-    if(NOT CHATCLIENT_OBJDUMP_EXECUTABLE)
+    if(NOT CHATCLIENT_DEPENDENCY_TOOL)
         message(WARNING
-            "未找到 objdump，无法自动部署 Qt 运行库。"
-            "请把 Qt 的 bin 目录与 MinGW 的 bin 目录加入 PATH 后再运行，"
+            "未找到依赖扫描工具（MinGW: objdump / MSVC: dumpbin），无法自动部署 Qt 运行库。"
+            "请把 Qt 的 bin 目录与工具链的 bin 目录加入 PATH 后再运行，"
             "或设 -DCHATCLIENT_DEPLOY_QT=OFF 关闭本步骤。")
     else()
         # 要部署的 Qt 插件类别（逗号分隔；用分号会被 CMake 当列表分隔符拆散）。
@@ -248,7 +258,8 @@ if(WIN32 AND CHATCLIENT_DEPLOY_QT)
         add_custom_command(TARGET ChatClient POST_BUILD
             COMMAND ${CMAKE_COMMAND}
                     "-DEXE=$<TARGET_FILE:ChatClient>"
-                    "-DOBJDUMP=${CHATCLIENT_OBJDUMP_EXECUTABLE}"
+                    "-DTOOL=${CHATCLIENT_DEPENDENCY_TOOL}"
+                    "-DTOOL_KIND=$<IF:$<BOOL:${MSVC}>,dumpbin,objdump>"
                     "-DQT_BIN=${_chatclient_qt_bin}"
                     "-DTOOLCHAIN_BIN=${_chatclient_toolchain_bin}"
                     "-DQT_PLUGINS=${_chatclient_qt_plugins}"

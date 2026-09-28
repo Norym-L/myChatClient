@@ -8,6 +8,8 @@
 #include "chatItem/TextBubble.h"
 #include "chatItem/PictureBubble.h"
 #include "app/global.h"
+#include "chatItem/chatitembase.h"
+#include "core/logger.h"
 
 InterChatPage::InterChatPage(QWidget* parent)
     : QWidget(parent), ui(new Ui::InterChatPage)
@@ -81,8 +83,49 @@ void InterChatPage::updateButtonPos() const
                                    hint.height());
 }
 
-void InterChatPage::slotSendButtonPushed()
+void InterChatPage::slotSendButtonPushed() const
 {
-    auto text_edit = ui->chat_edit;
+    const QString user_name = "norym";
+    const QString icon_url = ":/assets/images/head_4.jpg";
+    constexpr auto role = ChatRole::USER_SLEF;
+
+    const auto text_edit = ui->chat_edit;
     const QVector<MessageInfo>& message_list = text_edit->getMessageList();
+
+    for (auto i = 0; i < message_list.length(); ++i)
+    {
+        auto type = message_list[i].messageFlag;
+        auto* chat_item = new ChatItemBase(role);
+        chat_item->setUserName(user_name);
+        chat_item->setUserIcon(QPixmap(icon_url));
+        QWidget* bubble = nullptr;
+        switch (type)
+        {
+            case MessageInfo::MessageFlag::TEXT:
+            {
+                bubble = new TextBubble(role, message_list[i].content);
+                break;
+            }
+            case MessageInfo::MessageFlag::IMAGE:
+            {
+                bubble = new PictureBubble(role, message_list[i].content);
+                break;
+            }
+            case MessageInfo::MessageFlag::FILE:
+            {
+                // TODO
+                break;
+            }
+            default:
+            {
+                LOG_WARN() << "[chat page][send button] unknow message type!";
+                break;
+            }
+        }
+        if (bubble != nullptr)
+        {
+            chat_item->setWidget(bubble);
+            ui->chat_data_list->appendChatItemAtTail(chat_item);
+        }
+    }
 }

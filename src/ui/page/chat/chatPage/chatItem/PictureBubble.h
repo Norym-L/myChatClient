@@ -6,6 +6,7 @@
 
 class PictureBubble : public BubbleFrame
 {
+public:
     explicit PictureBubble(ChatRole role, const QPixmap& picture, QWidget* parent = nullptr);
 };
 
