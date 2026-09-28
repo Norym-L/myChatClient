@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
+    <file>assets/images/badge-red-16.png</file>
     <file>assets/images/loading.png</file>
     <file>assets/images/loading.gif</file>
     <file>assets/images/add-user.png</file>
