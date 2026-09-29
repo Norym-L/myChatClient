@@ -74,6 +74,7 @@ ChatPage::ChatPage(QWidget* parent)
     ui->add_button->setState("normal", "hover", "press");
     initSearchEdit();
     initChatUserList();
+    initSideBar();
 }
 
 ChatPage::~ChatPage()
@@ -146,6 +147,19 @@ void ChatPage::initChatUserList()
 {
     // 收到信号加载更多联系人
     connect(ui->chat_users_list, &ChatUserList::sigLoadingChatUser, this, &ChatPage::slotLoadingMoreChatUserInChatUserList);
+}
+
+void ChatPage::initSideBar() const
+{
+    QPixmap pixmap(":/assets/images/head_4.jpg");
+    pixmap = pixmap.scaled(ui->side_head_label->size(), Qt::KeepAspectRatio);
+    ui->side_head_label->setPixmap(pixmap);
+    ui->side_head_label->setScaledContents(true); // 设置头像
+
+    ui->side_chat_widget->setProperty("state", "normal");
+    ui->side_chat_widget->setState();
+    ui->side_contact_widget->setProperty("state", "normal");
+    ui->side_contact_widget->setState();
 }
 
 

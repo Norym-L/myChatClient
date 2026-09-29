@@ -12,8 +12,8 @@ class StateWidget : public QWidget
 public:
     explicit StateWidget(QWidget* parent = nullptr);
 
-    void setState(const QString& normal = "", const QString& normal_hover = "", const QString& normal_pressed = "",
-                  const QString& selected = "", const QString& selected_hover = "", const QString& selected_pressed = "");
+    void setState(const QString& normal = "normal", const QString& normal_hover = "normal_hover", const QString& normal_pressed = "normal_pressed",
+                  const QString& selected = "selected", const QString& selected_hover = "selected_hover", const QString& selected_pressed = "selected_pressed");
     ClickLabelState getCurrentState() const;
     void clearState();
 
@@ -42,6 +42,8 @@ private:
 
 signals:
     void clicked();
+    void clickedOnSelected(); // 选中状态下点击
+    void released();
 };
 
 

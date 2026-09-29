@@ -31,6 +31,7 @@ private:
     void showSerachList(bool is_searching = false);
     void initSearchEdit();
     void initChatUserList();
+    void initSideBar() const;
 
     Ui::ChatPageClass* ui;
     ChatUiMode m_state{ChatUiMode::CHAT_MODE};

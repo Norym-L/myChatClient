@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>710</width>
+    <width>702</width>
     <height>561</height>
    </rect>
   </property>
@@ -69,10 +69,10 @@
        <widget class="QWidget" name="widget" native="true">
         <layout class="QVBoxLayout" name="verticalLayout_3">
          <property name="spacing">
-          <number>30</number>
+          <number>20</number>
          </property>
          <property name="leftMargin">
-          <number>15</number>
+          <number>10</number>
          </property>
          <property name="topMargin">
           <number>0</number>
@@ -84,46 +84,59 @@
           <number>0</number>
          </property>
          <item>
-          <widget class="QLabel" name="side_chat_label">
+          <widget class="QLabel" name="side_head_label">
            <property name="minimumSize">
             <size>
-             <width>30</width>
-             <height>30</height>
+             <width>40</width>
+             <height>40</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>30</width>
-             <height>30</height>
+             <width>40</width>
+             <height>40</height>
+            </size>
+           </property>
+           <property name="sizeIncrement">
+            <size>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="text">
             <string/>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="side_contact_label">
+          <widget class="StateWidget" name="side_chat_widget" native="true">
            <property name="minimumSize">
             <size>
-             <width>30</width>
-             <height>30</height>
+             <width>40</width>
+             <height>40</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>30</width>
-             <height>30</height>
+             <width>40</width>
+             <height>40</height>
             </size>
            </property>
-           <property name="text">
-            <string/>
+          </widget>
+         </item>
+         <item>
+          <widget class="StateWidget" name="side_contact_widget" native="true">
+           <property name="minimumSize">
+            <size>
+             <width>40</width>
+             <height>40</height>
+            </size>
            </property>
-           <property name="alignment">
-            <set>Qt::AlignmentFlag::AlignCenter</set>
+           <property name="maximumSize">
+            <size>
+             <width>40</width>
+             <height>40</height>
+            </size>
            </property>
           </widget>
          </item>
@@ -297,6 +310,12 @@
    <class>InterChatPage</class>
    <extends>QWidget</extends>
    <header>ui/page/chat/chatPage/interchatpage.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>StateWidget</class>
+   <extends>QWidget</extends>
+   <header location="global">ui/components/StateWidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

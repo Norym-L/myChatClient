@@ -1,6 +1,9 @@
 #include "StateWidget.h"
 
+#include <QMouseEvent>
 #include <QVBoxLayout>
+#include <QPainter>
+#include <QStyleOption>
 
 StateWidget::StateWidget(QWidget* parent)
     : QWidget(parent), m_currentState(ClickLabelState::NORMAL), m_redPoint(nullptr)
@@ -57,7 +60,8 @@ void StateWidget::addRedPoint()
     layout2->setContentsMargins(0, 0, 0, 0);
     layout2->setSpacing(0);
     setLayout(layout2);
-    m_redPoint->setPixmap(QPixmap(":/assets/images/badge-red-16.png")); // TODO 设置红点到右上角
+    m_redPoint->setPixmap(QPixmap(":/assets/images/badge-red-16.png"));
+    m_redPoint->setAlignment(Qt::AlignRight | Qt::AlignTop);
     m_redPoint->setVisible(false);
 }
 
@@ -68,25 +72,83 @@ void StateWidget::showRedPoint(const bool show) const
 
 void StateWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::LeftButton)
+    {
+        if (m_currentState == ClickLabelState::SELECT)
+        {
+            emit clickedOnSelected();
+            QWidget::mousePressEvent(event);
+            return;
+        }
+        if (m_currentState == ClickLabelState::NORMAL)
+        {
+            emit clicked();
+            m_currentState = ClickLabelState::SELECT;
+            setProperty("state", m_selectedPressed);
+            repolish(this);
+            update();
+        }
+        return;
+    }
     QWidget::mousePressEvent(event);
 }
 
 void StateWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::LeftButton)
+    {
+        emit released();
+        if (m_currentState == ClickLabelState::NORMAL)
+        {
+            setProperty("state", m_normalHover);
+            repolish(this);
+            update();
+        }
+        else
+        {
+            setProperty("state", m_selectedHover);
+            repolish(this);
+            update();
+        }
+        return;
+    }
     QWidget::mouseReleaseEvent(event);
 }
 
 void StateWidget::enterEvent(QEnterEvent* event)
 {
+    if (m_currentState == ClickLabelState::NORMAL)
+    {
+        setProperty("state", m_normalHover);
+    }
+    else
+    {
+        setProperty("state", m_selectedHover);
+    }
+    repolish(this);
+    update();
     QWidget::enterEvent(event);
 }
 
 void StateWidget::leaveEvent(QEvent* event)
 {
+    if (m_currentState == ClickLabelState::NORMAL)
+    {
+        setProperty("state", m_normal);
+    }
+    else
+    {
+        setProperty("state", m_selected);
+    }
+    repolish(this);
+    update();
     QWidget::leaveEvent(event);
 }
 
 void StateWidget::paintEvent(QPaintEvent* event)
 {
-    QWidget::paintEvent(event);
+    QStyleOption opt;
+    opt.initFrom(this);
+    QPainter p(this);
+    style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 }

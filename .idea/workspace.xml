@@ -8,6 +8,7 @@
     <option name="/Default/Environment/StickyLines/Enabled/@EntryValue" value="false" type="bool" />
     <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
     <option name="/Default/Housekeeping/OptionsDialog/SelectedPageId/@EntryValue" value="CppFormatterOtherPage" type="string" />
+    <option name="/Default/RiderDebugger/RiderRestoreDecompile/RestoreDecompileSetting/@EntryValue" value="false" type="bool" />
   </component>
   <component name="CMakePresetLoader">{
   &quot;useNewFormat&quot;: true
@@ -41,13 +42,17 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="fix(chat): 修复消息气泡尺寸与布局错位&#10;&#10;调整气泡边距计算使用 mainLayout 的真实 margins，修正文本气泡宽高计算。&#10;聊天视图滚动条改为常驻占位，避免视口宽度变化导致条目横向重排。&#10;优化聊天项头部与消息区域布局，使其正确对齐。">
-      <change afterPath="$PROJECT_DIR$/src/ui/components/StateWidget.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/StateWidget.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="新增 StateWidget组件(实现了一半) 并调整聊天页布局">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/chat/chatPage/interchatpage.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/chat/chatPage/interchatpage.qss" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/add-user.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/add-user.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/add-user_hover.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/add-user_hover.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/add-user_push.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/add-user_push.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/styles/chat/chatpage.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/chat/chatpage.qss" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/StateWidget.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/components/StateWidget.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/components/StateWidget.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/components/StateWidget.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -108,36 +113,36 @@
     <option name="showExcludedFiles" value="false" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "CMake 应用程序.ChatClient.executor": "Debug",
-    "CidrDebugProfileConversion": "true",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.RadMigrateCodeStyle": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.cidr.known.project.marker": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.readMode.enableVisualFormatting": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "cf.first.check.clang-format": "false",
-    "cidr.known.project.marker": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "main",
-    "nodejs_package_manager_path": "npm",
-    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
-    "run.code.analysis.last.selected.profile": "pProject Default",
-    "settings.editor.selected.configurable": "com.tencent.code.intel.settings.ApplicationConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;CMake 应用程序.ChatClient.executor&quot;: &quot;Debug&quot;,
+    &quot;CidrDebugProfileConversion&quot;: &quot;true&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
+    &quot;run.code.analysis.last.selected.profile&quot;: &quot;pProject Default&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
       <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -201,7 +206,8 @@
     <MESSAGE value="feat(chat): 新增消息输入框组件 MessageTextEdit&#10;TODO bug：拖入文件会崩溃&#10;&#10;新增 MessageTextEdit 组件替换聊天页原有 QTextEdit，支持回车发送、&#10;拖拽图片与文件、插入图片缩略图及文件图标预览，并解析输入内容为&#10;消息列表。同步更新 interchatpage.ui 使用该组件。" />
     <MESSAGE value="按钮可以发送消息进行测试&#10;but&#10;好多bug。。。" />
     <MESSAGE value="fix(chat): 修复消息气泡尺寸与布局错位&#10;&#10;调整气泡边距计算使用 mainLayout 的真实 margins，修正文本气泡宽高计算。&#10;聊天视图滚动条改为常驻占位，避免视口宽度变化导致条目横向重排。&#10;优化聊天项头部与消息区域布局，使其正确对齐。" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix(chat): 修复消息气泡尺寸与布局错位&#10;&#10;调整气泡边距计算使用 mainLayout 的真实 margins，修正文本气泡宽高计算。&#10;聊天视图滚动条改为常驻占位，避免视口宽度变化导致条目横向重排。&#10;优化聊天项头部与消息区域布局，使其正确对齐。" />
+    <MESSAGE value="新增 StateWidget组件(实现了一半) 并调整聊天页布局" />
+    <option name="LAST_COMMIT_MESSAGE" value="新增 StateWidget组件(实现了一半) 并调整聊天页布局" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
