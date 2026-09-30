@@ -14,13 +14,14 @@ public:
 
     void setState(const QString& normal = "normal", const QString& normal_hover = "normal_hover", const QString& normal_pressed = "normal_pressed",
                   const QString& selected = "selected", const QString& selected_hover = "selected_hover", const QString& selected_pressed = "selected_pressed");
-    ClickLabelState getCurrentState() const;
+    [[nodiscard]] ClickLabelState getCurrentState() const;
     void clearState();
 
     void setSelected(bool selected);
     /// 添加🔴红点显示
     void addRedPoint();
     void showRedPoint(bool show = true) const;
+    void setDefautState(ClickLabelState state = ClickLabelState::NORMAL);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;

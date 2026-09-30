@@ -49,7 +49,7 @@ QWidget#side_chat_widget[state="selected"]
 }
 QWidget#side_chat_widget[state='selected_hover']
 {
-    border-image: url(":/assets/images/message.png");
+    border-image: url(":/assets/images/message_hover.png");
     background-color: rgb(47, 47, 47);
 }
 QWidget#side_chat_widget[state='selected_pressed']
@@ -80,7 +80,7 @@ QWidget#side_contact_widget[state="selected"]
 }
 QWidget#side_contact_widget[state='selected_hover']
 {
-    border-image: url(":/assets/images/avatar.png");
+    border-image: url(":/assets/images/avatar_hover.png");
     background-color: rgb(47, 47, 47);
 }
 QWidget#side_contact_widget[state='selected_pressed']

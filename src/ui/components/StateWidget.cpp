@@ -8,6 +8,8 @@
 StateWidget::StateWidget(QWidget* parent)
     : QWidget(parent), m_currentState(ClickLabelState::NORMAL), m_redPoint(nullptr)
 {
+    setState();
+
     setCursor(Qt::PointingHandCursor);
     // 添加红点不显示
     addRedPoint();
@@ -24,9 +26,7 @@ void StateWidget::setState(
     m_selectedHover = selected_hover;
     m_selectedPressed = selected_pressed;
 
-    setProperty("state", m_normal);
-    repolish(this);
-    update();
+    setDefautState();
 }
 
 ClickLabelState StateWidget::getCurrentState() const
@@ -68,6 +68,21 @@ void StateWidget::addRedPoint()
 void StateWidget::showRedPoint(const bool show) const
 {
     m_redPoint->setVisible(show);
+}
+
+void StateWidget::setDefautState(const ClickLabelState state)
+{
+    m_currentState = state;
+    if (m_currentState == ClickLabelState::SELECT)
+    {
+        setProperty("state", m_selected);
+    }
+    else
+    {
+        setProperty("state", m_normal);
+    }
+    repolish(this);
+    update();
 }
 
 void StateWidget::mousePressEvent(QMouseEvent* event)

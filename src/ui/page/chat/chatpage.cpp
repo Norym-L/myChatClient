@@ -156,10 +156,10 @@ void ChatPage::initSideBar() const
     ui->side_head_label->setPixmap(pixmap);
     ui->side_head_label->setScaledContents(true); // 设置头像
 
-    ui->side_chat_widget->setProperty("state", "normal");
     ui->side_chat_widget->setState();
-    ui->side_contact_widget->setProperty("state", "normal");
+    ui->side_chat_widget->setDefautState(ClickLabelState::SELECT);
     ui->side_contact_widget->setState();
+    ui->side_contact_widget->setDefautState(ClickLabelState::NORMAL);
 }
 
 
