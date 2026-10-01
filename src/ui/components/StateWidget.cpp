@@ -26,7 +26,7 @@ void StateWidget::setState(
     m_selectedHover = selected_hover;
     m_selectedPressed = selected_pressed;
 
-    setDefautState();
+    setCurrentState();
 }
 
 ClickLabelState StateWidget::getCurrentState() const
@@ -70,7 +70,7 @@ void StateWidget::showRedPoint(const bool show) const
     m_redPoint->setVisible(show);
 }
 
-void StateWidget::setDefautState(const ClickLabelState state)
+void StateWidget::setCurrentState(const ClickLabelState state)
 {
     m_currentState = state;
     if (m_currentState == ClickLabelState::SELECT)

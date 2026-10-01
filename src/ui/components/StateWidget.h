@@ -21,7 +21,7 @@ public:
     /// 添加🔴红点显示
     void addRedPoint();
     void showRedPoint(bool show = true) const;
-    void setDefautState(ClickLabelState state = ClickLabelState::NORMAL);
+    void setCurrentState(ClickLabelState state = ClickLabelState::NORMAL);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;

@@ -149,7 +149,7 @@ void ChatPage::initChatUserList()
     connect(ui->chat_users_list, &ChatUserList::sigLoadingChatUser, this, &ChatPage::slotLoadingMoreChatUserInChatUserList);
 }
 
-void ChatPage::initSideBar() const
+void ChatPage::initSideBar()
 {
     QPixmap pixmap(":/assets/images/head_4.jpg");
     pixmap = pixmap.scaled(ui->side_head_label->size(), Qt::KeepAspectRatio);
@@ -157,9 +157,36 @@ void ChatPage::initSideBar() const
     ui->side_head_label->setScaledContents(true); // 设置头像
 
     ui->side_chat_widget->setState();
-    ui->side_chat_widget->setDefautState(ClickLabelState::SELECT);
+    ui->side_chat_widget->setCurrentState(ClickLabelState::SELECT);
     ui->side_contact_widget->setState();
-    ui->side_contact_widget->setDefautState(ClickLabelState::NORMAL);
+    ui->side_contact_widget->setCurrentState(ClickLabelState::NORMAL);
+
+    addButtonToGroup(ui->side_chat_widget, "sideBar");
+    addButtonToGroup(ui->side_contact_widget, "sideBar");
+
+    connect(ui->side_chat_widget, &StateWidget::released, this, &ChatPage::slotSideBarSwitchToChat);
+    connect(ui->side_contact_widget, &StateWidget::released, this, &ChatPage::slotSideBarSwitchToContact);
+}
+
+void ChatPage::addButtonToGroup(StateWidget* widget, const QString& group_name)
+{
+    if (m_groupedWidgets.contains(group_name))
+    {
+        m_groupedWidgets[group_name].append(widget);
+    }
+    else
+    {
+        m_groupedWidgets[group_name] = {widget};
+    }
+}
+
+void ChatPage::freshSideBarStateToSelected(StateWidget* widget, const QString& group_name)
+{
+    for (auto* item: m_groupedWidgets[group_name])
+    {
+        item->setCurrentState(ClickLabelState::NORMAL);
+    }
+    widget->setCurrentState(ClickLabelState::SELECT);
 }
 
 
@@ -222,4 +249,22 @@ void ChatPage::slotLoadingMoreChatUserInChatUserList()
     test_addChatUserList();
     loading_dialog->deleteLater();
     m_beLoadingMoreChatUser = false;
+}
+
+void ChatPage::slotSideBarSwitchToChat()
+{
+    LOG_DEBUG() << "[ui][chat page] slotSideBarSwitchToChat";
+    ui->stackedWidget->setCurrentWidget(ui->chat_page);
+    freshSideBarStateToSelected(ui->side_chat_widget, "sideBar");
+    m_state = ChatUiMode::CHAT_MODE;
+    showSerachList(false);
+}
+
+void ChatPage::slotSideBarSwitchToContact()
+{
+    LOG_DEBUG() << "[ui][chat page] slotSideBarSwitchToContact";
+    ui->stackedWidget->setCurrentWidget(ui->friend_info_page);
+    freshSideBarStateToSelected(ui->side_contact_widget, "sideBar");
+    m_state = ChatUiMode::CONTACT_MODE;
+    showSerachList(false);
 }
