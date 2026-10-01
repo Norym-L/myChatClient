@@ -1,5 +1,5 @@
 /* ============================================================
-   会话列表项 FriendWidget（chat/friendWidget/friendwidget.qss）
+   会话列表项 FriendWidget（chat/interListItem/friendwidget.qss）
    作为 item widget 嵌入 chatpage.qss 中的会话/联系人列表。
    ============================================================ */
 

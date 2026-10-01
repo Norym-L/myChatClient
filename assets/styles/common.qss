@@ -18,7 +18,7 @@
      reset/resetdialog.qss              重置页
      chat/chatpage.qss                  聊天主页
      chat/chatPage/interchatpage.qss    会话聊天页
-     chat/friendWidget/friendwidget.qss 会话列表项
+     chat/interListItem/friendwidget.qss 会话列表项
    加载顺序见 main.cpp：common 在最前，页面样式在后。
    ============================================================ */
 

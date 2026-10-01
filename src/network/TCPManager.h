@@ -12,6 +12,7 @@
 
 #include "app/singleton.h"
 #include "app/global.h"
+#include "app/UserData.h"
 
 /**
  * @brief TCPManager 与 ChatServer 的裸 TCP 连接（详见 ServerDocs/api-tcp.md）
@@ -83,7 +84,9 @@ signals:
 	/// 连接结果；false 表示连接失败或超时
 	void sig_connectSuccess(bool be_success);
 	void sig_loginFailed(int error);
-	void sig_switchToChatDialog(void);
+	void sig_switchToChatDialog();
 	/// 连接建立之后的链路异常（已断开 / 报文非法）
 	void sig_tcpError(const QString& reason);
+
+    void sigUserSearch(std::shared_ptr<SearchInfo> info); // 用户搜索
 };

@@ -6,7 +6,7 @@
 #include <QAction>
 #include <QAbstractScrollArea>
 
-#include "friendWidget/friendwidget.h"
+#include "interListItem/friendwidget.h"
 #include "loadingDialog/loadingdialog.h"
 
 namespace
@@ -114,33 +114,36 @@ void ChatPage::initSearchEdit()
     ui->search_edit->addAction(search_action, QLineEdit::LeadingPosition);
     ui->search_edit->setPlaceholderText("搜索");
 
-    /// 删除动作
+    /// 删除动作("X"图标)
+    // 显示隐藏搜索列表放到 slotSideBarSwitchToContact() 中处理
     auto* clear_action = new QAction(ui->search_edit);
     clear_action->setIcon(QIcon(":/res/close.png"));
     ui->search_edit->addAction(clear_action, QLineEdit::TrailingPosition);
-    connect(ui->search_edit, &QLineEdit::textChanged, [this, clear_action](auto& text)
+    // 有文本变化时控制清除按钮的显示
+    connect(ui->search_edit, &QLineEdit::textChanged, [clear_action](auto& text)
                 {
-                    if (text.isEmpty())
+                    if (text.isEmpty()) // 设置清除按钮不可见
                     {
                         clear_action->setVisible(false);
-                        showSerachList(false);
                     }
                     else
                     {
                         clear_action->setVisible(true);
-                        showSerachList(true);
                     }
                 });
-    // 删除文本
-    connect(clear_action, &QAction::triggered, [this, clear_action]()
+    // 点击删除按钮时删除文本
+    connect(clear_action, &QAction::triggered, [this]()
                 {
                     ui->search_edit->clear();
-                    clear_action->setVisible(false);
+                    // clear_action->setVisible(false);
                     ui->search_edit->clearFocus();
-                    showSerachList(false);
+                    // showSerachList(false);
                 });
     clear_action->setVisible(false);
     showSerachList(false);
+
+    // 连接输入框发生变化
+    connect(ui->search_edit, &QLineEdit::textChanged, this, &ChatPage::slotSearchEditTextChanged);
 }
 
 void ChatPage::initChatUserList()
@@ -242,7 +245,7 @@ void ChatPage::slotLoadingMoreChatUserInChatUserList()
         return;
     }
     m_beLoadingMoreChatUser = true;
-    auto* loading_dialog = new LoadingDialog(this);
+    auto* loading_dialog = new LoadingDialog(this); // TODO: loading_dialog 改到list中,并且实现异步加载
     loading_dialog->setModal(true);
     loading_dialog->show();
     LOG_DEBUG() << "[ui][chat page] loading more user function run";
@@ -267,4 +270,10 @@ void ChatPage::slotSideBarSwitchToContact()
     freshSideBarStateToSelected(ui->side_contact_widget, "sideBar");
     m_state = ChatUiMode::CONTACT_MODE;
     showSerachList(false);
+}
+
+void ChatPage::slotSearchEditTextChanged(const QString& text)
+{
+    showSerachList(!text.isEmpty()); // 设置搜索框是否显示
+
 }
