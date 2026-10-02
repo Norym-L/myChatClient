@@ -1,0 +1,304 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="应用入口">
+      <UniqueIdentifier>{d1000001-0000-4000-8000-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="基础服务">
+      <UniqueIdentifier>{d1000002-0000-4000-8000-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="基础服务\日志">
+      <UniqueIdentifier>{d1000003-0000-4000-8000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="基础服务\数据管理">
+      <UniqueIdentifier>{d1000004-0000-4000-8000-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="基础服务\网络通信">
+      <UniqueIdentifier>{d1000005-0000-4000-8000-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面">
+      <UniqueIdentifier>{d1000006-0000-4000-8000-000000000006}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\主窗口">
+      <UniqueIdentifier>{d1000007-0000-4000-8000-000000000007}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\通用控件">
+      <UniqueIdentifier>{d1000008-0000-4000-8000-000000000008}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面">
+      <UniqueIdentifier>{d1000009-0000-4000-8000-000000000009}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\登录">
+      <UniqueIdentifier>{d100000a-0000-4000-8000-00000000000a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\注册">
+      <UniqueIdentifier>{d100000b-0000-4000-8000-00000000000b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\找回密码">
+      <UniqueIdentifier>{d100000c-0000-4000-8000-00000000000c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源">
+      <UniqueIdentifier>{d1000012-0000-4000-8000-000000000012}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面">
+      <UniqueIdentifier>{d100000d-0000-4000-8000-00000000000d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\消息气泡">
+      <UniqueIdentifier>{d100000f-0000-4000-8000-00000000000f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\列表项">
+      <UniqueIdentifier>{d1000010-0000-4000-8000-000000000010}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\对话框">
+      <UniqueIdentifier>{d1000011-0000-4000-8000-000000000011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\右侧聊天页面">
+      <UniqueIdentifier>{38193897-ef6b-44c2-95a0-eae68932ac32}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="rc.qrc">
+      <Filter>资源</Filter>
+    </QtRcc>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="adduseritem.ui">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </QtUic>
+    <QtUic Include="bubbleframe.ui">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </QtUic>
+    <QtUic Include="chatitembase.ui">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </QtUic>
+    <QtUic Include="findresultdialog.ui">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </QtUic>
+    <QtUic Include="friendwidget.ui">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </QtUic>
+    <QtUic Include="loadingdialog.ui">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </QtUic>
+    <QtUic Include="logindialog.ui">
+      <Filter>界面\页面\登录</Filter>
+    </QtUic>
+    <QtUic Include="mainwindow.ui">
+      <Filter>界面\主窗口</Filter>
+    </QtUic>
+    <QtUic Include="registerdialog.ui">
+      <Filter>界面\页面\注册</Filter>
+    </QtUic>
+    <QtUic Include="resetdialog.ui">
+      <Filter>界面\页面\找回密码</Filter>
+    </QtUic>
+    <QtUic Include="chatview.ui">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </QtUic>
+    <QtUic Include="interchatpage.ui">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </QtUic>
+    <QtUic Include="chatpage.ui">
+      <Filter>界面\页面\聊天页面</Filter>
+    </QtUic>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="ChatUserList.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="ListItemBase.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="MessageTextEdit.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="SearchList.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="StateWidget.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="TCPManager.h">
+      <Filter>基础服务\网络通信</Filter>
+    </QtMoc>
+    <QtMoc Include="TextBubble.h">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </QtMoc>
+    <QtMoc Include="TruncateEdit.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="UserManager.h">
+      <Filter>基础服务\数据管理</Filter>
+    </QtMoc>
+    <QtMoc Include="adduseritem.h">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </QtMoc>
+    <QtMoc Include="bubbleframe.h">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </QtMoc>
+    <QtMoc Include="chatitembase.h">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </QtMoc>
+    <QtMoc Include="clicked_label.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="findresultdialog.h">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </QtMoc>
+    <QtMoc Include="friendwidget.h">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </QtMoc>
+    <QtMoc Include="httpmanager.h">
+      <Filter>基础服务\网络通信</Filter>
+    </QtMoc>
+    <QtMoc Include="loadingdialog.h">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </QtMoc>
+    <QtMoc Include="logindialog.h">
+      <Filter>界面\页面\登录</Filter>
+    </QtMoc>
+    <QtMoc Include="mainwindow.h">
+      <Filter>界面\主窗口</Filter>
+    </QtMoc>
+    <QtMoc Include="registerdialog.h">
+      <Filter>界面\页面\注册</Filter>
+    </QtMoc>
+    <QtMoc Include="resetdialog.h">
+      <Filter>界面\页面\找回密码</Filter>
+    </QtMoc>
+    <QtMoc Include="chatview.h">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </QtMoc>
+    <QtMoc Include="interchatpage.h">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </QtMoc>
+    <QtMoc Include="chatpage.h">
+      <Filter>界面\页面\聊天页面</Filter>
+    </QtMoc>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ChatUserList.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="ClickedButton.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="MessageTextEdit.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="PictureBubble.cpp">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </ClCompile>
+    <ClCompile Include="SearchList.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="StateWidget.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="TCPManager.cpp">
+      <Filter>基础服务\网络通信</Filter>
+    </ClCompile>
+    <ClCompile Include="TextBubble.cpp">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </ClCompile>
+    <ClCompile Include="TruncateEdit.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="UserManager.cpp">
+      <Filter>基础服务\数据管理</Filter>
+    </ClCompile>
+    <ClCompile Include="adduseritem.cpp">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </ClCompile>
+    <ClCompile Include="bubbleframe.cpp">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </ClCompile>
+    <ClCompile Include="chatitembase.cpp">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </ClCompile>
+    <ClCompile Include="clicked_label.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="findresultdialog.cpp">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </ClCompile>
+    <ClCompile Include="friendwidget.cpp">
+      <Filter>界面\页面\聊天页面\列表项</Filter>
+    </ClCompile>
+    <ClCompile Include="global.cpp">
+      <Filter>应用入口</Filter>
+    </ClCompile>
+    <ClCompile Include="httpmanager.cpp">
+      <Filter>基础服务\网络通信</Filter>
+    </ClCompile>
+    <ClCompile Include="loadingdialog.cpp">
+      <Filter>界面\页面\聊天页面\对话框</Filter>
+    </ClCompile>
+    <ClCompile Include="logger.cpp">
+      <Filter>基础服务\日志</Filter>
+    </ClCompile>
+    <ClCompile Include="logindialog.cpp">
+      <Filter>界面\页面\登录</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>应用入口</Filter>
+    </ClCompile>
+    <ClCompile Include="mainwindow.cpp">
+      <Filter>界面\主窗口</Filter>
+    </ClCompile>
+    <ClCompile Include="registerdialog.cpp">
+      <Filter>界面\页面\注册</Filter>
+    </ClCompile>
+    <ClCompile Include="resetdialog.cpp">
+      <Filter>界面\页面\找回密码</Filter>
+    </ClCompile>
+    <ClCompile Include="timer_button.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="chatview.cpp">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </ClCompile>
+    <ClCompile Include="interchatpage.cpp">
+      <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
+    </ClCompile>
+    <ClCompile Include="chatpage.cpp">
+      <Filter>界面\页面\聊天页面</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ClickedButton.h">
+      <Filter>界面\通用控件</Filter>
+    </ClInclude>
+    <ClInclude Include="PictureBubble.h">
+      <Filter>界面\页面\聊天页面\消息气泡</Filter>
+    </ClInclude>
+    <ClInclude Include="UserData.h">
+      <Filter>应用入口</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>应用入口</Filter>
+    </ClInclude>
+    <ClInclude Include="logger.h">
+      <Filter>基础服务\日志</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>资源</Filter>
+    </ClInclude>
+    <ClInclude Include="singleton.h">
+      <Filter>应用入口</Filter>
+    </ClInclude>
+    <ClInclude Include="timer_button.h">
+      <Filter>界面\通用控件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ChatClient.rc">
+      <Filter>资源</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="config.ini">
+      <Filter>资源</Filter>
+    </None>
+  </ItemGroup>
+</Project>

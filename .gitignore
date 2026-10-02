@@ -1,21 +1,23 @@
+# Visual Studio
 .vs/
 x64/
-ChatClient/
+[Dd]ebug/
+[Rr]elease/
 *.user
 *.suo
+*.userosscache
 *.opendb
 *.db
 *.ipch
+*.aps
 
-/docs/ServerDocs
-
-# CMake / CLion 构建目录
+# CLion / CMake 历史遗留（防止误开误提交）
+.idea/
+cmake-build-*/
 /build/
-/cmake-build-*/
-/CMakeUserPresets.json
+/out/
 compile_commands.json
-/.workbuddy/
+
+# 本地文档与工作区（不进库）
 /docs/
-/out/*
-/.idea
-/.idea/
+/.workbuddy/
