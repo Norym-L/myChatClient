@@ -55,6 +55,12 @@
     <Filter Include="界面\页面\聊天页面\右侧聊天页面">
       <UniqueIdentifier>{38193897-ef6b-44c2-95a0-eae68932ac32}</UniqueIdentifier>
     </Filter>
+    <Filter Include="界面\页面\聊天页面\发送好友申请页面">
+      <UniqueIdentifier>{ef2a66d5-a348-4d5b-a124-2de43c1eeeea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\主体容器">
+      <UniqueIdentifier>{ee2349de-9d9a-4e17-aa91-db654673dad0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="rc.qrc">
@@ -98,9 +104,13 @@
     <QtUic Include="interchatpage.ui">
       <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
     </QtUic>
-    <QtUic Include="chatpage.ui">
-      <Filter>界面\页面\聊天页面</Filter>
+    <QtUic Include="ApplyFriend.ui">
+      <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
     </QtUic>
+    <QtUic Include="chatpage.ui">
+      <Filter>界面\页面\聊天页面\主体容器</Filter>
+    </QtUic>
+    <QtUic Include="FriendLabel.ui" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ChatUserList.h">
@@ -172,9 +182,16 @@
     <QtMoc Include="interchatpage.h">
       <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
     </QtMoc>
-    <QtMoc Include="chatpage.h">
-      <Filter>界面\页面\聊天页面</Filter>
+    <QtMoc Include="ApplyFriend.h">
+      <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
     </QtMoc>
+    <QtMoc Include="chatpage.h">
+      <Filter>界面\页面\聊天页面\主体容器</Filter>
+    </QtMoc>
+    <QtMoc Include="ClickedOnceLabel.h">
+      <Filter>界面\通用控件</Filter>
+    </QtMoc>
+    <QtMoc Include="FriendLabel.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ChatUserList.cpp">
@@ -261,9 +278,16 @@
     <ClCompile Include="interchatpage.cpp">
       <Filter>界面\页面\聊天页面\右侧聊天页面</Filter>
     </ClCompile>
-    <ClCompile Include="chatpage.cpp">
-      <Filter>界面\页面\聊天页面</Filter>
+    <ClCompile Include="ApplyFriend.cpp">
+      <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
     </ClCompile>
+    <ClCompile Include="chatpage.cpp">
+      <Filter>界面\页面\聊天页面\主体容器</Filter>
+    </ClCompile>
+    <ClCompile Include="ClickedOnceLabel.cpp">
+      <Filter>界面\通用控件</Filter>
+    </ClCompile>
+    <ClCompile Include="FriendLabel.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClickedButton.h">

@@ -110,11 +110,13 @@
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="adduseritem.ui" />
+    <QtUic Include="ApplyFriend.ui" />
     <QtUic Include="bubbleframe.ui" />
     <QtUic Include="chatitembase.ui" />
     <QtUic Include="chatpage.ui" />
     <QtUic Include="chatview.ui" />
     <QtUic Include="findresultdialog.ui" />
+    <QtUic Include="FriendLabel.ui" />
     <QtUic Include="friendwidget.ui" />
     <QtUic Include="interchatpage.ui" />
     <QtUic Include="loadingdialog.ui" />
@@ -150,8 +152,11 @@
     <QtMoc Include="resetdialog.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ApplyFriend.cpp" />
     <ClCompile Include="ChatUserList.cpp" />
     <ClCompile Include="ClickedButton.cpp" />
+    <ClCompile Include="ClickedOnceLabel.cpp" />
+    <ClCompile Include="FriendLabel.cpp" />
     <ClCompile Include="MessageTextEdit.cpp" />
     <ClCompile Include="PictureBubble.cpp" />
     <ClCompile Include="SearchList.cpp" />
@@ -181,7 +186,10 @@
     <ClCompile Include="timer_button.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="ApplyFriend.h" />
     <ClInclude Include="ClickedButton.h" />
+    <QtMoc Include="ClickedOnceLabel.h" />
+    <QtMoc Include="FriendLabel.h" />
     <ClInclude Include="PictureBubble.h" />
     <ClInclude Include="UserData.h" />
     <ClInclude Include="global.h" />

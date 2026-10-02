@@ -27,7 +27,7 @@
   </layout>
  </widget>
  <resources>
-  <include location="../../../../../rc.qrc"/>
+  <include location="rc.qrc"/>
  </resources>
  <connections/>
 </ui>

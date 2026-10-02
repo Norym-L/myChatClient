@@ -1,0 +1,8 @@
+
+[*]
+
+# ReSharper properties
+resharper_anonymous_method_declaration_braces = next_line_shifted_2
+resharper_case_block_braces = next_line_shifted
+resharper_empty_block_style = together
+resharper_namespace_indentation = none
