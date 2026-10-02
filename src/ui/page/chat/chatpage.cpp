@@ -5,6 +5,7 @@
 #include <QWidget>
 #include <QAction>
 #include <QAbstractScrollArea>
+#include <QMouseEvent>
 
 #include "interListItem/friendwidget.h"
 #include "loadingDialog/loadingdialog.h"
@@ -75,11 +76,24 @@ ChatPage::ChatPage(QWidget* parent)
     initSearchEdit();
     initChatUserList();
     initSideBar();
+
+    installEventFilter(this);
 }
 
 ChatPage::~ChatPage()
 {
     delete ui;
+}
+
+bool ChatPage::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+        auto* mouse_event = dynamic_cast<QMouseEvent*>(event);
+        handleGrobalMousePress(mouse_event);
+    }
+
+    return QWidget::eventFilter(watched, event);
 }
 
 void ChatPage::showSerachList(const bool is_searching)
@@ -190,6 +204,21 @@ void ChatPage::freshSideBarStateToSelected(StateWidget* widget, const QString& g
         item->setCurrentState(ClickLabelState::NORMAL);
     }
     widget->setCurrentState(ClickLabelState::SELECT);
+}
+
+void ChatPage::handleGrobalMousePress(const QMouseEvent* event)
+{
+    // 搜索模式，点击空白处隐藏搜索列表
+    if (m_mode != ChatUiMode::SEARCH_MODE)
+    {
+        return;
+    }
+    const QPoint pos_in_serach_list = ui->search_list->mapFromGlobal(event->globalPosition().toPoint());
+    if (!ui->search_list->rect().contains(pos_in_serach_list))
+    {
+        ui->search_edit->clear();
+        showSerachList(false);
+    }
 }
 
 

@@ -43,28 +43,13 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="添加了按钮组，实现聊天页面侧边栏单选按钮&#10;修改了statewidget的逻辑">
-      <change afterPath="$PROJECT_DIR$/assets/styles/chat/interListItem/adduseritem.qss" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/UserData.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/SearchList.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/components/SearchList.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/adduseritem.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/adduseritem.h" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/adduseritem.ui" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+    <list default="true" id="8e928f80-1ead-411d-8a82-c58ef7622ccd" name="更改" comment="新增 SearchList 组件，实现滚动条悬停显示与滚轮滚动&#10;新增 AddUserItem 列表项组件及样式&#10;新增 SearchInfo 用户数据模型与用户搜索信号&#10;重命名 friendWidget 目录为 interListItem 并更新资源引用">
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/findResultDialog/findresultdialog.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/findResultDialog/findresultdialog.h" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ui/page/chat/findResultDialog/findresultdialog.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/chat/friendWidget/friendwidget.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/chat/interListItem/friendwidget.qss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/styles/common.qss" beforeDir="false" afterPath="$PROJECT_DIR$/assets/styles/common.qss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rc.qrc" beforeDir="false" afterPath="$PROJECT_DIR$/rc.qrc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/network/TCPManager.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/network/TCPManager.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/chatpage.ui" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/friendwidget.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/friendwidget.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ui/page/chat/friendWidget/friendwidget.ui" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/page/chat/interListItem/friendwidget.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -148,7 +133,7 @@
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
     &quot;run.code.analysis.last.selected.profile&quot;: &quot;pProject Default&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;Errors&quot;
   }
 }</component>
   <component name="RecentsManager">
@@ -162,12 +147,12 @@
     </option>
   </component>
   <component name="RunManager">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
       <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="ChatClient" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ChatClient" TARGET_NAME="ChatClient" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="ChatClient" RUN_TARGET_NAME="ChatClient">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -242,7 +227,8 @@
     <MESSAGE value="feat(chat): 新增侧边栏状态组件与样式&#10;&#10;实现 StateWidget 的悬停、按下与选中状态切换，&#10;并在聊天页侧边栏接入头像、聊天与会话入口及对应 QSS 样式。" />
     <MESSAGE value="修改了statewidget的逻辑&#10;更改了sidebar的默认样式" />
     <MESSAGE value="添加了按钮组，实现聊天页面侧边栏单选按钮&#10;修改了statewidget的逻辑" />
-    <option name="LAST_COMMIT_MESSAGE" value="添加了按钮组，实现聊天页面侧边栏单选按钮&#10;修改了statewidget的逻辑" />
+    <MESSAGE value="新增 SearchList 组件，实现滚动条悬停显示与滚轮滚动&#10;新增 AddUserItem 列表项组件及样式&#10;新增 SearchInfo 用户数据模型与用户搜索信号&#10;重命名 friendWidget 目录为 interListItem 并更新资源引用" />
+    <option name="LAST_COMMIT_MESSAGE" value="新增 SearchList 组件，实现滚动条悬停显示与滚轮滚动&#10;新增 AddUserItem 列表项组件及样式&#10;新增 SearchInfo 用户数据模型与用户搜索信号&#10;重命名 friendWidget 目录为 interListItem 并更新资源引用" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
