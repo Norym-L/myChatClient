@@ -109,6 +109,7 @@
     <file alias="style/chat/chatPage/interchatpage.qss">assets/styles/chat/chatPage/interchatpage.qss</file>
     <file alias="style/chat/interListItem/adduseritem.qss">assets/styles/chat/interListItem/adduseritem.qss</file>
     <file alias="style/chat/interListItem/friendwidget.qss">assets/styles/chat/interListItem/friendwidget.qss</file>
+    <file alias="style/chat/findResultDialog/findresultdialog.qss">assets/styles/chat/findResultDialog/findresultdialog.qss</file>
     <file alias="res/login.png">assets/images/login.png</file>
     <file alias="res/invisible.png">assets/images/invisible.png</file>
     <file alias="res/invisible_hover.png">assets/images/invisible_hover.png</file>

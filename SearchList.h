@@ -3,6 +3,7 @@
 
 #include <QListWidget>
 
+#include "findresultdialog.h"
 #include "UserData.h"
 #include "loadingdialog.h"
 
@@ -29,7 +30,7 @@ private slots:
 
 private:
     bool m_sendPending{false}; // 是否阻塞,等待服务器回包
-    std::shared_ptr<QDialog> m_findDialog{nullptr};
+    FindResultDialog* m_findDialog{nullptr};
     QWidget* m_searchEdit{nullptr};
 };
 

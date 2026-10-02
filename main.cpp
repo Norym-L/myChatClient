@@ -32,7 +32,8 @@ int main(int argc, char *argv[])
         ":/style/chat/chatpage.qss",
         ":/style/chat/chatPage/interchatpage.qss",
         ":/style/chat/interListItem/friendwidget.qss",
-        ":/style/chat/interListItem/adduseritem.qss"
+        ":/style/chat/interListItem/adduseritem.qss",
+        ":/style/chat/findResultDialog/findresultdialog.qss"
     };
 
     QString style;

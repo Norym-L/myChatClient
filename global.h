@@ -33,6 +33,7 @@ enum ReqId : std::uint16_t
 	ID_LOGIN_USER = 1004, // 用户登录
 	ID_CHAT_LOGIN = 1005, // 聊天系统登录
 	ID_CHAT_LOGIN_RESP = 1006, // 聊天系统回包
+	ID_SEARCH_USER_REQ = 1007, // 用户查询请求
 };
 
 /**

@@ -89,4 +89,5 @@ signals:
 	void sig_tcpError(const QString& reason);
 
     void sigUserSearch(std::shared_ptr<SearchInfo> info); // 用户搜索
+	void sigSendData(ReqId id, const QString& data); // 发送数据
 };

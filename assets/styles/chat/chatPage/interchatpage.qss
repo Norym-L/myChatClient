@@ -13,17 +13,36 @@ QLabel#title_label
     padding-left: 8px;
 }
 
-/* 消息展示区 */
-QScrollArea#chat_area
+/* 消息展示区（QScrollArea 位于 ChatView 内部，非本页面直接子控件）
+   作用域锚点必须是**运行时真实存在的祖先 objectName**。本页面在两处被实例化：
+     interchatpage.ui:97  -> setObjectName("chat_data_list")
+     chatpage.ui:284     -> setObjectName("chat_page")
+   两者都覆盖了提升控件在各自 .ui 里的顶层名，因此类名锚点（ChatView /
+   InterChatPage）永不匹配——提升控件的 objectName 会被 uic 覆盖，
+   且本项目从不用独立窗口方式实例化这两个类。这里用 #chat_page：
+   它是 ChatView 在实际运行时的祖先节点。 */
+QWidget#chat_page QScrollArea#chat_area
 {
     background-color: rgb(34, 34, 34);
     border-top: 1px solid rgb(47, 47, 47);
     border-bottom: 1px solid rgb(47, 47, 47);
 }
 
-QWidget#null_widget,
-QWidget#widget,
-QWidget#scrollAreaWidgetContents
+/* ChatView 内部容器（同样以 #chat_page 为锚点）
+   注意：这三个 objectName 原本以裸选择器写在本文件里，但它们全部属于
+   chatview.ui（ChatView 的内部结构），而本页面自己的容器是 widget_4。
+   裸选择器会全局误命中 logindialog / registerdialog / resetdialog / chatpage
+   中同名的 widget 容器，故必须加作用域前缀。 */
+QWidget#chat_page QWidget#widget,
+QWidget#chat_page QWidget#null_widget,
+QWidget#chat_page QWidget#scrollAreaWidgetContents
+{
+    border: none;
+    background-color: rgb(34, 34, 34);
+}
+
+/* 本页标题栏容器（原裸规则里漏掉的本页控件） */
+QWidget#chat_page QWidget#widget_4
 {
     border: none;
     background-color: rgb(34, 34, 34);
