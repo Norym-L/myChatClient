@@ -79,7 +79,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QLabel" name="label">
+       <widget class="ClickedLabel" name="close_label">
         <property name="minimumSize">
          <size>
           <width>20</width>
@@ -109,6 +109,13 @@
   </layout>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>ClickedLabel</class>
+   <extends>QLabel</extends>
+   <header location="global">clicked_label.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="rc.qrc"/>
  </resources>

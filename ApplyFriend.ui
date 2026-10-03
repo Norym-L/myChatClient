@@ -236,7 +236,7 @@
                  <height>40</height>
                 </size>
                </property>
-               <widget class="QLineEdit" name="label_edit">
+               <widget class="TruncateEdit" name="label_edit">
                 <property name="geometry">
                  <rect>
                   <x>2</x>

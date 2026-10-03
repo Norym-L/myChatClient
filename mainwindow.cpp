@@ -11,7 +11,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     slotSwitchLogin();
 
-#ifdef LOG_DEBUG //TODO debug直接跳转chat页面做测试
+#ifdef _DEBUG //TODO debug直接跳转chat页面做测试
     slotSwitchChat();
 #endif
 }
