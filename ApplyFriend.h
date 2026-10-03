@@ -15,7 +15,7 @@
 
 constexpr int MIN_APPLY_LABEL_END_LEN = 40; // 好友标签输入框（已添加的标签）最小长度
 const QString ADD_TIP_PERFIX = "添加标签："; // 输入标签时，提示框的前缀
-constexpr int TIP_OFFSET = 20; // 标签偏移量
+constexpr int TIP_OFFSET = 5; // 标签偏移量
 
 QT_BEGIN_NAMESPACE
 namespace Ui
@@ -44,10 +44,16 @@ public:
 
 protected:
 	bool eventFilter(QObject*, QEvent*) override;
+	// 尺寸变化后重建圆角遮罩
+	void resizeEvent(QResizeEvent* event) override;
 
 private:
+	// 按当前尺寸重建窗口的圆角遮罩（无边框窗口的圆角靠遮罩实现）
+	void updateRoundedMask();
 	// 重置标签（位置）
 	void resetLabels();
+	// 重排候选区【已存在】的标签并按内容撑高 label_list（不新建、不删除）
+	void relayoutTipLabels();
 	// 按已放置的标签重新撑高 grid（标签换行后第二行不会被裁切）
 	void adjustGridHeight();
 	// 添加标签（添加到好友标签）
@@ -82,6 +88,7 @@ private:
 	QMap<QString, ClickedLabel*> m_addLabels;
 	QVector<QString> m_addLabelKeys;
 	QPoint m_labelPoint;
+	QVector<QString> m_currentAddedLabels; // 当前页面新建的标签，去掉标签后要删除
 	// 输入框显示的标签
 	QMap<QString, FriendLabel*> m_friendLabels;
 	QVector<QString> m_friendLabelKeys;

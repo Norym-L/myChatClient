@@ -25,13 +25,19 @@
 
    ★ state 取值（已用真实控件实测确认）：
      FriendLabel.cpp:9 调用
-       close_label->setState("normal", "hover", "pressed", ...)
-     ClickedLabel 把这三个入参原样写进 "state" 属性，所以实际取值只有
-     normal / hover / pressed 三种，**不是** normal_hover / normal_press。
-     下面选择器即按此编写。
-     后三个 selected_* 入参被 ClickedLabel::setState 丢弃
-     （clicked_label.cpp:122-124 把 m_selected 赋成了 normal），
-     因此 SELECT 态不可达，本文件不再为它写规则。
+       close_label->setState("normal", "hover", "pressed",
+                             "selected_normal", "selected_hover", "selected_pressed")
+     ClickedLabel 把这六个入参原样写进 "state" 属性，所以实际取值有两族：
+       NORMAL 族：normal / hover / pressed
+       SELECT 族：selected_normal / selected_hover / selected_pressed
+     注意**不是** normal_hover / normal_press，也不是 selected——
+     写错就是规则永远不命中，且 Qt 不报任何错。
+     （早期 ClickedLabel::setState 曾把 m_selected 误赋成 normal、
+       导致 SELECT 族不可达，该缺陷已在提交 9ad3eb1 修好，两族都生效。）
+
+     close_label 会进入 SELECT 族：ClickedLabel::mouseReleaseEvent 把
+     m_currentState 在 NORMAL / SELECT 之间来回切，所以点过一下之后
+     再悬停，state 是 selected_hover 而不是 hover。两族都要写。
 
    全局基础见 ../common.qss。
    ============================================================ */
@@ -55,6 +61,7 @@ QFrame#friendLabel:hover
     background-color: rgb(85,85,85);
     border: 1px solid rgb(153,153,153);
 }
+
 
 /* ==================== 标签文字 ====================
    字号 14px = 项目正文基准（common.qss 的 QDialog / QPushButton 均为 14px）；
@@ -83,12 +90,15 @@ QFrame#friendLabel QWidget#close_widget
 }
 
 /* 关闭图标三态。ClickedLabel 通过 setProperty("state", ...) + repolish()
-   切换，取值 normal / hover / pressed（QLabel 无 :hover 伪类，必须用属性）。
+   切换（QLabel 无 :hover 伪类，必须用属性），取值见文件头的两族说明。
    图标源文件 32x32，缩到 16x16 显示。
    FriendLabel.ui 原先写死了 <pixmap>close_hover.png，导致常态也显示蓝色图标
-   （与「蓝色只作强调」的配色约定冲突）；该属性已删除，图标改由下面三条
-   规则按状态驱动。 */
-QFrame#friendLabel QLabel#close_label
+   （与「蓝色只作强调」的配色约定冲突）；该属性已删除，图标改由下面规则
+   按状态驱动。两族都写：ClickedLabel::mouseReleaseEvent 会把 m_currentState
+   在 NORMAL / SELECT 之间来回切，点过一次后 state 就变成 selected_* 了。 */
+QFrame#friendLabel QLabel#close_label,
+QFrame#friendLabel QLabel#close_label[state='normal'],
+QFrame#friendLabel QLabel#close_label[state='selected_normal']
 {
     background-color: transparent;
     background-image: url(":/assets/images/close.png");
@@ -97,12 +107,14 @@ QFrame#friendLabel QLabel#close_label
     border: none;
 }
 
-QFrame#friendLabel QLabel#close_label[state='hover']
+QFrame#friendLabel QLabel#close_label[state='hover'],
+QFrame#friendLabel QLabel#close_label[state='selected_hover']
 {
     background-image: url(":/assets/images/close_hover.png");
 }
 
-QFrame#friendLabel QLabel#close_label[state='pressed']
+QFrame#friendLabel QLabel#close_label[state='pressed'],
+QFrame#friendLabel QLabel#close_label[state='selected_pressed']
 {
     background-image: url(":/assets/images/close_push.png");
 }

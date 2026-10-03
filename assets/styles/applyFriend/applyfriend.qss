@@ -49,7 +49,16 @@
 
 /* ==================== 弹窗主体 ====================
    common.qss 的 QDialog 是主背景 rgb(23,21,22)；本页是浮层卡片，
-   沿用 FindResultDialog 的做法改面板色 + 描边区分层级。 */
+   沿用 FindResultDialog 的做法改面板色 + 描边区分层级。
+
+   border-radius 的 8px 必须与 ApplyFriend.cpp 里的 kWindowCornerRadius 一致：
+   圆角是两件事配合出来的 —— QSS 把底色画成圆角矩形，代码再给窗口切一个
+   半径相同的遮罩，把四角挖掉。只做前者会露出平台底色成方角；
+   只做后者会切掉一部分圆角底色。改一个必须同时改另一个。
+
+   注意：这里**不能**改用窗口级半透明（WA_TranslucentBackground）来实现圆角。
+   半透明要求底色铺满整窗，只要有一块没画上（比如滚动区的 viewport），
+   那块就会变成鼠标穿透区域，窗口看着在却点不动。 */
 QDialog#ApplyFriend
 {
     background-color: rgb(34,34,34);
@@ -58,20 +67,25 @@ QDialog#ApplyFriend
     color: white;
 }
 
-/* ---- 滚动区：无边框，与弹窗背景同色 ---- */
-
-QDialog#ApplyFriend QScrollArea#scrollArea
+/* ---- 滚动区：整片透明，露出弹窗自己的圆角底色 ----
+   QAbstractScrollArea 的 viewport（内部子控件 qt_scrollarea_viewport）会拿
+   调色板的 Window 色当底来刷。系统深色主题下那是 rgb(30,30,30)，
+   于是「滚动区(30) 与 按钮行(34)」出现明显色差。
+   这里把 scrollArea / viewport / scrollcontents 全部置为透明，
+   底色只由上面的弹窗圆角背景提供，整页一个颜色。
+   注意：QScrollArea 自身刷不到 viewport，必须用 `> QWidget` 这层子选择器。 */
+QDialog#ApplyFriend QScrollArea#scrollArea,
+QDialog#ApplyFriend QScrollArea#scrollArea > QWidget,
+QDialog#ApplyFriend QScrollArea#scrollArea > QWidget > QWidget,
+QDialog#ApplyFriend QWidget#scrollcontents
 {
-    background-color: rgb(34,34,34);
+    background-color: transparent;
     border: none;
 }
 
-QDialog#ApplyFriend QWidget#scrollcontents
-{
-    background-color: rgb(34,34,34);
-}
-
-/* scrollcontents 由代码 setFixedHeight() 撑高，QSS 不给高度。 */
+/* scrollcontents 的高度不用 QSS 也不能在代码里手工撑：
+   scrollArea 的 widgetResizable 已打开，会按内容的最小高度自动推导，
+   太高时自动出滚动条、内容变少时自动缩回。 */
 
 /* ==================== 标题与分隔线 ==================== */
 
@@ -237,20 +251,31 @@ QLabel#tipsLabel[state='pressed']
     color: white;
 }
 
-/* 选中态（蓝底）当前不可达，仅作预留：
-   ClickedLabel::setState 把 m_selected 赋成了 normal
-   （clicked_label.cpp:122-124，select/select_hover/select_press 三个入参被丢弃），
-   所以 "state" 永远不会变成 selected*。修复该缺陷后，把下面规则的
-   state 值由注释还原即可生效——取值将是 selected / selected_hover /
-   selected_press（与 setState 的入参字面量一致）。
-QLabel#tipslb[state='selected'],
-QLabel#tipsLabel[state='selected']
+/* 选中态（蓝边框） */
+QLabel#tipslb[state='selected_normal'],
+QLabel#tipsLabel[state='selected_normal']
 {
-    background-color: rgb(0,153,255);
+    background-color: rgb(47,47,47);
     border: 1px solid rgb(0,153,255);
     color: white;
 }
-*/
+
+QLabel#tipslb[state='selected_hover'],
+QLabel#tipsLabel[state='selected_hover']
+{
+    background-color: rgb(61,61,61);
+    border: 1px solid rgb(0,153,255);
+    color: white;
+}
+
+QLabel#tipslb[state='selected_pressed'],
+QLabel#tipsLabel[state='selected_pressed']
+{
+    background-color: rgb(51,51,51);
+    border: 1px solid rgb(0,153,255);
+    color: white;
+}
+
 
 /* ==================== 「添加+xx」下拉提示 ====================
    input_tip 默认 hide()，仅在输入框有文字时 show()
@@ -284,8 +309,13 @@ QDialog#ApplyFriend QLabel#more_label:hover
 }
 
 /* ==================== 确认 / 取消 ====================
-   ClickedButton 走 [state=...]（setProperty + repolish），
-   文字按钮仍保留 :hover/:pressed 作为原生兜底。 */
+   这两个是文字按钮（无 border-image），沿用本项目对文字按钮的既有写法
+   —— 原生伪类 :hover / :pressed（见 findresultdialog.qss 的 add_friend_button、
+   common.qss 的 #cancel_button），而不是 [state=...] 属性选择器。
+   ClickedButton 确实也会 setProperty("state", ...)，但没有为这套按钮写
+   [state=...] 规则，两套并存只会重复；这里只保留伪类一套。
+   注意它的第三态实参是 "released"（不是 "pressed"），故即使将来要改用
+   属性选择器，取值也应是 [state='normal'|'hover'|'released']。 */
 QDialog#ApplyFriend QPushButton#sure_button
 {
     background-color: rgb(0,153,255);
