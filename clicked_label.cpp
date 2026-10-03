@@ -114,14 +114,20 @@ void ClickedLabel::leaveEvent(QEvent* event)
 	QLabel::leaveEvent(event);
 }
 
-void ClickedLabel::setState(const QString& normal, const QString& normal_hover, const QString& normal_press, const QString& select, const QString& select_hover, const QString& select_press)
+void ClickedLabel::setState(
+	const QString& normal,
+	const QString& normal_hover,
+	const QString& normal_press,
+	const QString& select,
+	const QString& select_hover,
+	const QString& select_press)
 {
 	m_normal = normal;
 	m_normalHover = normal_hover;
 	m_normalPress = normal_press;
-	m_selected = normal;
-	m_selectedHover = normal_hover;
-	m_selectedPress = normal_press;
+	m_selected = select;
+	m_selectedHover = select_hover;
+	m_selectedPress = select_press;
 
 	setProperty("state", m_normal);
 	repolish(this);
