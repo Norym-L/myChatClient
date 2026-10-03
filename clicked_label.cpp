@@ -29,6 +29,7 @@ void ClickedLabel::mousePressEvent(QMouseEvent* event)
 		}
 
 		emit clicked();
+		emit clickedWithNameAndState(text(), getCurrentState());
 		repolish(this);
 		update();
 	}
@@ -58,6 +59,7 @@ void ClickedLabel::mouseReleaseEvent(QMouseEvent* event)
 		}
 
 		emit released();
+		emit releasedWithNameAndState(text(), getCurrentState());
 		repolish(this);
 		update();
 	}
@@ -129,4 +131,18 @@ void ClickedLabel::setState(const QString& normal, const QString& normal_hover, 
 ClickLabelState ClickedLabel::getCurrentState() const
 {
 	return m_currentState;
+}
+
+void ClickedLabel::setCurrentState(const ClickLabelState state)
+{
+	m_currentState = state;
+	setProperty("state", state == ClickLabelState::NORMAL ? m_normal : m_selected);
+	repolish(this);
+}
+
+void ClickedLabel::resetState()
+{
+	m_currentState = ClickLabelState::NORMAL;
+	setProperty("state", m_normal);
+	repolish(this);
 }

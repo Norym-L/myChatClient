@@ -5,6 +5,8 @@
 #include <QCoreApplication>
 #include <QString>
 
+#include "ApplyFriend.h"
+
 
 FindResultDialog::FindResultDialog(QWidget* parent) 
     : QDialog(parent), ui(new Ui::FindResultDialog), m_parent(parent)
@@ -22,6 +24,8 @@ FindResultDialog::FindResultDialog(QWidget* parent)
     ui->head_label->setPixmap(head_pix);
     ui->add_friend_button->setState("normal", "hover", "press");
     this->setModal(true);
+
+    connect(ui->add_friend_button, &ClickedButton::released, this, &FindResultDialog::slotOnAddFriendButtonClicked);
 }
 
 FindResultDialog::~FindResultDialog()
@@ -37,5 +41,7 @@ void FindResultDialog::setSearchInfo(const std::shared_ptr<SearchInfo>& si)
 
 void FindResultDialog::slotOnAddFriendButtonClicked()
 {
-    // TODO: 添加好友
+    const auto apply_dialog = new ApplyFriend(m_parent);
+    apply_dialog->show();
+    hide();
 }

@@ -17,8 +17,8 @@ protected:
 	void mouseReleaseEvent(QMouseEvent* ev) override;
 
 signals:
-	void clicked();
-	void released();
+	void clicked(QString);
+	void released(QString);
 
 private:
 	bool m_enable{ true };

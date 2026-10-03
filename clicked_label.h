@@ -24,6 +24,9 @@ public:
         const QString& select = "", const QString& select_hover = "", const QString& select_press = "");
     [[nodiscard]] ClickLabelState getCurrentState() const;
 
+    void setCurrentState(ClickLabelState state);
+    void resetState();
+
 protected:
     /// 鼠标点击事件
     void mousePressEvent(QMouseEvent* event) override;
@@ -48,7 +51,9 @@ private:
 signals:
     /// 按下信号
     void clicked();
+    void clickedWithNameAndState(QString, ClickLabelState);
 
     /// 释放信号
     void released();
+    void releasedWithNameAndState(QString, ClickLabelState);
 };

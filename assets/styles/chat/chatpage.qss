@@ -94,7 +94,10 @@ QWidget#side_contact_widget[state='selected_pressed']
 QWidget#chat_user_widget
 {
     background-color: rgb(34,34,34);
-    border-right: 1px solid rgb(15,14,14);
+    /* 分隔线统一用调色板里的「边框颜色 rgb(47,47,47)」。
+       原值 rgb(15,14,14) 不在调色板内，且与左侧 side_bar 的
+       border-right 同为一列分隔线却取了不同颜色，故统一。 */
+    border-right: 1px solid rgb(47,47,47);
 }
 
 /* 搜索区容器（.ui 中已修正为 search_widget） */

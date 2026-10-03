@@ -1,0 +1,108 @@
+/* ============================================================
+   好友标签项 FriendLabel（applyFriend/friendlabel.qss）
+   ------------------------------------------------------------
+   对应界面：FriendLabel.ui   （根控件 class=FriendLabelClass）
+   对应代码：FriendLabel.cpp / .h
+
+   界面结构（选择器据此编写，控件改名后需同步）：
+     FriendLabelClass (QFrame)
+       ├─ tip_label    QLabel，标签文字，adjustSize() 撑宽
+       └─ close_widget QWidget 18x18，关闭按钮的点击热区
+            └─ close_label  ClickedLabel 16x16，关闭图标
+
+   ------------------------------------------------------------
+   对应关系与尺寸契约（三处必须同步改）：
+     FriendLabel.ui      布局外边距 4 / 间距 4；close_widget 18x18
+     FriendLabel.cpp     setFixedWidth(文字宽 + 图标宽 + 14)
+                         setFixedHeight(行高 + 14)
+     本文件              字号 14px；胶囊描边 1px（计入上述 +14 里的 2）
+   胶囊底色 rgb(61,61,61) 是「控件背景 47」的上一档，
+   压在 ApplyFriend 的标签输入区 rgb(47,47,47) 之上，形成 13 级色阶差。
+
+   ★ objectName 注意：运行时根控件名不是 FriendLabelClass，
+     而是 ApplyFriend.cpp:155 设置的 "friendLabel"
+     （setObjectName 会覆盖 .ui 里的根控件名）。写 #FriendLabelClass 不命中。
+
+   ★ state 取值（已用真实控件实测确认）：
+     FriendLabel.cpp:9 调用
+       close_label->setState("normal", "hover", "pressed", ...)
+     ClickedLabel 把这三个入参原样写进 "state" 属性，所以实际取值只有
+     normal / hover / pressed 三种，**不是** normal_hover / normal_press。
+     下面选择器即按此编写。
+     后三个 selected_* 入参被 ClickedLabel::setState 丢弃
+     （clicked_label.cpp:122-124 把 m_selected 赋成了 normal），
+     因此 SELECT 态不可达，本文件不再为它写规则。
+
+   全局基础见 ../common.qss。
+   ============================================================ */
+
+/* ==================== 标签胶囊本体 ====================
+   尺寸由 FriendLabel.cpp 的 setFixedWidth/setFixedHeight 决定；
+   .ui 里 32px 高度只是设计器占位（运行期被 setFixedHeight 覆盖）。
+   ⚠ QSS 的 border 画在控件矩形内部，会占用 2px；FriendLabel.cpp 的
+     +14 已把这 2px 算进去，改描边宽度必须同步改那里的常量。 */
+QFrame#friendLabel
+{
+    background-color: rgb(61,61,61);
+    border: 1px solid rgb(85,85,85);
+    border-radius: 4px;
+}
+
+/* 指针不在胶囊上时保持同色；胶囊本身不可点（只有 close_label 可点），
+   故只做极弱的提亮。 */
+QFrame#friendLabel:hover
+{
+    background-color: rgb(85,85,85);
+    border: 1px solid rgb(153,153,153);
+}
+
+/* ==================== 标签文字 ====================
+   字号 14px = 项目正文基准（common.qss 的 QDialog / QPushButton 均为 14px）；
+   原值 12px 低于基准，是「标签显得过小」的直接原因之一。 */
+QFrame#friendLabel QLabel#tip_label
+{
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 14px;
+    /* 兜底裁切：QSS 无法做省略号截断（:text-ellipsis 只对 QLineEdit /
+       QTextEdit 有效）。超长文本需在 FriendLabel::setText() 里改用
+       fontMetrics.elidedText()。当前 ApplyFriend 侧有 setMaxLength(10)
+       限制（约 70px），暂不会触发。 */
+    max-width: 160px;
+}
+
+/* ==================== 关闭按钮 ====================
+   热区容器：只做布局，不给背景。
+   ⚠ 裸QWidget 不接收鼠标事件，hover 态画在它上面不会触发，
+     所以高亮必须挂在 close_label 上。 */
+QFrame#friendLabel QWidget#close_widget
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* 关闭图标三态。ClickedLabel 通过 setProperty("state", ...) + repolish()
+   切换，取值 normal / hover / pressed（QLabel 无 :hover 伪类，必须用属性）。
+   图标源文件 32x32，缩到 16x16 显示。
+   FriendLabel.ui 原先写死了 <pixmap>close_hover.png，导致常态也显示蓝色图标
+   （与「蓝色只作强调」的配色约定冲突）；该属性已删除，图标改由下面三条
+   规则按状态驱动。 */
+QFrame#friendLabel QLabel#close_label
+{
+    background-color: transparent;
+    background-image: url(":/assets/images/close.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    border: none;
+}
+
+QFrame#friendLabel QLabel#close_label[state='hover']
+{
+    background-image: url(":/assets/images/close_hover.png");
+}
+
+QFrame#friendLabel QLabel#close_label[state='pressed']
+{
+    background-image: url(":/assets/images/close_push.png");
+}

@@ -2,6 +2,8 @@
 
 #include <QMouseEvent>
 
+#include "logger.h"
+
 ClickedOnceLabel::ClickedOnceLabel(QWidget* parent)
 	: QLabel(parent)
 {
@@ -22,12 +24,8 @@ void ClickedOnceLabel::mousePressEvent(QMouseEvent* ev)
 {
 	if (ev->button() == Qt::LeftButton)
 	{
-		if (m_enable)
-		{
-			m_enable = false;
-			emit clicked();
-			return;
-		}
+		emit clicked(text());
+		return;
 	}
 	QLabel::mousePressEvent(ev);
 }
@@ -36,12 +34,8 @@ void ClickedOnceLabel::mouseReleaseEvent(QMouseEvent* ev)
 {
 	if (ev->button() == Qt::LeftButton)
 	{
-		if (m_enable)
-		{
-			m_enable = false;
-			emit released();
-			return;
-		}
+		emit released(text());
+		return;
 	}
 
 	QLabel::mouseReleaseEvent(ev);

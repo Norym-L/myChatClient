@@ -31,7 +31,6 @@ void SearchList::closeFindDialog()
 	if (m_findDialog)
 	{
 		m_findDialog->hide();
-		m_findDialog = nullptr;
 	}
 }
 

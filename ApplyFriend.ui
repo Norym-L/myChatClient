@@ -46,7 +46,13 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>500</height>
+       <height>520</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>520</height>
       </size>
      </property>
      <property name="sizeIncrement">
@@ -64,7 +70,7 @@
         <x>0</x>
         <y>0</y>
         <width>358</width>
-        <height>498</height>
+        <height>518</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">

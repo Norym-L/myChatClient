@@ -33,7 +33,12 @@ int main(int argc, char *argv[])
         ":/style/chat/chatPage/interchatpage.qss",
         ":/style/chat/interListItem/friendwidget.qss",
         ":/style/chat/interListItem/adduseritem.qss",
-        ":/style/chat/findResultDialog/findresultdialog.qss"
+        ":/style/chat/findResultDialog/findresultdialog.qss",
+        // friendlabel.qss 必须在 applyfriend.qss 之前：
+        // 后者对 #grid 内的标签区做了底色，两处选择器不冲突，
+        // 但保持「组件样式先于页面样式」的既有惯例。
+        ":/style/applyFriend/friendlabel.qss",
+        ":/style/applyFriend/applyfriend.qss"
     };
 
     QString style;

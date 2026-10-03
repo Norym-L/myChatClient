@@ -1,0 +1,485 @@
+/* ============================================================
+   添加好友 / 好友申请页 ApplyFriend（applyFriend/applyfriend.qss）
+   ------------------------------------------------------------
+   对应界面：ApplyFriend.ui   （根控件 class=ApplyFriendClass）
+   对应代码：ApplyFriend.cpp / .h
+
+   ★ 运行时根控件 objectName 为 "ApplyFriend"
+     （ApplyFriend.cpp:14 setObjectName("ApplyFriend")，覆盖 .ui 里的
+     ApplyFriendClass），故选择器用 #ApplyFriend。
+
+   界面结构（选择器据此编写，控件改名后需同步）：
+     ApplyFriend (QDialog 360x620, FramelessWindowHint, Modal)
+      └─ verticalLayout (margin=0)
+           ├─ scrollArea 500+高
+           │    └─ scrollcontents
+           │         └─ verticalLayout_2
+           │              ├─ apply_label    "好友申请" 标题
+           │              ├─ line           分隔线
+           │              └─ widget         表单主体
+           │                   ├─ label    "填写验证信息"
+           │                   ├─ verify_info_edit  TruncateEdit 60高
+           │                   ├─ label_2  "备注"
+           │                   ├─ back_name_edit    TruncateEdit 30高
+           │                   ├─ label_3  "分组标签"
+           │                   ├─ friend_group_widget
+           │                   │    ├─ grid 标签容器（FriendLabel 父级）
+           │                   │    │    ├─ friendLabel*  动态，样式见 friendlabel.qss
+           │                   │    │    └─ label_edit    TruncateEdit 输入框
+           │                   │    └─ input_tip
+           │                   │         └─ tip_label  ClickedOnceLabel "添加+xx" 下拉提示
+           │                   └─ widget_2 推荐标签区
+           │                        ├─ label_list 285宽，动态 ClickedLabel#tipslb/#tipsLabel
+           │                        └─ more_label_widget "更多" 展开按钮
+           ├─ apply_sure_widget
+           │    ├─ sure_button   ClickedButton 85x30 "确认"
+           │    └─ cancel_button ClickedButton 85x30 "取消"
+           └─ verticalSpacer_2
+
+   ⚠ 本 .ui 当前形态是「我向对方发起好友申请」的表单，
+     没有任何申请列表项控件（无头像 / 昵称 / 同意拒绝按钮）。
+     需求中「申请列表项的头像、昵称、验证信息、同意/拒绝按钮」
+     对应的界面尚未存在，本文件末尾「预留：好友申请列表项」
+     一节给出了待建控件的配色规范，待ApplyFriend.ui（或新界面）
+     补上同名控件后直接生效。
+
+   全局基础（QDialog 背景 / QLineEdit / QPushButton 通用态 /
+   QScrollBar）见 ../common.qss。加载顺序见 main.cpp 的 kQssFiles。
+   ============================================================ */
+
+/* ==================== 弹窗主体 ====================
+   common.qss 的 QDialog 是主背景 rgb(23,21,22)；本页是浮层卡片，
+   沿用 FindResultDialog 的做法改面板色 + 描边区分层级。 */
+QDialog#ApplyFriend
+{
+    background-color: rgb(34,34,34);
+    border: 1px solid rgb(47,47,47);
+    border-radius: 8px;
+    color: white;
+}
+
+/* ---- 滚动区：无边框，与弹窗背景同色 ---- */
+
+QDialog#ApplyFriend QScrollArea#scrollArea
+{
+    background-color: rgb(34,34,34);
+    border: none;
+}
+
+QDialog#ApplyFriend QWidget#scrollcontents
+{
+    background-color: rgb(34,34,34);
+}
+
+/* scrollcontents 由代码 setFixedHeight() 撑高，QSS 不给高度。 */
+
+/* ==================== 标题与分隔线 ==================== */
+
+QDialog#ApplyFriend QLabel#apply_label
+{
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* .ui 里 class="Line"，Qt Designer 生成的是 QFrame */
+QDialog#ApplyFriend QFrame#line
+{
+    background-color: rgb(47,47,47);
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
+}
+
+/* ==================== 表单标签 ====================
+   label / label_2 / label_3 同为字段名，用次要文字色。 */
+QDialog#ApplyFriend QLabel#label,
+QDialog#ApplyFriend QLabel#label_2,
+QDialog#ApplyFriend QLabel#label_3
+{
+    background-color: transparent;
+    border: none;
+    color: rgb(153,153,153);
+    font-size: 13px;
+    padding-top: 6px;
+}
+
+/* ==================== 输入框 ====================
+   TruncateEdit 继承 QLineEdit，common.qss 已给基础外观，
+   此处只补本页特例：验证信息 60 高，垂直居中单行显示。 */
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(47,47,47);
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+    padding: 2px 8px;
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit:hover
+{
+    border: 1px solid rgb(61,61,61);
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit:focus
+{
+    border: 1px solid rgb(0,153,255);
+}
+
+QDialog#ApplyFriend QLineEdit#back_name_edit
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(47,47,47);
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+    padding: 2px 8px;
+}
+
+QDialog#ApplyFriend QLineEdit#back_name_edit:hover
+{
+    border: 1px solid rgb(61,61,61);
+}
+
+QDialog#ApplyFriend QLineEdit#back_name_edit:focus
+{
+    border: 1px solid rgb(0,153,255);
+}
+
+/* 昵称/备注超长（placeholder 较长，如「曹世明」）不裁字：
+   QLineEdit 内容超出时 Qt 自动左滚，QSS 无需额外处理。 */
+
+/* ==================== 标签容器 ====================
+   标签输入区：外观与上方 verify_info_edit / back_name_edit 两个输入框
+   完全一致（控件背景 rgb(47,47,47) + 4px 圆角），三个输入区观感统一。
+   ⚠ 原值 rgb(39,39,39) 不在项目调色板内，且与内部 FriendLabel 胶囊
+     (rgb(47,47,47)) 只差 8 级色阶，胶囊几乎糊进底色 —— 这是标签「看不清」
+     的第二个原因。现在底色 47 / 胶囊 61，拉开 14 级色阶。
+   不给 border：grid 内标签由 ApplyFriend.cpp 按 grid->width() 手工定位，
+   加描边会 inset 内容区 1px 造成错位。 */
+QDialog#ApplyFriend QWidget#grid
+{
+    background-color: rgb(47,47,47);
+    border: none;
+    border-radius: 4px;
+}
+
+QDialog#ApplyFriend QWidget#friend_group_widget,
+QDialog#ApplyFriend QWidget#widget,
+QDialog#ApplyFriend QWidget#widget_2,
+QDialog#ApplyFriend QWidget#label_list,
+QDialog#ApplyFriend QWidget#more_label_widget,
+QDialog#ApplyFriend QWidget#input_tip
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* 标签输入框：无边框，混排在一行里看起来是「继续输入」而非新控件。
+   代码里 setMaxLength(10)，且 move() 手工排布，
+   故不给 margin/border，避免挤压同级 FriendLabel。
+   字号与胶囊文字对齐（同为 14px），保证「已选标签」和「正在输入」
+   在同一行里基线一致。 */
+QDialog#ApplyFriend QLineEdit#label_edit
+{
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 14px;
+    padding: 0px 2px;
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+QDialog#ApplyFriend QLineEdit#label_edit:focus
+{
+    border: none;
+}
+
+/* ==================== 推荐标签（label_list 内的 ClickedLabel） ====================
+   对象名在代码里有两个：ApplyFriend.cpp:60 用 "tipslb"，
+   第 185 行用 "tipsLabel"，两处都要写。
+   位于面板背景 rgb(34,34,34) 之上，故取「控件背景 47」，
+   与容器拉开 13 级色阶（与 FriendLabel 的相对关系一致）。
+   字号 14px：原 12px 低于项目正文基准，是标签偏小的原因之一。 */
+QLabel#tipslb,
+QLabel#tipsLabel
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(61,61,61);
+    border-radius: 4px;
+    color: rgb(220,220,220);
+    font-size: 14px;
+    padding: 3px 10px;
+}
+
+/* ⚠ state 取值实测为 normal / hover / pressed：
+   ApplyFriend.cpp 调 setState("normal","hover","pressed",...)，ClickedLabel
+   把这三个入参原样写进 "state" 属性。原先写的 normal_hover / normal_press
+   永远不会命中，悬停与按下效果实际是失效的。 */
+QLabel#tipslb[state='hover'],
+QLabel#tipsLabel[state='hover']
+{
+    background-color: rgb(61,61,61);
+    border: 1px solid rgb(85,85,85);
+    color: white;
+}
+
+QLabel#tipslb[state='pressed'],
+QLabel#tipsLabel[state='pressed']
+{
+    background-color: rgb(51,51,51);
+    border: 1px solid rgb(0,153,255);
+    color: white;
+}
+
+/* 选中态（蓝底）当前不可达，仅作预留：
+   ClickedLabel::setState 把 m_selected 赋成了 normal
+   （clicked_label.cpp:122-124，select/select_hover/select_press 三个入参被丢弃），
+   所以 "state" 永远不会变成 selected*。修复该缺陷后，把下面规则的
+   state 值由注释还原即可生效——取值将是 selected / selected_hover /
+   selected_press（与 setState 的入参字面量一致）。
+QLabel#tipslb[state='selected'],
+QLabel#tipsLabel[state='selected']
+{
+    background-color: rgb(0,153,255);
+    border: 1px solid rgb(0,153,255);
+    color: white;
+}
+*/
+
+/* ==================== 「添加+xx」下拉提示 ====================
+   input_tip 默认 hide()，仅在输入框有文字时 show()
+   （ApplyFriend.cpp:346-364）。ClickedOnceLabel 无状态机。
+   蓝描边是刻意的强调（提示这是一条可点的新建项），
+   底色取调色板里的「选中色 61」。 */
+QDialog#ApplyFriend QLabel#tip_label
+{
+    background-color: rgb(61,61,61);
+    border: 1px solid rgb(0,153,255);
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+    padding: 3px 10px;
+}
+
+/* ==================== 「更多」展开按钮 ==================== */
+
+QDialog#ApplyFriend QLabel#more_label
+{
+    background-color: transparent;
+    border: none;
+    /* 展开后由 slotShwoMoreLabel() hide() 掉，无需 selected 态 */
+    color: rgb(153,153,153);
+    font-size: 13px;
+}
+
+QDialog#ApplyFriend QLabel#more_label:hover
+{
+    color: white;
+}
+
+/* ==================== 确认 / 取消 ====================
+   ClickedButton 走 [state=...]（setProperty + repolish），
+   文字按钮仍保留 :hover/:pressed 作为原生兜底。 */
+QDialog#ApplyFriend QPushButton#sure_button
+{
+    background-color: rgb(0,153,255);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+}
+
+QDialog#ApplyFriend QPushButton#sure_button:hover
+{
+    background-color: rgb(26,168,255);
+}
+
+QDialog#ApplyFriend QPushButton#sure_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+/* 已填完进入提交中：setEnabled(false) 时的等待态 */
+QDialog#ApplyFriend QPushButton#sure_button:disabled
+{
+    background-color: rgba(0,153,255,90);
+    color: rgba(255,255,255,150);
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button
+{
+    background-color: rgb(47,47,47);
+    border: none;
+    border-radius: 6px;
+    color: rgb(220,220,220);
+    font-size: 14px;
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button:hover
+{
+    background-color: rgb(61,61,61);
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button:pressed
+{
+    background-color: rgb(51,51,51);
+}
+
+QDialog#ApplyFriend QWidget#apply_sure_widget
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* ==================== 空数据 ====================
+   ⚠ 待建：label_list 为空（m_tipData 为空）时，界面上应显示占位提示。
+     两种做法，二选一：
+       a) 代码 new 一个 ClickedLabel#tipslb 并 setText("暂无标签")，
+          再 setProperty("empty", true)，命中下面这条虚线样式；
+       b) 在 .ui 里加 QLabel#empty_tip 显示占位文案，
+          启用本文件末尾注释掉的 #empty_tip 规则。
+   现状：ApplyFriend::initTipLabel() 未处理空列表，
+         m_tipData 为空时 label_list 会是一片空白。 */
+QLabel#tipslb[empty='true'],
+QLabel#tipsLabel[empty='true']
+{
+    background-color: transparent;
+    border: 1px dashed rgb(61,61,61);
+    color: rgb(120,120,120);
+}
+
+/* 空态占位标签（无边框弱化，与上方虚线二选一）：
+   QLabel#empty_tip { color: rgb(120,120,120); font-size: 13px;
+                      background: transparent; border: none; } */
+
+/* ==================== 加载中 ====================
+   ⚠ 待建：ApplyFriend.ui 目前没有 loading_label 控件，
+     下面这条规则在界面补上同名 QLabel 之前不会命中。
+     用途：提交申请等待服务端回包期间，用 loading.gif 盖住表单。
+     资源已存在于 rc.qrc：/assets/images/loading.gif、loading.png。
+   配套代码（尚未实现）：
+     ui->loading_label->show();ui->widget->setEnabled(false);
+     // 回包后 ui->loading_label->hide(); ui->widget->setEnabled(true); */
+QDialog#ApplyFriend QLabel#loading_label
+{
+    background-color: rgb(34,34,34);
+    border: none;
+    background-image: url(":/assets/images/loading.gif");
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 120px;
+}
+
+/* 灰掉底层表单的通用写法（配合 setEnabled(false)）：
+   QDialog#ApplyFriend QWidget#widget[loading='true'] { opacity 不可用，
+   改用降低对比——把文字色交给各控件的 :disabled 规则即可。 */
+
+/* ==================== 预留：好友申请列表项 ====================
+   ⚠ 待建：ApplyFriend.ui 目前只有「发起申请」表单，
+     尚无列表项。以下为规划中的控件命名与配色，
+     待界面补齐同名控件后取消注释即生效。
+
+   建议对象名：apply_list(QListWidget) / apply_item(QWidget 容器)
+                apply_avatar(QLabel 40x40) / apply_name(QLabel)
+                apply_info(QLabel 验证信息) 
+                agree_button / refuse_button(ClickedButton)
+
+QDialog#ApplyFriend QListWidget#apply_list
+{
+    background-color: transparent;
+    border: none;
+    outline: none;
+}
+
+QDialog#ApplyFriend QListWidget#apply_list::item
+{
+    background-color: transparent;
+    border: none;
+    outline: none;
+}
+
+QDialog#ApplyFriend QListWidget#apply_list::item:hover
+{
+    background-color: rgb(51,51,51);
+}
+
+QDialog#ApplyFriend QListWidget#apply_list::item:selected
+{
+    background-color: rgb(61,61,61);
+}
+
+QDialog#ApplyFriend QWidget#apply_item
+{
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid rgb(47,47,47);
+}
+
+QDialog#ApplyFriend QLabel#apply_avatar
+{
+    background-color: rgb(47,47,47);
+    border: 1px solid rgb(61,61,61);
+    border-radius: 4px;
+}
+
+QDialog#ApplyFriend QLabel#apply_name
+{
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 14px;
+}
+
+QDialog#ApplyFriend QLabel#apply_info
+{
+    background-color: transparent;
+    border: none;
+    color: rgb(153,153,153);
+    font-size: 12px;
+    max-width: 150px;   -- 超长验证信息兜底裁切；省略号需代码 elide
+}
+
+QDialog#ApplyFriend QPushButton#agree_button
+{
+    background-color: rgb(0,153,255);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+}
+
+QDialog#ApplyFriend QPushButton#agree_button:hover
+{
+    background-color: rgb(26,168,255);
+}
+
+QDialog#ApplyFriend QPushButton#agree_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QDialog#ApplyFriend QPushButton#refuse_button
+{
+    background-color: rgb(47,47,47);
+    border: none;
+    border-radius: 4px;
+    color: rgb(220,220,220);
+    font-size: 12px;
+}
+
+QDialog#ApplyFriend QPushButton#refuse_button:hover
+{
+    background-color: rgb(61,61,61);
+}
+
+QDialog#ApplyFriend QPushButton#refuse_button:pressed
+{
+    background-color: rgb(51,51,51);
+}
+   ============================================================ */
