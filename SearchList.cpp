@@ -108,7 +108,7 @@ void SearchList::slotItemClicked(QListWidgetItem* item)
 	else if (item_type == ListItemType::ADD_USER_TIP)
 	{
 		// test
-		const auto search_info = std::make_shared<SearchInfo>(0, "csm", "曹世明", "from wzu", SearchInfo::Sex::FEMALE);
+		const auto search_info = std::make_shared<SearchInfo>(0, "csm", "曹世明", "from wzu", Sex::FEMALE);
 
 		LOG_DEBUG() << "[chat page][search list] show addFriend dailog";
 		m_findDialog->setSearchInfo(search_info);

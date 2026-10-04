@@ -90,4 +90,7 @@ signals:
 
     void sigUserSearch(std::shared_ptr<SearchInfo> info); // 用户搜索
 	void sigSendData(ReqId id, const QString& data); // 发送数据
+
+	// void sigAddAuthFriend(std::shared_ptr<AuthInfo>); // 对端同意添加好友
+	// void sigAuthRsp(std::shared_ptr<AuthInfo>); // 自己同意添加好友
 };

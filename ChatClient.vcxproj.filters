@@ -64,6 +64,12 @@
     <Filter Include="界面\通用控件\用户标签">
       <UniqueIdentifier>{6e85ac97-8535-42fe-8bd5-aae5fab3eafa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="界面\页面\聊天页面\联系人列表">
+      <UniqueIdentifier>{f275d2b6-c1f2-454a-b07b-69dab2e13460}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\联系人列表\用户标签组">
+      <UniqueIdentifier>{51478853-09f5-46c0-8fa4-502d8dcf96a7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="rc.qrc">
@@ -115,6 +121,12 @@
     </QtUic>
     <QtUic Include="findresultdialog.ui">
       <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
+    </QtUic>
+    <QtUic Include="ContactUserItem.ui">
+      <Filter>界面\页面\聊天页面\联系人列表</Filter>
+    </QtUic>
+    <QtUic Include="GroupTipItem.ui">
+      <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
     </QtUic>
   </ItemGroup>
   <ItemGroup>
@@ -198,6 +210,15 @@
     </QtMoc>
     <QtMoc Include="findresultdialog.h">
       <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
+    </QtMoc>
+    <QtMoc Include="ContactUserList.h">
+      <Filter>界面\页面\聊天页面\联系人列表</Filter>
+    </QtMoc>
+    <QtMoc Include="ContactUserItem.h">
+      <Filter>界面\页面\聊天页面\联系人列表</Filter>
+    </QtMoc>
+    <QtMoc Include="GroupTipItem.h">
+      <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>
@@ -296,6 +317,15 @@
     </ClCompile>
     <ClCompile Include="findresultdialog.cpp">
       <Filter>界面\页面\聊天页面\发送好友申请页面</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactUserList.cpp">
+      <Filter>界面\页面\聊天页面\联系人列表</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactUserItem.cpp">
+      <Filter>界面\页面\聊天页面\联系人列表</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupTipItem.cpp">
+      <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
