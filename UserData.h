@@ -28,7 +28,6 @@ struct SearchInfo
 
 struct AddFriendApply // 添加好友申请
 {
-public:
 	explicit AddFriendApply(const std::uint64_t from_uid, const QString& name, const QString& desc)
 		: from_uid(from_uid), name(name), desc(desc)
 	{}

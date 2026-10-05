@@ -6,7 +6,7 @@ ContactUserItem::ContactUserItem(QWidget *parent)
 	ui->setupUi(this);
 	setItemType(ListItemType::CONTACT_USER);
 	ui->red_point->raise(); // 🔴展示在最前面
-	showRedPoint(true);
+	showRedPoint(false); // 默认不显示红点
 }
 
 ContactUserItem::~ContactUserItem()

@@ -70,6 +70,12 @@
     <Filter Include="界面\页面\聊天页面\联系人列表\用户标签组">
       <UniqueIdentifier>{51478853-09f5-46c0-8fa4-502d8dcf96a7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="界面\页面\聊天页面\好友聊天列表">
+      <UniqueIdentifier>{60bdcc7e-8c2c-414b-b26c-7dca9b3e15d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="界面\页面\聊天页面\好友聊天列表\好友展示框">
+      <UniqueIdentifier>{83d13635-5009-43ad-805d-31cd1db3a721}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="rc.qrc">
@@ -85,9 +91,6 @@
     </QtUic>
     <QtUic Include="chatitembase.ui">
       <Filter>界面\页面\聊天页面\消息气泡</Filter>
-    </QtUic>
-    <QtUic Include="friendwidget.ui">
-      <Filter>界面\页面\聊天页面\列表项</Filter>
     </QtUic>
     <QtUic Include="loadingdialog.ui">
       <Filter>界面\页面\聊天页面\对话框</Filter>
@@ -128,11 +131,11 @@
     <QtUic Include="GroupTipItem.ui">
       <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
     </QtUic>
+    <QtUic Include="friendwidget.ui">
+      <Filter>界面\页面\聊天页面\好友聊天列表\好友展示框</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="ChatUserList.h">
-      <Filter>界面\通用控件</Filter>
-    </QtMoc>
     <QtMoc Include="ListItemBase.h">
       <Filter>界面\通用控件</Filter>
     </QtMoc>
@@ -168,9 +171,6 @@
     </QtMoc>
     <QtMoc Include="clicked_label.h">
       <Filter>界面\通用控件</Filter>
-    </QtMoc>
-    <QtMoc Include="friendwidget.h">
-      <Filter>界面\页面\聊天页面\列表项</Filter>
     </QtMoc>
     <QtMoc Include="httpmanager.h">
       <Filter>基础服务\网络通信</Filter>
@@ -220,11 +220,14 @@
     <QtMoc Include="GroupTipItem.h">
       <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
     </QtMoc>
+    <QtMoc Include="ChatUserList.h">
+      <Filter>界面\页面\聊天页面\好友聊天列表</Filter>
+    </QtMoc>
+    <QtMoc Include="friendwidget.h">
+      <Filter>界面\页面\聊天页面\好友聊天列表\好友展示框</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ChatUserList.cpp">
-      <Filter>界面\通用控件</Filter>
-    </ClCompile>
     <ClCompile Include="ClickedButton.cpp">
       <Filter>界面\通用控件</Filter>
     </ClCompile>
@@ -263,9 +266,6 @@
     </ClCompile>
     <ClCompile Include="clicked_label.cpp">
       <Filter>界面\通用控件</Filter>
-    </ClCompile>
-    <ClCompile Include="friendwidget.cpp">
-      <Filter>界面\页面\聊天页面\列表项</Filter>
     </ClCompile>
     <ClCompile Include="global.cpp">
       <Filter>应用入口</Filter>
@@ -326,6 +326,12 @@
     </ClCompile>
     <ClCompile Include="GroupTipItem.cpp">
       <Filter>界面\页面\聊天页面\联系人列表\用户标签组</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatUserList.cpp">
+      <Filter>界面\页面\聊天页面\好友聊天列表</Filter>
+    </ClCompile>
+    <ClCompile Include="friendwidget.cpp">
+      <Filter>界面\页面\聊天页面\好友聊天列表\好友展示框</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

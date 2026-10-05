@@ -55,22 +55,22 @@
      <widget class="QLabel" name="icon">
       <property name="geometry">
        <rect>
-        <x>5</x>
-        <y>5</y>
-        <width>50</width>
-        <height>50</height>
+        <x>6</x>
+        <y>6</y>
+        <width>45</width>
+        <height>45</height>
        </rect>
       </property>
       <property name="minimumSize">
        <size>
-        <width>50</width>
-        <height>50</height>
+        <width>45</width>
+        <height>45</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>50</width>
-        <height>50</height>
+        <width>45</width>
+        <height>45</height>
        </size>
       </property>
       <property name="text">
@@ -83,22 +83,22 @@
      <widget class="QLabel" name="red_point">
       <property name="geometry">
        <rect>
-        <x>39</x>
-        <y>5</y>
-        <width>16</width>
-        <height>16</height>
+        <x>50</x>
+        <y>0</y>
+        <width>10</width>
+        <height>10</height>
        </rect>
       </property>
       <property name="minimumSize">
        <size>
-        <width>16</width>
-        <height>16</height>
+        <width>10</width>
+        <height>10</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>16</width>
-        <height>16</height>
+        <width>10</width>
+        <height>10</height>
        </size>
       </property>
       <property name="text">
@@ -107,11 +107,17 @@
       <property name="pixmap">
        <pixmap resource="rc.qrc">:/assets/images/badge-red-16.png</pixmap>
       </property>
+      <property name="scaledContents">
+       <bool>true</bool>
+      </property>
      </widget>
     </widget>
    </item>
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
+     <property name="spacing">
+      <number>0</number>
+     </property>
      <item>
       <widget class="QLabel" name="user_name">
        <property name="text">

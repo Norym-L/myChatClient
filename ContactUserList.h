@@ -11,7 +11,7 @@ class ContactUserList : public QListWidget
 
 public:
 	explicit ContactUserList(QWidget* parent = nullptr);
-	void showRedPoint(bool show = true);
+	void showRedPoint(bool show = true) const;
 
 protected:
 	bool eventFilter(QObject* object, QEvent* event) override;
@@ -25,8 +25,10 @@ private slots:
 	// void slotAuthRsp(std::shared_ptr<AuthInfo>); // 自己同意添加好友
 
 signals:
-	void sigLoadingContactUser();
+	void sigLoadMoreContactUsers();
+	// 跳转好友验证界面（对方请求添加）
 	void sigSwitchApplyFriendPage();
+	// 跳转到联系人信息界面
 	void sigSwitchFriendInfoPage();
 
 private:
