@@ -111,6 +111,8 @@
   <ItemGroup>
     <QtUic Include="adduseritem.ui" />
     <QtUic Include="ApplyFriend.ui" />
+    <QtUic Include="ApplyFriendItem.ui" />
+    <QtUic Include="ApplyFriendPage.ui" />
     <QtUic Include="bubbleframe.ui" />
     <QtUic Include="chatitembase.ui" />
     <QtUic Include="chatpage.ui" />
@@ -155,6 +157,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ApplyFriend.cpp" />
+    <ClCompile Include="ApplyFriendItem.cpp" />
+    <ClCompile Include="ApplyFriendPage.cpp" />
     <ClCompile Include="ChatUserList.cpp" />
     <ClCompile Include="ClickedButton.cpp" />
     <ClCompile Include="ClickedOnceLabel.cpp" />
@@ -192,6 +196,8 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ApplyFriend.h" />
+    <QtMoc Include="ApplyFriendPage.h" />
+    <QtMoc Include="ApplyFriendItem.h" />
     <ClInclude Include="ClickedButton.h" />
     <QtMoc Include="ClickedOnceLabel.h" />
     <QtMoc Include="FriendLabel.h" />
