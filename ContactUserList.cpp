@@ -81,7 +81,7 @@ bool ContactUserList::eventFilter(QObject* object, QEvent* event)
 
 void ContactUserList::addContactUserList()
 {
-    auto* group_tip = new GroupTipItem();
+    auto* group_tip = new GroupTipItem(tr("新的朋友"));
     auto* item = new QListWidgetItem();
     item->setSizeHint(group_tip->sizeHint());
     addItem(item);
@@ -90,7 +90,7 @@ void ContactUserList::addContactUserList()
 
     m_addFriendItem = new ContactUserItem();
     m_addFriendItem->setObjectName("newFriendItem");
-    m_addFriendItem->setInfo(0, tr("新的朋友"), ":/assets/images/addUser.png"); // TODO “新的朋友”标签不显示
+    m_addFriendItem->setInfo(0, tr("新的朋友"), ":/assets/images/addUser.png");
     m_addFriendItem->setItemType(ListItemType::APPLY_FRIEND);
     auto* add_item = new QListWidgetItem();
     add_item->setSizeHint(m_addFriendItem->sizeHint());

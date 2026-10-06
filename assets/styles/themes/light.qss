@@ -37,6 +37,10 @@
    - 自己        rgb(0,153,255)（白字）
    - 对方        rgb(255,255,255)（主文字，灰底聊天区上的白气泡）
 
+   分组标题条带（GroupTipItem，不可选中、无悬停/选中态，与 dark 一一对应）：
+   - 底          rgb(240,241,244)（= 控件背景，不透明以屏蔽列表高亮）
+   - 字          rgb(96,102,112)（对 240 底 ≈ 5.1:1，AA）
+
    图标：浅色主题字形在 :/assets/images/themes/light/ 下
         （深灰常态 / 蓝色悬停 / 深蓝按下），由 scripts 从原白色字形重着色。
    结构（圆角/尺寸/字体）见 ../common.qss。
@@ -726,9 +730,17 @@ QWidget#newFriendItem QLabel#user_info
     color: rgb(122,129,139);
 }
 
+/* 分组标题（「新的朋友」「联系人」等）：纯标签，不可选中。
+   底色不透明 = 控件背景，屏蔽 ::item 的 hover(228)/selected(216) 高亮，
+   悬停与选中都不改变外观。文字在浅底上需压深到 rgb(96,102,112) 才够 5:1（AA）。 */
+QWidget#GroupTipItemClass
+{
+    background-color: rgb(240,241,244);
+}
+
 QWidget#GroupTipItemClass QLabel#label
 {
-    color: rgb(176,181,189);
+    color: rgb(96,102,112);
 }
 
 /* ==================== 好友申请页 ApplyFriendPage ==================== */

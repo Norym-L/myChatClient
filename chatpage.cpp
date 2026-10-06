@@ -176,6 +176,7 @@ void ChatPage::initSideBar()
 
     ui->side_chat_widget->setState();
     ui->side_chat_widget->setCurrentState(ClickLabelState::SELECT);
+    ui->stackedWidget->setCurrentWidget(ui->chat_page);
     ui->side_contact_widget->setState();
     ui->side_contact_widget->setCurrentState(ClickLabelState::NORMAL);
 

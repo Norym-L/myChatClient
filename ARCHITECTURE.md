@@ -457,7 +457,7 @@ ApplyFriend (QDialog, Frameless)                    ApplyFriend.ui
 | `CHAT_USER`                     | `friendwidget.h/.cpp/.ui`    | 会话列表                                   |
 | `CONTACT_USER` / `APPLY_FRIEND` | `ContactUserItem.h/.cpp/.ui` | 联系人列表（含红点、两种 `setInfo` 重载）             |
 | `SEARCH_USER` / `ADD_USER_TIP`  | `adduseritem.h/.cpp/.ui`     | 搜索结果列表的「添加用户」项                         |
-| `GROUP_TIP`                     | `GroupTipItem.h/.cpp/.ui`    | 分组标题（不可选中）                             |
+| `GROUP_TIP`                     | `GroupTipItem.h/.cpp/.ui`    | 分组标题（不可选中；底色不透明以屏蔽悬停/选中高亮）                |
 | `INVALID`                       | —                            | 列表顶部 10px 空白占位（`SearchList.cpp:47-53`） |
 | `APPLY_FRIEND`                  | `ApplyFriendItem.h/.cpp/.ui` | 好友申请列表                                 |
 | `LINE`                          | —                            | 预留                                     |

@@ -217,13 +217,14 @@ QLabel#name
 
 /* ==================== 列表项组件 ==================== */
 
-/* 作为 item widget 嵌入列表，背景透明以透出列表的悬停/选中高亮 */
+/* 作为 item widget 嵌入列表，背景透明以透出列表的悬停/选中高亮。
+   注意：GroupTipItem 不在本组——它是分组标题「标签」，不可选中，
+   底色由主题注入且不透明，用来屏蔽 ::item 的悬停/选中高亮（见 themes/*.qss）。 */
 QWidget#FriendWidget,
 QWidget#AddUserItem,
 QWidget#ContactUserItemClass,
 QWidget#newFriendItem,
-QWidget#ApplyFriendItemClass,
-QWidget#GroupTipItemClass
+QWidget#ApplyFriendItemClass
 {
     background-color: transparent;
 }
