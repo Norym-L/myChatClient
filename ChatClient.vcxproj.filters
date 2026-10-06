@@ -139,9 +139,6 @@
     <QtMoc Include="ListItemBase.h">
       <Filter>通用控件</Filter>
     </QtMoc>
-    <QtMoc Include="MessageTextEdit.h">
-      <Filter>通用控件</Filter>
-    </QtMoc>
     <QtMoc Include="SearchList.h">
       <Filter>通用控件</Filter>
     </QtMoc>
@@ -235,12 +232,12 @@
     <QtMoc Include="ApplyFriendList.h">
       <Filter>聊天页面\右侧好友申请页面</Filter>
     </QtMoc>
+    <QtMoc Include="MessageTextEdit.h">
+      <Filter>聊天页面\右侧聊天页面</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ClickedButton.cpp">
-      <Filter>通用控件</Filter>
-    </ClCompile>
-    <ClCompile Include="MessageTextEdit.cpp">
       <Filter>通用控件</Filter>
     </ClCompile>
     <ClCompile Include="PictureBubble.cpp">
@@ -350,6 +347,9 @@
     </ClCompile>
     <ClCompile Include="ApplyFriendList.cpp">
       <Filter>聊天页面\右侧好友申请页面</Filter>
+    </ClCompile>
+    <ClCompile Include="MessageTextEdit.cpp">
+      <Filter>聊天页面\右侧聊天页面</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

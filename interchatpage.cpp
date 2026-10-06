@@ -21,6 +21,8 @@ InterChatPage::InterChatPage(QWidget* parent)
 #endif
 
     initChatInputEditAndRecvSendButton();
+
+    connect(ui->chat_edit, &MessageTextEdit::sigSend, this, &InterChatPage::slotSendButtonPushed); // 按回车发送
 }
 
 InterChatPage::~InterChatPage()
