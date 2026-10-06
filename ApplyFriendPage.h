@@ -21,8 +21,8 @@ public:
     explicit ApplyFriendPage(QWidget* parent = nullptr);
     ~ApplyFriendPage() override;
 
-    // 添加新的申请
-    void addNewApply(std::shared_ptr<AddFriendApply> apply);
+    // 添加新的申请（不管有没有接受）
+    void addNewApply(std::shared_ptr<ApplyInfo> apply);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -42,5 +42,5 @@ signals:
 private:
     Ui::ApplyFriendPageClass* ui;
 
-    std::map<int, ApplyFriendItem*> m_unauthItems;
+    std::map<std::uint64_t, ApplyFriendItem*> m_unauthItems;
 };

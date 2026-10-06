@@ -117,7 +117,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QListWidget" name="friend_apply_list"/>
+       <widget class="ApplyFriendList" name="friend_apply_list"/>
       </item>
      </layout>
     </widget>
@@ -125,6 +125,13 @@
   </layout>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>ApplyFriendList</class>
+   <extends>QListWidget</extends>
+   <header>ApplyFriendList.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

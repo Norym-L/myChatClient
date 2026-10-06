@@ -28,14 +28,14 @@ void ContactUserItem::setInfo(const std::shared_ptr<AuthInfo>& auth_info)
 	ui->user_name->setText(m_info->name);
 }
 
-void ContactUserItem::setInfo(const std::shared_ptr<AuthRsp>& auth_rsp)
-{
-	m_info = std::make_shared<UserInfo>(auth_rsp);
-	const QPixmap pixmap(m_info->icon);
-	ui->icon->setPixmap(pixmap.scaled(ui->icon->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-	ui->icon->setScaledContents(true);
-	ui->user_name->setText(m_info->name);
-}
+// void ContactUserItem::setInfo(const std::shared_ptr<AuthRsp>& auth_rsp)
+// {
+// 	m_info = std::make_shared<UserInfo>(auth_rsp);
+// 	const QPixmap pixmap(m_info->icon);
+// 	ui->icon->setPixmap(pixmap.scaled(ui->icon->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+// 	ui->icon->setScaledContents(true);
+// 	ui->user_name->setText(m_info->name);
+// }
 
 void ContactUserItem::setInfo(int uid, const QString& name, const QString& icon, const QString& nick)
 {

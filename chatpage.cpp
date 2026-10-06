@@ -295,7 +295,7 @@ void ChatPage::slotSideBarSwitchToChat()
 void ChatPage::slotSideBarSwitchToContact()
 {
     LOG_DEBUG() << "[ui][chat page] slotSideBarSwitchToContact";
-    ui->stackedWidget->setCurrentWidget(ui->friend_info_page);
+    ui->stackedWidget->setCurrentWidget(ui->friend_apply_page);
     freshSideBarStateToSelected(ui->side_contact_widget, "sideBar");
     m_state = ChatUiMode::CONTACT_MODE;
     showSerachList(false);

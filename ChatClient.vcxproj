@@ -158,6 +158,7 @@
   <ItemGroup>
     <ClCompile Include="ApplyFriend.cpp" />
     <ClCompile Include="ApplyFriendItem.cpp" />
+    <ClCompile Include="ApplyFriendList.cpp" />
     <ClCompile Include="ApplyFriendPage.cpp" />
     <ClCompile Include="ChatUserList.cpp" />
     <ClCompile Include="ClickedButton.cpp" />
@@ -198,6 +199,7 @@
     <QtMoc Include="ApplyFriend.h" />
     <QtMoc Include="ApplyFriendPage.h" />
     <QtMoc Include="ApplyFriendItem.h" />
+    <QtMoc Include="ApplyFriendList.h" />
     <ClInclude Include="ClickedButton.h" />
     <QtMoc Include="ClickedOnceLabel.h" />
     <QtMoc Include="FriendLabel.h" />

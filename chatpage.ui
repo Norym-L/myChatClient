@@ -281,7 +281,7 @@
      <property name="currentIndex">
       <number>0</number>
      </property>
-     <widget class="QWidget" name="friend_apply_page"/>
+     <widget class="ApplyFriendPage" name="friend_apply_page"/>
      <widget class="InterChatPage" name="chat_page">
       <layout class="QVBoxLayout" name="verticalLayout_6"/>
      </widget>
@@ -328,6 +328,12 @@
    <class>ContactUserList</class>
    <extends>QListWidget</extends>
    <header location="global">ContactUserList.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ApplyFriendPage</class>
+   <extends>QWidget</extends>
+   <header>ApplyFriendPage.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources>

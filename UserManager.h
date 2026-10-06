@@ -1,8 +1,10 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <vector>
 
 #include "singleton.h"
+#include "UserData.h"
 
 /**
  * @brief UserManager 保存当前登录用户的信息，来源为 /user_login 响应与
@@ -26,10 +28,14 @@ public:
     [[nodiscard]] QString getToken() const { return m_token; }
     void setToken(const QString& token) { m_token = token; }
 
+    /// 获取用户申请列表
+    [[nodiscard]] std::vector<std::shared_ptr<ApplyInfo>> getApplyList() const { return m_applyList; }
+
 private:
     UserManager() = default;
 
     int m_uid = 0;
     QString m_name;
     QString m_token;
+    std::vector<std::shared_ptr<ApplyInfo>> m_applyList;
 };
