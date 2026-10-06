@@ -21,6 +21,35 @@
 extern std::function<void(QWidget*)> repolish;
 
 /**
+ * @brief 应用主题（深色 / 浅色）
+ * @note 样式表结构：assets/styles/common.qss（结构层：尺寸/圆角/字体）
+ *       + assets/styles/themes/{dark,light}.qss（主题层：全部颜色与图标），
+ *       由 applyTheme() 拼接后 setStyleSheet 到 qApp。
+ */
+enum class AppTheme : std::uint8_t
+{
+	Dark,
+	Light,
+};
+
+/**
+ * @brief applyTheme 应用主题：拼接 common.qss + 主题 qss 并设置到 qApp，
+ *        同时刷新调色板的占位文字色（PlaceholderText QSS 管不到）
+ */
+void applyTheme(AppTheme theme);
+
+/**
+ * @brief currentTheme 当前主题（未调用 applyTheme 前为 Dark）
+ */
+[[nodiscard]] AppTheme currentTheme();
+
+/**
+ * @brief themedIconPath 代码内图标按主题取路径（QSS 管不到的 QAction 图标等）
+ * @note Dark -> ":/res/<name>.png"；Light -> ":/assets/images/themes/light/<name>.png"
+ */
+[[nodiscard]] QString themedIconPath(const QString& name);
+
+/**
  * @brief The ReqId enum 请求
  * @note 客户端内部请求编号，与 ChatServer 线上 message_id 不是同一套编号，
  *       两者的换算见 ChatProtocol::toMessageId / ChatProtocol::toReqId。

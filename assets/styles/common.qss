@@ -1,70 +1,61 @@
 /* ============================================================
-   MyChat 深色主题 —— 公共基础样式（common.qss）
+   MyChat —— 结构层样式（common.qss）
    ------------------------------------------------------------
-   色板（唯一权威来源，新样式只允许取用下列颜色）：
-   - 主背景      rgb(23,21,22)    窗口 / 对话框 / 聊天区
-   - 面板背景    rgb(34,34,34)    侧栏 / 会话列表 / 搜索区 / 浮层卡片
-   - 控件背景    rgb(47,47,47)    输入框 / 次级按钮 / 标签底色
-   - 悬停        rgb(51,51,51)
-   - 选中        rgb(61,61,61)    也用作「容器上一档」的标签/胶囊底色
-   - 强调色      rgb(0,153,255)   QQ 蓝（主按钮 / 焦点 / 高亮）
-   - 强调-悬停   rgb(26,168,255)
-   - 强调-按下   rgb(0,122,204)
-   - 强调-淡底   rgba(0,153,255,40) / rgba(0,153,255,70)  描边按钮的悬停/按下
-   - 强调-禁用   rgba(0,153,255,90) + 白字 rgba(255,255,255,150)
-   - 次级文字    rgb(153,153,153)
-   - 次级按钮字  rgb(220,220,220)
-   - 禁用文字    rgb(120,120,120)
-   - 边框        rgb(47,47,47)
-   - 描边/滚动条 rgb(85,85,85)    滚动条滑块悬停、胶囊强调描边
+   职责：只放「与主题无关」的规则 —— 尺寸、圆角、内边距、字号、
+        透明背景、border:none 复位。**不允许出现任何颜色值**
+        （transparent 除外），全部颜色与图标在主题层：
+          themes/dark.qss   深色主题（QQ NT 蓝黑系）
+          themes/light.qss  浅色主题（QQ NT 浅色系）
+        两个主题文件的选择器一一对应，加载时本文件在前、主题在后。
 
-   色阶规律（做「容器 + 其内卡片」时照此挑色，保证层次一致）：
-     面板 34 → 卡片 47（+13）→ 卡片内元素 61（+13）→ 强调 85
-   例：ApplyFriend 标签输入区 47，其内 FriendLabel 胶囊 61。
-
-   页面级样式按 ui/page 拆分在同级子目录：
-     login/logindialog.qss              登录页
-     register/registerdialog.qss        注册页
-     reset/resetdialog.qss              重置页
-     chat/chatpage.qss                  聊天主页
-     chat/chatPage/interchatpage.qss    会话聊天页
-     chat/interListItem/friendwidget.qss 会话列表项
-   加载顺序见 main.cpp：common 在最前，页面样式在后。
+   加载入口：global.cpp 的 applyTheme()。
+   新增控件样式时：几何/字体进本文件，颜色/图标同时进两个主题文件。
    ============================================================ */
 
 /* ==================== 全局基础 ==================== */
 
-/* 对话框统一主背景（覆盖登录/注册/重置三页） */
 QDialog
 {
-    background-color: rgb(23,21,22);
-    color: white;
     font-size: 14px;
 }
 
-QMainWindow
-{
-    background-color: rgb(23,21,22);
-    color: white;
-}
-
+/* 提示气泡 */
 QToolTip
 {
-    background-color: rgb(47,47,47);
-    color: white;
-    border: 1px solid rgb(61,61,61);
+    border-width: 1px;
+    border-style: solid;
     border-radius: 4px;
     padding: 4px 8px;
 }
 
-/* ---- 滚动条（悬浮式：无轨道背景，仅显示滑块） ----
-   滑块宽度需与 chatpage.cpp 中 kScrollBarWidth 保持一致（负值 viewport 边距）。
-   若所用 Qt 样式仍绘制滚动条槽，可将 width / height 改为 0px 彻底隐藏。 */
+/* 菜单（输入框右键菜单等） */
+QMenu
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QMenu::item
+{
+    border-radius: 4px;
+    padding: 6px 24px;
+    background-color: transparent;
+}
+
+QMenu::separator
+{
+    height: 1px;
+    margin: 4px 8px;
+}
+
+/* ---- 滚动条（悬浮式：无轨道，仅滑块） ----
+   滑块宽度需与 chatpage.cpp 的滚动条宽度常量保持一致（8px） */
 
 QScrollBar:vertical
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
     width: 8px;
     margin: 0px;
@@ -72,36 +63,26 @@ QScrollBar:vertical
 }
 QScrollBar::handle:vertical
 {
-    background: rgb(61,61,61);
-    background-image: none;
     border: none;
     border-radius: 3px;
     min-height: 30px;
-    margin: 0px 0px 0px 0px;
-}
-QScrollBar::handle:vertical:hover,
-QScrollBar::handle:vertical:pressed
-{
-    background: rgb(85,85,85);
+    margin: 0px;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
     height: 0px;
 }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
 }
 
 QScrollBar:horizontal
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
     height: 8px;
     margin: 0px;
@@ -109,108 +90,404 @@ QScrollBar:horizontal
 }
 QScrollBar::handle:horizontal
 {
-    background: rgb(61,61,61);
-    background-image: none;
     border: none;
     border-radius: 3px;
     min-width: 30px;
-    margin: 2px 0px 2px 0px;
-}
-QScrollBar::handle:horizontal:hover,
-QScrollBar::handle:horizontal:pressed
-{
-    background: rgb(85,85,85);
+    margin: 2px 0px;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
     width: 0px;
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal
 {
-    background: rgba(0, 0, 0, 0);
-    background-image: none;
+    background: transparent;
     border: none;
 }
-
 QScrollBar::corner
 {
-    background: rgba(0, 0, 0, 0);
+    background: transparent;
     border: none;
 }
 
-/* ---- 输入框（登录/注册/重置表单 + 搜索框 search_edit 统一套用） ---- */
+/* ---- 输入框（登录/注册/重置表单 + 搜索框统一套用） ---- */
 
 QLineEdit
 {
-    background-color: rgb(47,47,47);
-    border: 1px solid rgb(47,47,47);
+    border-width: 1px;
+    border-style: solid;
     border-radius: 4px;
-    color: white;
     padding: 2px 8px;
-    selection-background-color: rgb(0,153,255);
-    selection-color: white;
 }
 
-QLineEdit:hover
-{
-    border: 1px solid rgb(61,61,61);
-}
-
-QLineEdit:focus
-{
-    border: 1px solid rgb(0,153,255);
-}
-
-/* ---- 按钮基础样式 ---- */
+/* ---- 按钮基础 ---- */
 
 QPushButton
 {
-    background-color: rgb(47,47,47);
     border: none;
     border-radius: 6px;
-    color: white;
     padding: 5px 16px;
     font-size: 14px;
 }
 
-QPushButton:disabled
+/* ==================== 登录 / 注册 / 重置 ==================== */
+
+/* 登录按钮更宽的内边距（QQ 登录窗主按钮形态） */
+QPushButton#login_button
 {
-    background-color: rgb(47,47,47);
-    color: rgb(120,120,120);
+    padding: 5px 40px;
 }
 
-/* ==================== 跨页面复用控件 ==================== */
-
-/* 错误/成功提示（state 由代码设置）：
-   登录页与重置页为 error_tip，注册页为 err_tip，三页共用本组规则 */
-QLabel#error_tip[state='normal'],
-QLabel#err_tip[state='normal']
+/* 获取验证码按钮（TimerButton）：描边按钮形态 */
+QPushButton#get_token_button,
+QPushButton#get_verify_button
 {
-    color: green;
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+    padding: 2px 10px;
 }
 
-QLabel#error_tip[state='err'],
-QLabel#err_tip[state='err']
+/* ==================== 聊天主页 ChatPage ==================== */
+
+/* 三个列表：会话 / 搜索 / 联系人 —— 去掉默认边框与焦点框 */
+QListWidget#chat_users_list,
+QListWidget#search_list,
+QListWidget#con_user_list,
+QListWidget#friend_apply_list
 {
-    color: red;
+    border: none;
+    outline: none;
 }
 
-/* 取消按钮：次级按钮（注册页、重置页共用） */
-QPushButton#cancel_button
+QListWidget#chat_users_list::item,
+QListWidget#search_list::item,
+QListWidget#con_user_list::item,
+QListWidget#friend_apply_list::item
 {
-    background-color: rgb(47,47,47);
-    color: rgb(220,220,220);
+    border: none;
+    outline: none;
 }
 
-QPushButton#cancel_button:hover
+/* 添加好友按钮（纯图标按钮，由主题层给 border-image） */
+QPushButton#add_button
 {
-    background-color: rgb(61,61,61);
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
 }
 
-QPushButton#cancel_button:pressed
+/* 右侧 QStackedWidget 翻页容器 */
+QStackedWidget#stackedWidget
 {
-    background-color: rgb(51,51,51);
+    padding-left: 1px;
+}
+
+/* ==================== 会话页 InterChatPage ==================== */
+
+QLabel#title_label
+{
+    font-size: 16px;
+    font-weight: 600;
+    padding-left: 8px;
+}
+
+/* 工具栏 / 悬浮按钮区：透明容器 */
+QWidget#tool_widget,
+QWidget#button_widget
+{
+    background-color: transparent;
+}
+
+/* 消息输入框：底部留白 = 按钮区高度 40 + 边距，避免文字被悬浮按钮遮挡 */
+QTextEdit#chat_edit
+{
+    border: none;
+    font-size: 14px;
+    padding: 6px 8px 68px 8px;
+}
+
+/* 聊天气泡内的名字 */
+QLabel#name
+{
+    font-size: 13px;
+}
+
+/* ==================== 列表项组件 ==================== */
+
+/* 作为 item widget 嵌入列表，背景透明以透出列表的悬停/选中高亮 */
+QWidget#FriendWidget,
+QWidget#AddUserItem,
+QWidget#ContactUserItemClass,
+QWidget#newFriendItem,
+QWidget#ApplyFriendItemClass,
+QWidget#GroupTipItemClass
+{
+    background-color: transparent;
+}
+
+QWidget#FriendWidget QLabel#user_name
+{
+    font-size: 14px;
+}
+
+QWidget#FriendWidget QLabel#time
+{
+    font-size: 11px;
+}
+
+QWidget#FriendWidget QLabel#user_chat
+{
+    font-size: 12px;
+}
+
+QWidget#AddUserItem QLabel#message_tip
+{
+    font-size: 14px;
+}
+
+QWidget#ContactUserItemClass QLabel#user_name,
+QWidget#newFriendItem QLabel#user_name,
+QWidget#ApplyFriendItemClass QLabel#user_name
+{
+    font-size: 14px;
+}
+
+QWidget#ContactUserItemClass QLabel#user_info,
+QWidget#newFriendItem QLabel#user_info,
+QWidget#ApplyFriendItemClass QLabel#user_info
+{
+    font-size: 12px;
+}
+
+/* 分组标题（联系人列表「联系人」等） */
+QWidget#GroupTipItemClass QLabel#label
+{
+    font-size: 12px;
+}
+
+/* 好友申请页标题栏 */
+QWidget#friend_apply_page QLabel#friend_apply_label
+{
+    font-size: 15px;
+    font-weight: 600;
+}
+
+/* ==================== 搜索结果弹窗 FindResultDialog ==================== */
+
+QDialog#FindResultDialog
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 8px;
+}
+
+/* 两行内容容器（必须带 QDialog#FindResultDialog 前缀，防止误命中
+   interchatpage 的同名容器） */
+QDialog#FindResultDialog QWidget#widget,
+QDialog#FindResultDialog QWidget#widget_2
+{
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#name_label
+{
+    font-size: 14px;
+    padding-left: 8px;
+}
+
+QPushButton#add_friend_button
+{
+    border: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 14px;
+}
+
+/* ==================== 加载中弹窗 LoadingDialog ==================== */
+
+QDialog#LoadingDialog
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 8px;
+}
+
+QDialog#LoadingDialog QLabel#loading_label
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* ==================== 添加好友对话框 ApplyFriend ====================
+   圆角 8px 必须与 ApplyFriend.cpp 的 kWindowCornerRadius 一致：
+   QSS 画圆角底色 + 代码 setMask 切窗角，两件配套，改一必改二。 */
+
+QDialog#ApplyFriend
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 8px;
+}
+
+/* 滚动区整片透明，露出弹窗自己的圆角底色。
+   注意：QScrollArea 刷不到 viewport，必须用 > QWidget 子选择器 */
+QDialog#ApplyFriend QScrollArea#scrollArea,
+QDialog#ApplyFriend QScrollArea#scrollArea > QWidget,
+QDialog#ApplyFriend QScrollArea#scrollArea > QWidget > QWidget,
+QDialog#ApplyFriend QWidget#scrollcontents
+{
+    background-color: transparent;
+    border: none;
+}
+
+QDialog#ApplyFriend QLabel#apply_label
+{
+    background-color: transparent;
+    border: none;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* 分隔线（.ui 里 class="Line" 即 QFrame） */
+QDialog#ApplyFriend QFrame#line
+{
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
+}
+
+/* 表单字段名 */
+QDialog#ApplyFriend QLabel#label,
+QDialog#ApplyFriend QLabel#label_2,
+QDialog#ApplyFriend QLabel#label_3
+{
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+    padding-top: 6px;
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit,
+QDialog#ApplyFriend QLineEdit#back_name_edit
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 2px 8px;
+}
+
+/* 标签容器（grid 内标签由代码手工定位，不能给 border，会 inset 错位） */
+QDialog#ApplyFriend QWidget#grid
+{
+    border: none;
+    border-radius: 4px;
+}
+
+QDialog#ApplyFriend QWidget#friend_group_widget,
+QDialog#ApplyFriend QWidget#widget,
+QDialog#ApplyFriend QWidget#widget_2,
+QDialog#ApplyFriend QWidget#label_list,
+QDialog#ApplyFriend QWidget#more_label_widget,
+QDialog#ApplyFriend QWidget#input_tip,
+QDialog#ApplyFriend QWidget#apply_sure_widget
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* 标签输入框：无边框混排在标签行内（代码 move() 手工排布） */
+QDialog#ApplyFriend QLineEdit#label_edit
+{
+    background-color: transparent;
+    border: none;
+    font-size: 14px;
+    padding: 0px 2px;
+}
+
+/* 推荐标签胶囊（对象名两处：tipslb / tipsLabel） */
+QLabel#tipslb,
+QLabel#tipsLabel
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 3px 10px;
+}
+
+/* 「添加+xx」下拉提示 */
+QDialog#ApplyFriend QLabel#tip_label
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 3px 10px;
+}
+
+QDialog#ApplyFriend QLabel#more_label
+{
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+}
+
+QDialog#ApplyFriend QPushButton#sure_button,
+QDialog#ApplyFriend QPushButton#cancel_button
+{
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* 提交等待时的 GIF 占位（界面补上 loading_label 后生效） */
+QDialog#ApplyFriend QLabel#loading_label
+{
+    border: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 120px;
+}
+
+/* ==================== 好友标签胶囊 FriendLabel ====================
+   ★ 运行时根控件名是 "friendLabel"（ApplyFriend.cpp 覆盖），不是 FriendLabelClass。
+   描边 1px 计入 FriendLabel.cpp 的 setFixedWidth(+14)，改宽必须同步改代码。 */
+
+QFrame#friendLabel
+{
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+}
+
+QFrame#friendLabel QLabel#tip_label
+{
+    background-color: transparent;
+    border: none;
+    font-size: 14px;
+    /* 兜底裁切：超长省略号需代码 elide，当前输入侧 setMaxLength(10) 不会触发 */
+    max-width: 160px;
+}
+
+/* 关闭按钮热区容器（裸 QWidget 不收 hover，高亮挂在 close_label 上） */
+QFrame#friendLabel QWidget#close_widget
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* 关闭图标：background-image 居中，源图 32x32 缩到 16x16 显示。
+   state 取值两族：normal/hover/pressed 与 selected_normal/selected_hover/
+   selected_pressed（ClickedLabel 点击后在 NORMAL/SELECT 间切换），两族都写。 */
+QFrame#friendLabel QLabel#close_label
+{
+    background-color: transparent;
+    background-repeat: no-repeat;
+    background-position: center;
+    border: none;
 }

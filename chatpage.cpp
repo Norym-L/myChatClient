@@ -1,6 +1,7 @@
 #include "chatpage.h"
 
 #include "ChatUserList.h"
+#include "global.h"
 #include "logger.h"
 #include <QWidget>
 #include <QAction>
@@ -124,14 +125,14 @@ void ChatPage::initSearchEdit()
     /// 搜索图标
     ui->search_edit->setMaxLen(100);
     auto* search_action = new QAction(ui->search_edit);
-    search_action->setIcon(QIcon(":/res/search.png"));
+    search_action->setIcon(QIcon(themedIconPath("search")));
     ui->search_edit->addAction(search_action, QLineEdit::LeadingPosition);
     ui->search_edit->setPlaceholderText("搜索");
 
     /// 删除动作("X"图标)
     // 显示隐藏搜索列表放到 slotSideBarSwitchToContact() 中处理
     auto* clear_action = new QAction(ui->search_edit);
-    clear_action->setIcon(QIcon(":/res/close.png"));
+    clear_action->setIcon(QIcon(themedIconPath("close")));
     ui->search_edit->addAction(clear_action, QLineEdit::TrailingPosition);
     // 有文本变化时控制清除按钮的显示
     connect(ui->search_edit, &QLineEdit::textChanged, [clear_action](auto& text)

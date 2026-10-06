@@ -1,0 +1,1093 @@
+/* ============================================================
+   MyChat —— 深色主题（themes/dark.qss，QQ NT 深色：中性炭灰）
+   ------------------------------------------------------------
+   色板（本文件唯一权威来源，选择器与 light.qss 一一对应）：
+
+   背景色阶（中性灰，逐级提亮，蓝色只作强调不进背景）：
+   - 窗口背景    rgb(24,24,24)   登录/注册/重置对话框、主窗口
+   - 侧栏背景    rgb(28,28,28)   side_bar（全窗最深一档）
+   - 面板背景    rgb(34,34,34)   会话/搜索/联系人列表区
+   - 聊天区背景  rgb(43,43,43)   右区（消息区 / 输入区 / 标题栏 / 申请页）
+   - 卡片背景    rgb(44,44,44)   浮层弹窗（FindResult/ApplyFriend/Loading）
+   - 控件背景    rgb(52,52,52)   输入框 / 次级按钮 / 标签区
+   - 悬停        rgb(58,58,58)   也用作对方气泡
+   - 选中        rgb(66,66,66)   列表选中 / 胶囊底色
+   - 描边强调    rgb(90,90,90)   胶囊描边 / 滚动条滑块悬停
+
+   边框：
+   - 分隔线      rgb(52,52,52)   面板间 1px 分隔线、输入框默认描边
+   - 强描边      rgb(72,72,72)   浮层卡片边框、输入框悬停
+
+   文字：
+   - 主文字      rgb(235,235,235)  对比度（对面板）≈ 12.6:1
+   - 次级文字    rgb(150,150,150)  ≈ 5.9:1（AA）
+   - 禁用文字    rgb(105,105,105)
+
+   强调（QQ 蓝，只用于主按钮 / 焦点 / 链接态，不进背景）：
+   - 强调        rgb(0,153,255)
+   - 强调-悬停   rgb(38,166,255)
+   - 强调-按下   rgb(0,122,204)
+   - 强调-淡底   rgba(0,153,255,38) / rgba(0,153,255,70)   描边按钮悬停/按下
+   - 强调-禁用   rgba(0,153,255,80) + 字 rgba(255,255,255,130)
+
+   功能色：
+   - 错误        rgb(240,100,100)
+   - 成功        rgb(80,200,140)
+
+   气泡（QQ NT 深色为中性灰气泡，蓝色只留给发送按钮等强调件）：
+   - 自己        rgb(70,70,70)（白字）
+   - 对方        rgb(56,56,56)（主文字）
+
+   结构（圆角/尺寸/字体）见 ../common.qss。
+   ============================================================ */
+
+/* ==================== 全局基础 ==================== */
+
+QDialog
+{
+    background-color: rgb(24,24,24);
+    color: rgb(235,235,235);
+}
+
+QMainWindow
+{
+    background-color: rgb(24,24,24);
+    color: rgb(235,235,235);
+}
+
+QToolTip
+{
+    background-color: rgb(52,52,52);
+    color: rgb(235,235,235);
+    border-color: rgb(72,72,72);
+}
+
+/* 菜单（输入框右键菜单等） */
+QMenu
+{
+    background-color: rgb(44,44,44);
+    color: rgb(235,235,235);
+    border-color: rgb(72,72,72);
+}
+
+QMenu::item:selected
+{
+    background-color: rgb(58,58,58);
+}
+
+QMenu::item:disabled
+{
+    color: rgb(105,105,105);
+}
+
+QMenu::separator
+{
+    background-color: rgb(52,52,52);
+}
+
+/* ---- 滚动条滑块 ---- */
+
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal
+{
+    background: rgb(66,66,66);
+}
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:vertical:pressed,
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:horizontal:pressed
+{
+    background: rgb(90,90,90);
+}
+
+/* ---- 输入框 ---- */
+
+QLineEdit
+{
+    background-color: rgb(52,52,52);
+    border-color: rgb(52,52,52);
+    color: rgb(235,235,235);
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+QLineEdit:hover
+{
+    border-color: rgb(72,72,72);
+}
+
+QLineEdit:focus
+{
+    border-color: rgb(0,153,255);
+}
+
+QLineEdit:disabled
+{
+    background-color: rgb(44,44,44);
+    border-color: rgb(44,44,44);
+    color: rgb(105,105,105);
+}
+
+/* ---- 按钮基础 ---- */
+
+QPushButton
+{
+    background-color: rgb(52,52,52);
+    color: rgb(235,235,235);
+}
+
+QPushButton:hover
+{
+    background-color: rgb(58,58,58);
+}
+
+QPushButton:pressed
+{
+    background-color: rgb(66,66,66);
+}
+
+QPushButton:disabled
+{
+    background-color: rgb(44,44,44);
+    color: rgb(105,105,105);
+}
+
+/* ==================== 跨页面复用 ==================== */
+
+/* 错误/成功提示（state 由代码设置 + repolish 刷新） */
+QLabel#error_tip[state='normal'],
+QLabel#err_tip[state='normal']
+{
+    color: rgb(80,200,140);
+}
+
+QLabel#error_tip[state='err'],
+QLabel#err_tip[state='err']
+{
+    color: rgb(240,100,100);
+}
+
+/* 取消按钮：次级按钮（注册页、重置页共用） */
+QPushButton#cancel_button
+{
+    background-color: rgb(52,52,52);
+    color: rgb(215,215,215);
+}
+
+QPushButton#cancel_button:hover
+{
+    background-color: rgb(66,66,66);
+}
+
+QPushButton#cancel_button:pressed
+{
+    background-color: rgb(58,58,58);
+}
+
+/* ==================== 登录页 ==================== */
+
+/* 忘记密码（ClickedLabel，state 属性驱动） */
+QLabel#forget_label[state='normal']
+{
+    color: rgb(235,235,235);
+}
+
+QLabel#forget_label[state='hover']
+{
+    color: rgb(0,153,255);
+}
+
+/* 注册按钮：蓝色文字链 */
+QPushButton#register_button
+{
+    background-color: transparent;
+    color: rgb(0,153,255);
+}
+
+QPushButton#register_button:hover
+{
+    background-color: rgb(58,58,58);
+}
+
+QPushButton#register_button:pressed
+{
+    background-color: rgb(66,66,66);
+}
+
+/* 登录按钮：QQ 蓝主按钮 */
+QPushButton#login_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#login_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#login_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#login_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* ==================== 注册页 ==================== */
+
+/* 密码可见性图标。
+   ★ state 取值以 registerdialog.cpp 的 setState() 实参为准：
+     invisible / invisible_hover / visible / visible_hover。
+   ★ 图标为深色主题补丁变体（原图 68 灰在控件底色上对比度不足），
+     hover 青色双主题通用。 */
+QLabel#pass_visible[state='invisible'],
+QLabel#pass2_visible[state='invisible']
+{
+    border-image: url(:/assets/images/themes/dark/invisible.png);
+}
+
+QLabel#pass_visible[state='invisible_hover'],
+QLabel#pass2_visible[state='invisible_hover']
+{
+    border-image: url(:/res/invisible_hover.png);
+}
+
+QLabel#pass_visible[state='visible'],
+QLabel#pass2_visible[state='visible']
+{
+    border-image: url(:/assets/images/themes/dark/visible.png);
+}
+
+QLabel#pass_visible[state='visible_hover'],
+QLabel#pass2_visible[state='visible_hover']
+{
+    border-image: url(:/res/visible_hover.png);
+}
+
+/* 获取验证码：蓝描边按钮（TimerButton 倒计时期间 disabled） */
+QPushButton#get_token_button
+{
+    background-color: transparent;
+    border-color: rgb(0,153,255);
+    color: rgb(0,153,255);
+}
+
+QPushButton#get_token_button:hover
+{
+    background-color: rgba(0,153,255,38);
+}
+
+QPushButton#get_token_button:pressed
+{
+    background-color: rgba(0,153,255,70);
+}
+
+QPushButton#get_token_button:disabled
+{
+    background-color: transparent;
+    border-color: rgb(66,66,66);
+    color: rgb(105,105,105);
+}
+
+/* 确认：QQ 蓝主按钮 */
+QPushButton#confirm_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#confirm_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#confirm_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#confirm_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* 注册成功页 */
+QLabel#reg_success_tip_label
+{
+    color: rgb(235,235,235);
+}
+
+QPushButton#return_to_login
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#return_to_login:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#return_to_login:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+/* ==================== 重置页 ==================== */
+
+QPushButton#get_verify_button
+{
+    background-color: transparent;
+    border-color: rgb(0,153,255);
+    color: rgb(0,153,255);
+}
+
+QPushButton#get_verify_button:hover
+{
+    background-color: rgba(0,153,255,38);
+}
+
+QPushButton#get_verify_button:pressed
+{
+    background-color: rgba(0,153,255,70);
+}
+
+QPushButton#get_verify_button:disabled
+{
+    background-color: transparent;
+    border-color: rgb(66,66,66);
+    color: rgb(105,105,105);
+}
+
+QPushButton#ok_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#ok_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#ok_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#ok_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* ==================== 聊天主页 ChatPage ==================== */
+
+QWidget#ChatPageClass
+{
+    background-color: rgb(24,24,24);
+    color: rgb(235,235,235);
+}
+
+/* ---- 左侧功能栏（全窗最深一档） ---- */
+
+QWidget#side_bar
+{
+    background-color: rgb(28,28,28);
+    border-right: 1px solid rgb(52,52,52);
+}
+
+QWidget#side_chat_widget[state='normal']
+{
+    border-image: url(":/assets/images/message.png");
+    background-color: rgb(28,28,28);
+}
+QWidget#side_chat_widget[state='normal_hover']
+{
+    border-image: url(":/assets/images/message.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_chat_widget[state='normal_pressed']
+{
+    border-image: url(":/assets/images/message_push.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_chat_widget[state='selected']
+{
+    border-image: url(":/assets/images/message_hover.png");
+    background-color: rgb(28,28,28);
+}
+QWidget#side_chat_widget[state='selected_hover']
+{
+    border-image: url(":/assets/images/message_hover.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_chat_widget[state='selected_pressed']
+{
+    border-image: url(":/assets/images/message_push.png");
+    background-color: rgb(52,52,52);
+}
+
+QWidget#side_contact_widget[state='normal']
+{
+    border-image: url(":/assets/images/avatar.png");
+    background-color: rgb(28,28,28);
+}
+QWidget#side_contact_widget[state='normal_hover']
+{
+    border-image: url(":/assets/images/avatar.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_contact_widget[state='normal_pressed']
+{
+    border-image: url(":/assets/images/avatar_push.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_contact_widget[state='selected']
+{
+    border-image: url(":/assets/images/avatar_hover.png");
+    background-color: rgb(28,28,28);
+}
+QWidget#side_contact_widget[state='selected_hover']
+{
+    border-image: url(":/assets/images/avatar_hover.png");
+    background-color: rgb(52,52,52);
+}
+QWidget#side_contact_widget[state='selected_pressed']
+{
+    border-image: url(":/assets/images/avatar_push.png");
+    background-color: rgb(52,52,52);
+}
+
+/* ---- 会话列表区 ---- */
+
+QWidget#chat_user_widget
+{
+    background-color: rgb(34,34,34);
+    border-right: 1px solid rgb(52,52,52);
+}
+
+QWidget#search_widget
+{
+    background-color: rgb(34,34,34);
+}
+
+/* 添加好友按钮（图标三态） */
+QPushButton#add_button
+{
+    background-color: transparent;
+}
+
+QPushButton#add_button[state='normal']
+{
+    border-image: url(:/res/add-user.png);
+}
+
+QPushButton#add_button[state='hover']
+{
+    border-image: url(:/res/add-user_hover.png);
+}
+
+QPushButton#add_button[state='press']
+{
+    border-image: url(:/res/add-user_push.png);
+}
+
+/* ---- 三个列表 + 好友申请列表：统一风格 ---- */
+
+QListWidget#chat_users_list,
+QListWidget#search_list,
+QListWidget#con_user_list,
+QListWidget#friend_apply_list
+{
+    background-color: rgb(34,34,34);
+}
+
+QListWidget#chat_users_list::item,
+QListWidget#search_list::item,
+QListWidget#con_user_list::item,
+QListWidget#friend_apply_list::item
+{
+    background-color: transparent;
+}
+
+QListWidget#chat_users_list::item:hover,
+QListWidget#search_list::item:hover,
+QListWidget#con_user_list::item:hover,
+QListWidget#friend_apply_list::item:hover
+{
+    background-color: rgb(52,52,52);
+}
+
+QListWidget#chat_users_list::item:selected,
+QListWidget#search_list::item:selected,
+QListWidget#con_user_list::item:selected,
+QListWidget#friend_apply_list::item:selected,
+QListWidget#chat_users_list::item:selected:hover,
+QListWidget#search_list::item:selected:hover,
+QListWidget#con_user_list::item:selected:hover,
+QListWidget#friend_apply_list::item:selected:hover
+{
+    background-color: rgb(66,66,66);
+}
+
+/* ---- 右侧内容区（聊天区：比列表区亮一档，与 QQ NT 一致） ---- */
+
+/* 注意：注册页存在同名 stackedWidget，本规则同样命中（与拆分前行为一致） */
+QStackedWidget#stackedWidget
+{
+    background-color: rgb(43,43,43);
+    border-left: 1px solid rgb(52,52,52);
+}
+
+QWidget#chat_page,
+QWidget#friend_info_page,
+QWidget#friend_apply_page
+{
+    background-color: rgb(43,43,43);
+    color: rgb(235,235,235);
+}
+
+/* ==================== 会话页 InterChatPage ==================== */
+
+QLabel#title_label
+{
+    color: rgb(235,235,235);
+}
+
+/* 消息展示区（作用域锚点 #chat_page 是运行时真实祖先，类名锚点永不匹配，
+   提升控件的 objectName 会被 uic 覆盖） */
+QWidget#chat_page QScrollArea#chat_area
+{
+    background-color: rgb(43,43,43);
+    border-top: 1px solid rgb(52,52,52);
+    border-bottom: 1px solid rgb(52,52,52);
+}
+
+/* ChatView 内部容器（必须带 #chat_page 前缀，裸选择器会全局误命中
+   login/register/reset/chatpage 的同名容器） */
+QWidget#chat_page QWidget#widget,
+QWidget#chat_page QWidget#null_widget,
+QWidget#chat_page QWidget#scrollAreaWidgetContents,
+QWidget#chat_page QWidget#widget_4
+{
+    border: none;
+    background-color: rgb(43,43,43);
+}
+
+/* 消息输入框：与聊天区同色，靠 chat_area 的下边框分隔 */
+QTextEdit#chat_edit
+{
+    background-color: rgb(43,43,43);
+    color: rgb(235,235,235);
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+/* 发送：QQ 蓝主按钮 */
+QPushButton#send_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#send_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#send_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#send_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* 接收(debug)：次级按钮 */
+QPushButton#receive_button
+{
+    background-color: rgb(52,52,52);
+    color: rgb(215,215,215);
+}
+
+QPushButton#receive_button:hover
+{
+    background-color: rgb(66,66,66);
+}
+
+QPushButton#receive_button:pressed
+{
+    background-color: rgb(58,58,58);
+}
+
+/* 表情按钮 */
+QLabel#emoji_label[state='normal']
+{
+    border-image: url(:/res/grinning-face.png);
+}
+
+QLabel#emoji_label[state='hover']
+{
+    border-image: url(:/res/grinning-face_hover.png);
+}
+
+QLabel#emoji_label[state='press']
+{
+    border-image: url(:/res/grinning-face_push.png);
+}
+
+/* 文件按钮 */
+QLabel#file_label[state='normal']
+{
+    border-image: url(:/res/file.png);
+}
+
+QLabel#file_label[state='hover']
+{
+    border-image: url(:/res/file_hover.png);
+}
+
+QLabel#file_label[state='press']
+{
+    border-image: url(:/res/file_push.png);
+}
+
+/* 气泡旁的名字 */
+QLabel#name
+{
+    color: rgb(150,150,150);
+}
+
+/* ---- 气泡（BubbleFrame 自绘，颜色经 qproperty 注入；
+   QQ NT 深色为中性灰气泡） ---- */
+
+BubbleFrame
+{
+    qproperty-bubbleColorSelf: rgb(70,70,70);
+    qproperty-bubbleColorOther: rgb(56,56,56);
+}
+
+/* 气泡内文字（TextBubble 内嵌只读 QTextEdit；bubbleRole 属性由
+   BubbleFrame 构造时按角色写入） */
+TextBubble[bubbleRole='self'] QTextEdit
+{
+    color: white;
+    background: transparent;
+    border: none;
+}
+
+TextBubble[bubbleRole='other'] QTextEdit
+{
+    color: rgb(235,235,235);
+    background: transparent;
+    border: none;
+}
+
+/* ==================== 会话列表项 FriendWidget ==================== */
+
+QWidget#FriendWidget QLabel#user_name
+{
+    color: rgb(235,235,235);
+}
+
+QWidget#FriendWidget QLabel#time
+{
+    color: rgb(150,150,150);
+}
+
+QWidget#FriendWidget QLabel#user_chat
+{
+    color: rgb(150,150,150);
+}
+
+/* ==================== 搜索提示项 AddUserItem ==================== */
+
+QWidget#AddUserItem QLabel#message_tip
+{
+    color: rgb(235,235,235);
+}
+
+QWidget#AddUserItem QWidget#invalid_item
+{
+    border: none;
+    background-color: rgb(34,34,34);
+}
+
+QWidget#AddUserItem QLabel#add_tip
+{
+    border-image: url(":/assets/images/addUser.png");
+}
+
+QWidget#AddUserItem QLabel#right_tip
+{
+    border-image: url(":/assets/images/right_hover.png");
+}
+
+/* ==================== 联系人列表项 ContactUserItem ==================== */
+
+QWidget#ContactUserItemClass QLabel#user_name,
+QWidget#newFriendItem QLabel#user_name
+{
+    color: rgb(235,235,235);
+}
+
+QWidget#ContactUserItemClass QLabel#user_info,
+QWidget#newFriendItem QLabel#user_info
+{
+    color: rgb(150,150,150);
+}
+
+/* 分组标题（「联系人」等，不可选中） */
+QWidget#GroupTipItemClass QLabel#label
+{
+    color: rgb(105,105,105);
+}
+
+/* ==================== 好友申请页 ApplyFriendPage ==================== */
+
+/* 标题栏（「新的朋友」） */
+QWidget#friend_apply_page QWidget#friend_apply_widget
+{
+    background-color: rgb(43,43,43);
+    border-bottom: 1px solid rgb(52,52,52);
+}
+
+QWidget#friend_apply_page QLabel#friend_apply_label
+{
+    color: rgb(235,235,235);
+}
+
+QWidget#friend_apply_page QWidget#widget_2
+{
+    background-color: rgb(43,43,43);
+}
+
+/* ==================== 好友申请项 ApplyFriendItem ==================== */
+
+QWidget#ApplyFriendItemClass QLabel#user_name
+{
+    color: rgb(235,235,235);
+}
+
+QWidget#ApplyFriendItemClass QLabel#user_info
+{
+    color: rgb(150,150,150);
+}
+
+QWidget#ApplyFriendItemClass QWidget#widget,
+QWidget#ApplyFriendItemClass QWidget#widget_2
+{
+    background-color: transparent;
+    border: none;
+}
+
+/* 同意添加：QQ 蓝主按钮 */
+QWidget#ApplyFriendItemClass QPushButton#accept_friend_apply_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QWidget#ApplyFriendItemClass QPushButton#accept_friend_apply_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QWidget#ApplyFriendItemClass QPushButton#accept_friend_apply_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QWidget#ApplyFriendItemClass QPushButton#accept_friend_apply_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* 已添加 / 已拒绝 状态文本 */
+QWidget#ApplyFriendItemClass QLabel#tip_label
+{
+    color: rgb(150,150,150);
+}
+
+/* ==================== 搜索结果弹窗 FindResultDialog ==================== */
+
+/* 浮层卡片：面板上一档底色 + 强描边区分层级 */
+QDialog#FindResultDialog
+{
+    background-color: rgb(44,44,44);
+    border-color: rgb(72,72,72);
+    color: rgb(235,235,235);
+}
+
+QLabel#head_label
+{
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#name_label
+{
+    color: rgb(235,235,235);
+}
+
+/* 添加到通讯录：QQ 蓝主按钮（文字按钮用伪类写法；[state=...] 留给图标按钮） */
+QPushButton#add_friend_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QPushButton#add_friend_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QPushButton#add_friend_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QPushButton#add_friend_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+/* ==================== 加载中弹窗 LoadingDialog ==================== */
+
+QDialog#LoadingDialog
+{
+    background-color: rgb(44,44,44);
+    border-color: rgb(72,72,72);
+    color: rgb(235,235,235);
+}
+
+/* ==================== 添加好友对话框 ApplyFriend ==================== */
+
+QDialog#ApplyFriend
+{
+    background-color: rgb(44,44,44);
+    border-color: rgb(72,72,72);
+    color: rgb(235,235,235);
+}
+
+QDialog#ApplyFriend QLabel#apply_label
+{
+    color: rgb(235,235,235);
+}
+
+QDialog#ApplyFriend QFrame#line
+{
+    background-color: rgb(52,52,52);
+}
+
+QDialog#ApplyFriend QLabel#label,
+QDialog#ApplyFriend QLabel#label_2,
+QDialog#ApplyFriend QLabel#label_3
+{
+    color: rgb(150,150,150);
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit,
+QDialog#ApplyFriend QLineEdit#back_name_edit
+{
+    background-color: rgb(52,52,52);
+    border-color: rgb(52,52,52);
+    color: rgb(235,235,235);
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit:hover,
+QDialog#ApplyFriend QLineEdit#back_name_edit:hover
+{
+    border-color: rgb(72,72,72);
+}
+
+QDialog#ApplyFriend QLineEdit#verify_info_edit:focus,
+QDialog#ApplyFriend QLineEdit#back_name_edit:focus
+{
+    border-color: rgb(0,153,255);
+}
+
+/* 标签容器：控件底色，与内部胶囊（选中档 66）拉开色阶 */
+QDialog#ApplyFriend QWidget#grid
+{
+    background-color: rgb(52,52,52);
+}
+
+QDialog#ApplyFriend QLineEdit#label_edit
+{
+    color: rgb(235,235,235);
+    selection-background-color: rgb(0,153,255);
+    selection-color: white;
+}
+
+/* 推荐标签胶囊（位于卡片底色 44 之上，取控件档 52 拉开层级） */
+QLabel#tipslb,
+QLabel#tipsLabel
+{
+    background-color: rgb(52,52,52);
+    border-color: rgb(66,66,66);
+    color: rgb(215,215,215);
+}
+
+QLabel#tipslb[state='hover'],
+QLabel#tipsLabel[state='hover']
+{
+    background-color: rgb(66,66,66);
+    border-color: rgb(90,90,90);
+    color: rgb(235,235,235);
+}
+
+QLabel#tipslb[state='pressed'],
+QLabel#tipsLabel[state='pressed']
+{
+    background-color: rgb(58,58,58);
+    border-color: rgb(0,153,255);
+    color: rgb(235,235,235);
+}
+
+QLabel#tipslb[state='selected_normal'],
+QLabel#tipsLabel[state='selected_normal']
+{
+    background-color: rgb(52,52,52);
+    border-color: rgb(0,153,255);
+    color: rgb(235,235,235);
+}
+
+QLabel#tipslb[state='selected_hover'],
+QLabel#tipsLabel[state='selected_hover']
+{
+    background-color: rgb(66,66,66);
+    border-color: rgb(0,153,255);
+    color: rgb(235,235,235);
+}
+
+QLabel#tipslb[state='selected_pressed'],
+QLabel#tipsLabel[state='selected_pressed']
+{
+    background-color: rgb(58,58,58);
+    border-color: rgb(0,153,255);
+    color: rgb(235,235,235);
+}
+
+/* 「添加+xx」下拉提示：蓝描边强调可点新建项 */
+QDialog#ApplyFriend QLabel#tip_label
+{
+    background-color: rgb(66,66,66);
+    border-color: rgb(0,153,255);
+    color: rgb(235,235,235);
+}
+
+/* 「更多」展开按钮 */
+QDialog#ApplyFriend QLabel#more_label
+{
+    color: rgb(150,150,150);
+}
+
+QDialog#ApplyFriend QLabel#more_label:hover
+{
+    color: rgb(235,235,235);
+}
+
+/* 确认 / 取消（文字按钮用伪类；ClickedButton 第三态实参是 "released"） */
+QDialog#ApplyFriend QPushButton#sure_button
+{
+    background-color: rgb(0,153,255);
+    color: white;
+}
+
+QDialog#ApplyFriend QPushButton#sure_button:hover
+{
+    background-color: rgb(38,166,255);
+}
+
+QDialog#ApplyFriend QPushButton#sure_button:pressed
+{
+    background-color: rgb(0,122,204);
+}
+
+QDialog#ApplyFriend QPushButton#sure_button:disabled
+{
+    background-color: rgba(0,153,255,80);
+    color: rgba(255,255,255,130);
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button
+{
+    background-color: rgb(52,52,52);
+    color: rgb(215,215,215);
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button:hover
+{
+    background-color: rgb(66,66,66);
+}
+
+QDialog#ApplyFriend QPushButton#cancel_button:pressed
+{
+    background-color: rgb(58,58,58);
+}
+
+/* 空数据占位（配合 setProperty("empty", true)，待代码接入） */
+QLabel#tipslb[empty='true'],
+QLabel#tipsLabel[empty='true']
+{
+    background-color: transparent;
+    border: 1px dashed rgb(66,66,66);
+    color: rgb(105,105,105);
+}
+
+/* 提交等待 GIF 占位（界面补上 loading_label 后生效） */
+QDialog#ApplyFriend QLabel#loading_label
+{
+    background-color: rgb(44,44,44);
+    background-image: url(":/assets/images/loading.gif");
+}
+
+/* ==================== 好友标签胶囊 FriendLabel ==================== */
+
+QFrame#friendLabel
+{
+    background-color: rgb(66,66,66);
+    border-color: rgb(90,90,90);
+}
+
+QFrame#friendLabel:hover
+{
+    background-color: rgb(90,90,90);
+    border-color: rgb(150,150,150);
+}
+
+QFrame#friendLabel QLabel#tip_label
+{
+    color: rgb(235,235,235);
+}
+
+/* 关闭图标三态（state 两族取值见 common.qss 尾部说明） */
+QFrame#friendLabel QLabel#close_label[state='normal'],
+QFrame#friendLabel QLabel#close_label[state='selected_normal']
+{
+    background-image: url(":/assets/images/close.png");
+}
+
+QFrame#friendLabel QLabel#close_label[state='hover'],
+QFrame#friendLabel QLabel#close_label[state='selected_hover']
+{
+    background-image: url(":/assets/images/close_hover.png");
+}
+
+QFrame#friendLabel QLabel#close_label[state='pressed'],
+QFrame#friendLabel QLabel#close_label[state='selected_pressed']
+{
+    background-image: url(":/assets/images/close_push.png");
+}

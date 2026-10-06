@@ -1,8 +1,6 @@
 #include "mainwindow.h"
 
 #include <QApplication>
-#include <QFile>
-#include <QStringList>
 
 #include "global.h"
 #include "logger.h"
@@ -21,55 +19,6 @@ int main(int argc, char *argv[])
 
     QApplication a(argc, argv);
 
-    // 样式表按 ui/page 拆分为多个 .qss（见 assets/styles/），此处按原
-    // stylesheet.qss 的段落顺序拼接加载——顺序决定同名选择器的覆盖结果，
-    // 与拆分前行为保持一致，新增页面样式请追加到列表末尾或对应位置。
-    const QStringList kQssFiles = {
-        ":/style/common.qss",
-        ":/style/login/logindialog.qss",
-        ":/style/register/registerdialog.qss",
-        ":/style/reset/resetdialog.qss",
-        ":/style/chat/chatpage.qss",
-        ":/style/chat/chatPage/interchatpage.qss",
-        ":/style/chat/interListItem/friendwidget.qss",
-        ":/style/chat/interListItem/adduseritem.qss",
-        ":/style/chat/findResultDialog/findresultdialog.qss",
-        // friendlabel.qss 必须在 applyfriend.qss 之前：
-        // 后者对 #grid 内的标签区做了底色，两处选择器不冲突，
-        // 但保持「组件样式先于页面样式」的既有惯例。
-        ":/style/applyFriend/friendlabel.qss",
-        ":/style/applyFriend/applyfriend.qss"
-    };
-
-    QString style;
-    qint64 total_size = 0;
-    int loaded_count = 0;
-
-    for (const QString &qss_path : kQssFiles)
-    {
-        QFile qss(qss_path);
-
-        if (qss.open(QFile::ReadOnly))
-        {
-            const QByteArray data = qss.readAll();
-            style.append(QString::fromUtf8(data));
-            total_size += data.size();
-            ++loaded_count;
-            qss.close();
-        }
-        else
-        {
-            LOG_WARN() << "[ui] stylesheet open failed:" << qss.fileName();
-        }
-    }
-
-    if (loaded_count > 0)
-    {
-        LOG_DEBUG() << "[ui] stylesheets loaded," << loaded_count << "/"
-                    << kQssFiles.size() << "files," << total_size << "bytes";
-        a.setStyleSheet(style);
-    }
-
     // 配置来源：可执行文件目录下的 config.ini
     QString file_name = "config.ini";
     QString app_path = QCoreApplication::applicationDirPath();
@@ -77,6 +26,11 @@ int main(int argc, char *argv[])
     LOG_DEBUG() << "[config] read from:" << config_path;
 
     QSettings settings(config_path, QSettings::IniFormat);
+
+    // 主题：config.ini [UI] theme=dark|light，缺省深色；
+    // 运行期切换主题直接调 applyTheme()（global.h）
+    const QString theme_name = settings.value("UI/theme").toString().trimmed().toLower();
+    applyTheme(theme_name == "light" ? AppTheme::Light : AppTheme::Dark);
 
     QString gate_host = settings.value("GateServer/host").toString().trimmed();
     QString gate_port = settings.value("GateServer/port").toString().trimmed();

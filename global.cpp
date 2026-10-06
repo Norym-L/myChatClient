@@ -1,5 +1,11 @@
 #include "global.h"
 
+#include <QApplication>
+#include <QFile>
+#include <QPalette>
+
+#include "logger.h"
+
 QString GATE_URL_PREFIX = "";
 
 inline std::function<void(QWidget *)> repolish = [](QWidget * w)
@@ -7,6 +13,66 @@ inline std::function<void(QWidget *)> repolish = [](QWidget * w)
     w->style()->unpolish(w);
     w->style()->polish(w);
 };
+
+namespace
+{
+AppTheme g_currentTheme = AppTheme::Dark;
+
+/// 读取一份 qss 资源，失败记 WARN 并返回空串（不中断，与其它资源解耦）
+QString readQssFile(const QString& path)
+{
+	QFile file(path);
+	if (!file.open(QFile::ReadOnly))
+	{
+		LOG_WARN() << "[ui] stylesheet open failed:" << path;
+		return {};
+	}
+	return QString::fromUtf8(file.readAll());
+}
+} // namespace
+
+void applyTheme(const AppTheme theme)
+{
+	g_currentTheme = theme;
+
+	const QString theme_path = (theme == AppTheme::Light)
+		? QStringLiteral(":/style/themes/light.qss")
+		: QStringLiteral(":/style/themes/dark.qss");
+
+	const QString style = readQssFile(QStringLiteral(":/style/common.qss"))
+		+ readQssFile(theme_path);
+
+	if (style.isEmpty())
+	{
+		LOG_ERROR() << "[ui] no stylesheet loaded, theme switch aborted";
+		return;
+	}
+
+	// 占位文字色 QSS 管不到，只能走调色板
+	QPalette palette = qApp->palette();
+	palette.setColor(QPalette::PlaceholderText,
+		theme == AppTheme::Light ? QColor(172, 172, 172) : QColor(130, 130, 130));
+	qApp->setPalette(palette);
+
+	qApp->setStyleSheet(style);
+	LOG_INFO() << "[ui] theme applied:"
+		<< (theme == AppTheme::Light ? "light" : "dark")
+		<< "," << style.size() << "bytes";
+}
+
+AppTheme currentTheme()
+{
+	return g_currentTheme;
+}
+
+QString themedIconPath(const QString& name)
+{
+	if (g_currentTheme == AppTheme::Light)
+	{
+		return QStringLiteral(":/assets/images/themes/light/") + name + QStringLiteral(".png");
+	}
+	return QStringLiteral(":/res/") + name + QStringLiteral(".png");
+}
 
 namespace ChatProtocol
 {
