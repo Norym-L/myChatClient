@@ -41,7 +41,7 @@ public:
 
 private:
     /// 连接状态
-    enum class LinkState
+    enum class LinkState : std::uint8_t
     {
         Idle = 0,
         Connecting,
@@ -61,10 +61,6 @@ private:
      * @brief handleMessage 按线上 message_id 分发到处理函数
      */
     void handleMessage(std::uint16_t message_id, const QByteArray& body);
-
-    /// 处理 MESSAGE_CHAT_LOGIN_RESP(1)
-    void handleLoginResp(const QByteArray& body);
-
     /// 关闭并复位会话（不再对外发信号）
     void closeSession(const QString& reason);
 
@@ -78,7 +74,8 @@ private:
 
 public slots:
     /// 连接 /user_login 分配到的 ChatServer
-    void slot_tcpConnect(const ServerInfo& server_info);
+    void slot_tcpConnect(ServerInfo server_info);
+    void slotSendData(ReqId req_id, QByteArray data);
 
 signals:
     /// 连接结果；false 表示连接失败或超时
@@ -88,8 +85,8 @@ signals:
     /// 连接建立之后的链路异常（已断开 / 报文非法）
     void sig_tcpError(const QString& reason);
 
-    void sigUserSearch(std::shared_ptr<SearchInfo> info); // 用户搜索
-    void sigSendData(ReqId id, const QString& data); // 发送数据
+    void sigUserSearchFinish(std::shared_ptr<SearchInfo> info); // 用户搜索收到回包
+    void sigSendData(ReqId id, QByteArray data); // 发送数据
 
     void sigReciveFriendApply(std::shared_ptr<AddFriendApply>); // 收到添加好友申请
     void sigAddAuthFriend(std::shared_ptr<AuthInfo>); // 对端同意添加好友

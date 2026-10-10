@@ -24,10 +24,15 @@ public:
 	~FindResultDialog() override;
 
 	/// 设置用户信息
-	void setSearchInfo(const std::shared_ptr<SearchInfo>& si);
+	void setSearchInfo(std::shared_ptr<SearchInfo> si);
+
+private:
+	/// 刷新用户信息到显示
+	void flashSearchInfo();
 
 private slots:
-	void slotOnAddFriendButtonClicked();
+	void slotOnAddFriendButtonClickedifFined();
+	void slotOnAddFriendButtonClickednotFined();
 
 private:
 	Ui::FindResultDialog* ui;

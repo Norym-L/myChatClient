@@ -19,8 +19,8 @@ class UserManager : public QObject, public Singleton<UserManager>
 public:
     ~UserManager() override;
 
-    [[nodiscard]] int getUid() const { return m_uid; }
-    void setUid(const int uid) { m_uid = uid; }
+    [[nodiscard]] std::uint64_t getUid() const { return m_uid; }
+    void setUid(const std::uint64_t uid) { m_uid = uid; }
 
     [[nodiscard]] QString getName() const { return m_name; }
     void setName(const QString& name) { m_name = name; }
@@ -34,7 +34,7 @@ public:
 private:
     UserManager() = default;
 
-    int m_uid = 0;
+    std::uint64_t m_uid = 0;
     QString m_name;
     QString m_token;
     std::vector<std::shared_ptr<ApplyInfo>> m_applyList;

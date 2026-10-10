@@ -25,9 +25,6 @@
     <Filter Include="聊天页面\列表项">
       <UniqueIdentifier>{d1000010-0000-4000-8000-000000000010}</UniqueIdentifier>
     </Filter>
-    <Filter Include="聊天页面\对话框">
-      <UniqueIdentifier>{d1000011-0000-4000-8000-000000000011}</UniqueIdentifier>
-    </Filter>
     <Filter Include="聊天页面\右侧聊天页面">
       <UniqueIdentifier>{38193897-ef6b-44c2-95a0-eae68932ac32}</UniqueIdentifier>
     </Filter>
@@ -67,7 +64,16 @@
     <Filter Include="聊天页面\右侧好友申请页面">
       <UniqueIdentifier>{bf46aac7-734f-4c03-ab89-31f284d2615d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="聊天页面\发送好友申请弹窗">
+    <Filter Include="文档">
+      <UniqueIdentifier>{cf1b117b-313b-4f52-8c0c-ef5985454d50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="聊天页面\搜索好友、用户列表">
+      <UniqueIdentifier>{96b6cbb5-3849-4b86-90ce-fd76dcf6efd4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="聊天页面\加载弹窗">
+      <UniqueIdentifier>{d1000011-0000-4000-8000-000000000011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="聊天页面\搜索好友、用户列表\发送好友申请弹窗">
       <UniqueIdentifier>{ef2a66d5-a348-4d5b-a124-2de43c1eeeea}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -87,7 +93,7 @@
       <Filter>聊天页面\消息气泡</Filter>
     </QtUic>
     <QtUic Include="loadingdialog.ui">
-      <Filter>聊天页面\对话框</Filter>
+      <Filter>聊天页面\加载弹窗</Filter>
     </QtUic>
     <QtUic Include="logindialog.ui">
       <Filter>登录页面</Filter>
@@ -108,16 +114,13 @@
       <Filter>聊天页面\右侧聊天页面</Filter>
     </QtUic>
     <QtUic Include="ApplyFriend.ui">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
     </QtUic>
     <QtUic Include="chatpage.ui">
       <Filter>聊天页面\主体容器</Filter>
     </QtUic>
     <QtUic Include="FriendLabel.ui">
       <Filter>聊天页面\用户标签</Filter>
-    </QtUic>
-    <QtUic Include="findresultdialog.ui">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
     </QtUic>
     <QtUic Include="ContactUserItem.ui">
       <Filter>聊天页面\联系人列表</Filter>
@@ -134,12 +137,12 @@
     <QtUic Include="ApplyFriendItem.ui">
       <Filter>聊天页面\右侧好友申请页面</Filter>
     </QtUic>
+    <QtUic Include="findresultdialog.ui">
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ListItemBase.h">
-      <Filter>通用控件</Filter>
-    </QtMoc>
-    <QtMoc Include="SearchList.h">
       <Filter>通用控件</Filter>
     </QtMoc>
     <QtMoc Include="StateWidget.h">
@@ -173,7 +176,7 @@
       <Filter>基础服务\网络通信</Filter>
     </QtMoc>
     <QtMoc Include="loadingdialog.h">
-      <Filter>聊天页面\对话框</Filter>
+      <Filter>聊天页面\加载弹窗</Filter>
     </QtMoc>
     <QtMoc Include="logindialog.h">
       <Filter>登录页面</Filter>
@@ -194,7 +197,7 @@
       <Filter>聊天页面\右侧聊天页面</Filter>
     </QtMoc>
     <QtMoc Include="ApplyFriend.h">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
     </QtMoc>
     <QtMoc Include="chatpage.h">
       <Filter>聊天页面\主体容器</Filter>
@@ -204,9 +207,6 @@
     </QtMoc>
     <QtMoc Include="FriendLabel.h">
       <Filter>聊天页面\用户标签</Filter>
-    </QtMoc>
-    <QtMoc Include="findresultdialog.h">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
     </QtMoc>
     <QtMoc Include="ContactUserList.h">
       <Filter>聊天页面\联系人列表</Filter>
@@ -235,6 +235,12 @@
     <QtMoc Include="MessageTextEdit.h">
       <Filter>聊天页面\右侧聊天页面</Filter>
     </QtMoc>
+    <QtMoc Include="SearchList.h">
+      <Filter>聊天页面\搜索好友、用户列表</Filter>
+    </QtMoc>
+    <QtMoc Include="findresultdialog.h">
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ClickedButton.cpp">
@@ -242,9 +248,6 @@
     </ClCompile>
     <ClCompile Include="PictureBubble.cpp">
       <Filter>聊天页面\消息气泡</Filter>
-    </ClCompile>
-    <ClCompile Include="SearchList.cpp">
-      <Filter>通用控件</Filter>
     </ClCompile>
     <ClCompile Include="StateWidget.cpp">
       <Filter>通用控件</Filter>
@@ -277,7 +280,7 @@
       <Filter>基础服务\网络通信</Filter>
     </ClCompile>
     <ClCompile Include="loadingdialog.cpp">
-      <Filter>聊天页面\对话框</Filter>
+      <Filter>聊天页面\加载弹窗</Filter>
     </ClCompile>
     <ClCompile Include="logger.cpp">
       <Filter>基础服务\日志</Filter>
@@ -304,7 +307,7 @@
       <Filter>聊天页面\右侧聊天页面</Filter>
     </ClCompile>
     <ClCompile Include="ApplyFriend.cpp">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
     </ClCompile>
     <ClCompile Include="chatpage.cpp">
       <Filter>聊天页面\主体容器</Filter>
@@ -314,9 +317,6 @@
     </ClCompile>
     <ClCompile Include="FriendLabel.cpp">
       <Filter>聊天页面\用户标签</Filter>
-    </ClCompile>
-    <ClCompile Include="findresultdialog.cpp">
-      <Filter>聊天页面\发送好友申请弹窗</Filter>
     </ClCompile>
     <ClCompile Include="ContactUserList.cpp">
       <Filter>聊天页面\联系人列表</Filter>
@@ -350,6 +350,12 @@
     </ClCompile>
     <ClCompile Include="MessageTextEdit.cpp">
       <Filter>聊天页面\右侧聊天页面</Filter>
+    </ClCompile>
+    <ClCompile Include="SearchList.cpp">
+      <Filter>聊天页面\搜索好友、用户列表</Filter>
+    </ClCompile>
+    <ClCompile Include="findresultdialog.cpp">
+      <Filter>聊天页面\搜索好友、用户列表\发送好友申请弹窗</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -386,6 +392,9 @@
   <ItemGroup>
     <None Include="config.ini">
       <Filter>资源</Filter>
+    </None>
+    <None Include="接口文档.md">
+      <Filter>文档</Filter>
     </None>
   </ItemGroup>
 </Project>

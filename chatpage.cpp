@@ -79,6 +79,9 @@ ChatPage::ChatPage(QWidget* parent)
     initSideBar();
 
     installEventFilter(this);
+
+    // 连接搜索框和搜索列表，同步搜索框内容
+    connect(ui->search_edit, &TruncateEdit::textChanged, ui->search_list, &SearchList::slotSyncSearchEditChanged);
 }
 
 ChatPage::~ChatPage()

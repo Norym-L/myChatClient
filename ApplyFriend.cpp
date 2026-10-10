@@ -11,6 +11,7 @@
 #include <QFontMetrics>
 
 #include "logger.h"
+#include "TCPManager.h"
 #include "UserManager.h"
 
 namespace
@@ -608,6 +609,18 @@ void ApplyFriend::slotAddFriendLabelByClickTip(const QString& text)
 void ApplyFriend::slotApplySure()
 {
 	LOG_DEBUG() << "[friend apply page] slot apply sure";
+
+	QJsonObject json_object;
+	json_object["uid"] = QString::number(UserManager::GetInstance().getUid());
+	json_object["verify_info"] = ui->verify_info_edit->text().isEmpty() ? ui->verify_info_edit->placeholderText() : ui->verify_info_edit->text();
+	json_object["remark"] = ui->back_name_edit->text().isEmpty() ? ui->back_name_edit->placeholderText() : ui->back_name_edit->text();
+	json_object["to_uid"] = QString::number(m_searchInfo->uid);
+
+	const QJsonDocument document(json_object);
+	const QByteArray json_data = document.toJson(QJsonDocument::Compact);
+
+	emit TCPManager::GetInstance().sigSendData(ReqId::ID_ADD_FRIEDN_REQ, std::move(json_data));
+
 	hide();
 	deleteLater();
 }

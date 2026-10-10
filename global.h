@@ -28,8 +28,8 @@ extern std::function<void(QWidget*)> repolish;
  */
 enum class AppTheme : std::uint8_t
 {
-	Dark,
-	Light,
+    Dark,
+    Light,
 };
 
 /**
@@ -56,13 +56,21 @@ void applyTheme(AppTheme theme);
  */
 enum ReqId : std::uint16_t
 {
-	ID_GET_VERIFY_CODE = 1001, // 获取验证码
-	ID_REG_USER = 1002, // 注册用户
-	ID_RESET_PWD = 1003, // 重置密码
-	ID_LOGIN_USER = 1004, // 用户登录
-	ID_CHAT_LOGIN = 1005, // 聊天系统登录
-	ID_CHAT_LOGIN_RESP = 1006, // 聊天系统回包
-	ID_SEARCH_USER_REQ = 1007, // 用户查询请求
+    ID_GET_VERIFY_CODE = 1001, // 获取验证码
+    ID_REG_USER, // 注册用户
+    ID_RESET_PWD, // 重置密码
+    ID_LOGIN_USER, // 用户登录
+    ID_CHAT_LOGIN, // 聊天系统登录
+    ID_CHAT_LOGIN_RESP, // 聊天系统登录回包
+    ID_SEARCH_USER_REQ, // 查询用户请求
+    ID_SEARCH_USER_RSP, // 查询用户请求回包
+    ID_ADD_FRIEDN_REQ, // 添加好友请求
+    ID_ADD_FRIEDN_RSP, // 添加好友请求回包
+    ID_NOTIFY_ADD_FRIEND_REQ, // 通知用户添加好友申请
+    ID_AUTH_FRIEND_REQ, // 认证好友请求
+    ID_AUTH_FRIEND_RSP, // 认证好友请求回包
+    ID_NOTIFY_AUTH_FRIEND_REQ, // 通知用户认证好友申请
+    ID_TEXT_CHAT_MSG_REQ, // 文本聊天信息请求
 };
 
 /**
@@ -70,9 +78,9 @@ enum ReqId : std::uint16_t
  */
 enum Modules : std::uint8_t
 {
-	REGISTER_MOD = 0, // 注册模块
-	RESET_MOD = 1, // 重置密码模块
-	LOGIN_MOD = 2, // 登录模块
+    REGISTER_MOD = 0, // 注册模块
+    RESET_MOD = 1, // 重置密码模块
+    LOGIN_MOD = 2, // 登录模块
 };
 
 /**
@@ -82,26 +90,26 @@ enum Modules : std::uint8_t
  */
 enum ErrorCodes : std::uint16_t
 {
-	SUCCESS = 0, // 成功
-	ERR_JSON = 1, // json 解析失败
-	ERR_NETWORK = 2, // 网络错误
-	ERR_HTTP_STATUS = 3, // 服务端返回非 200（未知路径 404 / 不支持的方法 405）
-	ERR_REQUEST_TOO_LONG = 4, // 请求体超出服务端缓冲区上限
+    SUCCESS = 0, // 成功
+    ERR_JSON = 1, // json 解析失败
+    ERR_NETWORK = 2, // 网络错误
+    ERR_HTTP_STATUS = 3, // 服务端返回非 200（未知路径 404 / 不支持的方法 405）
+    ERR_REQUEST_TOO_LONG = 4, // 请求体超出服务端缓冲区上限
 
-	/// 服务器返回值
-	ERROR_JSON = 1001, // Json解析错误或必填字段缺失
-	RPC_FAILED = 1002, // RPC请求失败
-	VERIFY_CODE_EXPIRED = 1003, // 验证码过期
-	VERIFY_CODE_ERROR = 1004, // 验证码错误
-	USER_EXIST = 1005, // 用户已存在
-	PASSWORD_ERROR = 1006, // 密码错误
-	EMAIL_NOT_MATCH = 1007, // 邮箱不匹配
-	PASSWORD_UP_FAILED = 1008, // 密码修改失败
-	PASSWORD_INVALID = 1009, // 密码无效
-	REGISTER_USER_FAILED = 1010, // 用户注册失败
-	USER_UID_INVALID = 1011, // 用户id非法或不存在
-	USER_TOKEN_INVALID = 1012, // token非法或已失效
-	SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis连接池超时或不可达）
+    /// 服务器返回值
+    ERROR_JSON = 1001, // Json解析错误或必填字段缺失
+    RPC_FAILED = 1002, // RPC请求失败
+    VERIFY_CODE_EXPIRED = 1003, // 验证码过期
+    VERIFY_CODE_ERROR = 1004, // 验证码错误
+    USER_EXIST = 1005, // 用户已存在
+    PASSWORD_ERROR = 1006, // 密码错误
+    EMAIL_NOT_MATCH = 1007, // 邮箱不匹配
+    PASSWORD_UP_FAILED = 1008, // 密码修改失败
+    PASSWORD_INVALID = 1009, // 密码无效
+    REGISTER_USER_FAILED = 1010, // 用户注册失败
+    USER_UID_INVALID = 1011, // 用户id非法或不存在
+    USER_TOKEN_INVALID = 1012, // token非法或已失效
+    SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis连接池超时或不可达）
 };
 
 /**
@@ -123,8 +131,8 @@ inline constexpr int MAX_LENGTH = 2048; // body 最大长度，超出服务端�
 /// 线上 message_id
 enum MessageId : std::uint16_t
 {
-	MESSAGE_CHAT_LOGIN = 0, // 客户端 -> 服务端：{"uid":<int>, "token":<string>}
-	MESSAGE_CHAT_LOGIN_RESP = 1, // 服务端 -> 客户端：{"error":<int>, ...}
+    MESSAGE_CHAT_LOGIN = 0, // 客户端 -> 服务端：{"uid":<int>, "token":<string>}
+    MESSAGE_CHAT_LOGIN_RESP = 1, // 服务端 -> 客户端：{"error":<int>, ...}
 };
 
 /**
@@ -148,29 +156,29 @@ enum MessageId : std::uint16_t
 /// 登录页面错误提示
 enum class TipErr : std::uint8_t
 {
-	TIP_SUCCESS = 0,
-	TIP_EMAIL_ERR = 1,
-	TIP_PWD_ERR = 2,
-	TIP_CONFIRM_ERR = 3,
-	TIP_PWD_CONFIRM = 4,
-	TIP_VERIFY_ERR = 5,
-	TIP_USER_ERR = 6
+    TIP_SUCCESS = 0,
+    TIP_EMAIL_ERR = 1,
+    TIP_PWD_ERR = 2,
+    TIP_CONFIRM_ERR = 3,
+    TIP_PWD_CONFIRM = 4,
+    TIP_VERIFY_ERR = 5,
+    TIP_USER_ERR = 6
 };
 
 /// label选择状态
 enum class ClickLabelState : std::uint8_t
 {
-	NORMAL = 0,
-	SELECT = 1,
+    NORMAL = 0,
+    SELECT = 1,
 };
 
 /// /user_login 响应中分配到的 ChatServer 信息
 struct ServerInfo
 {
-	int _uid = 0;
-	QString _token;
-	QString _host;
-	QString _port;
+    int _uid = 0;
+    QString _token;
+    QString _host;
+    QString _port;
 };
 
 struct MessageInfo

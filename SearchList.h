@@ -2,6 +2,7 @@
 #define CHATCLIENT_SEARCHLIST_H
 
 #include <QListWidget>
+#include <QPointer>
 
 #include "findresultdialog.h"
 #include "UserData.h"
@@ -15,7 +16,6 @@ public:
     explicit SearchList(QWidget* parent = nullptr);
 
     void closeFindDialog();
-    void setSearchedit(QWidget* widget);
 
 protected:
     bool eventFilter(QObject* object, QEvent* event) override;
@@ -24,14 +24,18 @@ private:
     void waitPending(bool pending = true);
     void addTipItem();
 
+public slots:
+    void slotSyncSearchEditChanged(const QString& text);
+
 private slots:
     void slotItemClicked(QListWidgetItem* item);
-    void slotUserSearch(std::shared_ptr<SearchInfo> info);
+    void slotUserSearchFinish(std::shared_ptr<SearchInfo> info); // 处理收到搜索结果
 
 private:
     bool m_sendPending{false}; // 是否阻塞,等待服务器回包
-    FindResultDialog* m_findDialog{nullptr};
-    QWidget* m_searchEdit{nullptr};
+    QPointer<FindResultDialog> m_findDialog{nullptr};
+    LoadingDialog* m_loadingDialog{nullptr};
+    QString m_searchEditText{};
 };
 
 
