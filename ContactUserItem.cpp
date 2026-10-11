@@ -37,7 +37,7 @@ void ContactUserItem::setInfo(const std::shared_ptr<AuthInfo>& auth_info)
 // 	ui->user_name->setText(m_info->name);
 // }
 
-void ContactUserItem::setInfo(int uid, const QString& name, const QString& icon, const QString& nick)
+void ContactUserItem::setInfo(std::uint64_t uid, const QString& name, const QString& icon, const QString& nick)
 {
 	m_info = std::make_shared<UserInfo>(uid, name, icon, nick);
 	const QPixmap pixmap(m_info->icon);

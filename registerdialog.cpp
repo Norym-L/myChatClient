@@ -315,7 +315,9 @@ void RegisterDialog::initHttpHandlers()
 			}
 
 			// 文档：成功响应含 uid / email / user（昵称），不再回显 password
-			LOG_INFO() << "[register] register success, uid:" << jsonObj.value("uid").toInt()
+			// uid 为 uint64，这里仅用于日志，走统一解析避免 toInt() 打印出截断值
+			LOG_INFO() << "[register] register success, uid:"
+				<< parseUid(jsonObj.value("uid")).value_or(0)
 				<< "email:" << jsonObj.value("email").toString()
 				<< "user:" << jsonObj.value("user").toString();
 

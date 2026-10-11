@@ -145,13 +145,19 @@ void LoginDialog::login()
 		return;
 	}
 
-	// 文档：/user_login 的 user 字段为 uid（数字）；email 仅用于响应回显、不参与校验
-	const int uid = ui->account_edit->text().toInt();
-	const QString password = ui->pass_edit->text();
+	// 文档：/user_login 的 user 字段为 uid；按《接口文档.md》约定以 uint64 的字符串形式提交。
+	// 账号输入框里是 uid 文本，先按 uint64 校验再规范化，避免超出 2^53 时经 JSON double 丢精度
+	bool be_valid_uid = false;
+	const std::uint64_t uid = ui->account_edit->text().toULongLong(&be_valid_uid);
+	if (!be_valid_uid)
+	{
+		addTipErr(TipErr::TIP_USER_ERR, tr("账号超出有效范围"));
+		return;
+	}
 
 	QJsonObject json_object;
-	json_object.insert("user", uid);
-	json_object.insert("password", password);
+	json_object.insert("user", QString::number(uid));
+	json_object.insert("password", ui->pass_edit->text());
 
 	showTip(tr("正在登录..."), true);
 	enableLoginButton(false);
@@ -177,7 +183,17 @@ void LoginDialog::initHttpHandlers()
 		}
 
 		ServerInfo si;
-		si._uid = json_object.value("uid").toInt();
+		// uid 由服务端以 uint64 字符串形式下发，走统一解析（toInt() 会截断大 uid）
+		const std::optional<std::uint64_t> uid = parseUid(json_object.value("uid"));
+		if (!uid.has_value())
+		{
+			LOG_WARN() << "[login] login resp has invalid uid:" << json_object;
+			showTip(tr("服务器返回数据不完整"), false);
+			enableLoginButton(true);
+			return;
+		}
+
+		si._uid = uid.value();
 		si._token = json_object.value("token").toString();
 		si._host = json_object.value("host").toString();
 		si._port = json_object.value("port").toString();
@@ -244,12 +260,13 @@ void LoginDialog::slot_tcpConnectFinish(bool success)
 
 	showTip(tr("已连接聊天服务器，正在登录..."), true);
 
-	// 文档：MESSAGE_CHAT_LOGIN(0) 的 body 为 {"uid": <int>, "token": <string>}
+	// 文档：MESSAGE_CHAT_LOGIN(0) 的 body 为 {"uid": <string>, "token": <string>}
+	// uid 以 uint64 的字符串形式发送，与搜索/加好友等接口保持一致
 	QJsonObject json_object;
-	json_object.insert("uid", m_uid);
+	json_object.insert("uid", QString::number(m_uid));
 	json_object.insert("token", m_token);
 
-	if (!TCPManager::GetInstance().sendChatMessage(ReqId::ID_CHAT_LOGIN, json_object))
+	if (!TCPManager::GetInstance().sendChatMessage(ReqId::ID_CHAT_LOGIN_REQ, json_object))
 	{
 		showTip(tr("登录消息发送失败"), false);
 		enableLoginButton(true);

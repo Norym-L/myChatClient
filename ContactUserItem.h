@@ -21,7 +21,7 @@ public:
 	[[nodiscard]] QSize sizeHint() const override;
 	void setInfo(const std::shared_ptr<AuthInfo>& auth_info);
 	void setInfo(const std::shared_ptr<AuthRsp>& auth_rsp);
-	void setInfo(int uid, const QString& name, const QString& icon, const QString& nick = {});
+	void setInfo(std::uint64_t uid, const QString& name, const QString& icon, const QString& nick = {});
 	void showRedPoint(bool show = true) const;
 
 private:

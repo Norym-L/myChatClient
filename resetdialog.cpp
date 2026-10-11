@@ -66,9 +66,19 @@ ResetDialog::ResetDialog(QWidget* parent)
 				return;
 			}
 
-			// 文档：/reset_password 的 user 字段为 uid（数字），验证码字段为 verify_code
+			// 文档：/reset_password 的 user 字段为 uid，验证码字段为 verify_code。
+			// 按《接口文档.md》约定 uid 以 uint64 的字符串形式提交；
+			// 原先的 toInt() 会把超出 int 范围的输入静默截成 0，从而请求到 uid=0
+			bool be_valid_uid = false;
+			const std::uint64_t uid = ui->user_edit->text().toULongLong(&be_valid_uid);
+			if (!be_valid_uid)
+			{
+				showTip(tr("账号超出有效范围"), false);
+				return;
+			}
+
 			QJsonObject json_object;
-			json_object.insert("user", ui->user_edit->text().toInt());
+			json_object.insert("user", QString::number(uid));
 			json_object.insert("email", ui->email_edit->text());
 			json_object.insert("password", ui->new_password_edit->text());
 			json_object.insert("verify_code", ui->verify_edit->text());

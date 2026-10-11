@@ -34,7 +34,8 @@ private:
     QMap<ReqId, std::function<void(const QJsonObject&)>> m_handlers;
     Ui::LoginDialog *ui;
     QMap<TipErr, QString> m_tipErrs;
-    int m_uid = 0;
+    /// /user_login 响应里的 uid，也是后续 TCP 登录帧携带的 uid，统一按 uint64 保存
+    std::uint64_t m_uid = 0;
     QString m_token;
 
 private slots:

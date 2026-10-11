@@ -113,7 +113,7 @@ void TCPManager::closeSession(const QString& reason)
 void TCPManager::initHandlers()
 {
     m_handlers.emplace(
-        ReqId::ID_CHAT_LOGIN_RESP,
+        ReqId::ID_CHAT_LOGIN_RSP,
         [this](const QByteArray& body)
             {
                 QJsonParseError parse_error{};
@@ -138,16 +138,26 @@ void TCPManager::initHandlers()
                     return;
                 }
 
-                const std::uint64_t uid = std::stoull(json_object.value("uid").toString().toStdString());
+                // uid 由服务端以 uint64 字符串形式下发（QJson 数字只有 53 位有效整数）。
+                // 原实现直接用 toString() + std::stoull：服务端若按旧约定发数字，
+                // toString() 得到空串，std::stoull 会抛 std::invalid_argument 导致进程终止
+                const std::optional<std::uint64_t> uid = parseUid(json_object.value("uid"));
+                if (!uid.has_value())
+                {
+                    LOG_WARN() << "[tcp] login resp has invalid uid:" << json_object;
+                    emit sig_loginFailed(ErrorCodes::ERR_JSON);
+                    return;
+                }
+
                 const QString name = json_object.value("name").toString();
                 const QString token = json_object.value("token").toString();
 
                 auto& user = UserManager::GetInstance();
-                user.setUid(uid);
+                user.setUid(uid.value());
                 user.setName(name);
                 user.setToken(token);
 
-                LOG_INFO() << "[tcp] login to chat server success, uid:" << uid << "name:" << name;
+                LOG_INFO() << "[tcp] login to chat server success, uid:" << uid.value() << "name:" << name;
                 emit sig_switchToChatDialog();
             });
     m_handlers.emplace(
@@ -169,21 +179,31 @@ void TCPManager::initHandlers()
 
                 // 文档：失败响应仅含 error 字段（1011 uid非法 / 1012 token不一致 / 1002 RPC失败）
                 const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
-                if (error != ErrorCodes::SUCCESS)
+                if (error != ErrorCodes::SUCCESS && error != ErrorCodes::USER_NOT_FOUND)
                 {
-                    LOG_WARN() << "[tcp] login to chat server failed, error:" << error;
+                    LOG_WARN() << "[tcp] search user failed, error:" << error;
                     emit sig_loginFailed(error);
                     return;
                 }
 
-                if (json_object.value("uid").toString() == "0") // 如果返回的uid是0代表未找到
+                // uid 由服务端以 uint64 字符串形式下发；返回 0 表示未找到
+                const std::optional<std::uint64_t> uid = parseUid(json_object.value("uid"));
+                if (!uid.has_value())
                 {
+                    LOG_WARN() << "[tcp] search resp has invalid uid:" << json_object;
+                    emit sigUserSearchFinish(nullptr);
+                    return;
+                }
+
+                if (uid.value() == 0 || error == ErrorCodes::USER_NOT_FOUND)
+                {
+                    LOG_DEBUG() << "[tcp] search user not found";
                     emit sigUserSearchFinish(nullptr);
                     return;
                 }
 
                 auto serch_info = std::make_shared<SearchInfo>(
-                    std::stoull(json_object.value("uid").toString().toStdString()),
+                    uid.value(),
                     json_object.value("user_name").toString(),
                     json_object.value("desc").toString(),
                     static_cast<Sex>(json_object.value("sex").toInt()),
@@ -228,7 +248,19 @@ void TCPManager::slot_tcpConnect(ServerInfo server_info)
 // NOLINTNEXTLINE == data 异步执行需要复制
 void TCPManager::slotSendData(const ReqId req_id, QByteArray data)
 {
-    const quint16 id = req_id;
+    const std::optional<std::uint16_t> message_id = ChatProtocol::toMessageId(req_id);
+    if (!message_id.has_value())
+    {
+        LOG_WARN() << "[tcp] no wire message id for req id:" << static_cast<int>(req_id);
+        return;
+    }
+
+    if (!isConnected())
+    {
+        LOG_WARN() << "[tcp] socket is not connected, message dropped";
+        return;
+    }
+
     const quint16 len = static_cast<quint16>(data.size());
 
     QByteArray block;
@@ -236,7 +268,7 @@ void TCPManager::slotSendData(const ReqId req_id, QByteArray data)
 
     out.setByteOrder(QDataStream::BigEndian);
 
-    out << id << len;
+    out << message_id.value() << len;
 
     block.append(data);
     m_socket.write(block);

@@ -2,6 +2,7 @@
 #define GLOBAL_H
 
 #include <QWidget>
+#include <cstdint>
 #include <functional>
 #include <QRegularExpression>
 #include "QStyle"
@@ -60,8 +61,8 @@ enum ReqId : std::uint16_t
     ID_REG_USER, // 注册用户
     ID_RESET_PWD, // 重置密码
     ID_LOGIN_USER, // 用户登录
-    ID_CHAT_LOGIN, // 聊天系统登录
-    ID_CHAT_LOGIN_RESP, // 聊天系统登录回包
+    ID_CHAT_LOGIN_REQ, // 聊天系统登录
+    ID_CHAT_LOGIN_RSP, // 聊天系统登录回包
     ID_SEARCH_USER_REQ, // 查询用户请求
     ID_SEARCH_USER_RSP, // 查询用户请求回包
     ID_ADD_FRIEDN_REQ, // 添加好友请求
@@ -110,6 +111,7 @@ enum ErrorCodes : std::uint16_t
     USER_UID_INVALID = 1011, // 用户id非法或不存在
     USER_TOKEN_INVALID = 1012, // token非法或已失效
     SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis连接池超时或不可达）
+    USER_NOT_FOUND = 1014, // 未找到查询的用户
 };
 
 /**
@@ -131,8 +133,19 @@ inline constexpr int MAX_LENGTH = 2048; // body 最大长度，超出服务端�
 /// 线上 message_id
 enum MessageId : std::uint16_t
 {
-    MESSAGE_CHAT_LOGIN = 0, // 客户端 -> 服务端：{"uid":<int>, "token":<string>}
-    MESSAGE_CHAT_LOGIN_RESP = 1, // 服务端 -> 客户端：{"error":<int>, ...}
+    MESSAGE_CHAT_LOGIN_REQ = 1001,    // 登录请求
+    MESSAGE_CHAT_LOGIN_RSP,           // 登录回包
+    MESSAGE_SEARCH_USER_REQ,          //用户搜索请求
+    MESSAGE_SEARCH_USER_RSP,          //搜索用户回包
+    MESSAGE_ADD_FRIEND_REQ,           //申请添加好友请求
+    MESSAGE_ADD_FRIEND_RSP,           //申请添加好友回复
+    MESSAGE_NOTIFY_ADD_FRIEND_REQ,    //通知用户添加好友申请
+    MESSAGE_AUTH_FRIEND_REQ,          //认证好友请求
+    MESSAGE_AUTH_FRIEND_RSP,          //认证好友回复
+    MESSAGE_NOTIFY_AUTH_FRIEND_REQ,   //通知用户认证好友申请
+    MESSAGE_TEXT_CHAT_MSG_REQ,        //文本聊天信息请求
+    MESSAGE_TEXT_CHAT_MSG_RSP,        //文本聊天信息回复
+    MESSAGE_NOTIFY_TEXT_CHAT_MSG_REQ, //通知用户文本聊天信息
 };
 
 /**
@@ -152,6 +165,20 @@ enum MessageId : std::uint16_t
  * @brief errorCodeToTip 服务器 error 字段 -> 用户可读提示
  */
 [[nodiscard]] QString errorCodeToTip(int error_code);
+
+/**
+ * @brief parseUid 从 JSON 字段解析用户 uid（uint64）
+ *
+ * 约定（见根目录《接口文档.md》）：uid 一律以 **uint64 的字符串形式**传递。
+ * 原因：QJsonValue 内部用 double 存储数字，只有 53 位有效整数，超过 2^53 的
+ * uid 会静默丢精度，因此不能依赖数字形式。
+ *
+ * 为兼容尚未切换的服务端，这里同时接受数字形式，但仅当值落在 double 可精确
+ * 表示的整数区间内才可信，超出会记 WARN（此时应视为服务端未按约定发送）。
+ *
+ * @return 字段缺失、类型不符或字符串非法时返回 std::nullopt
+ */
+[[nodiscard]] std::optional<std::uint64_t> parseUid(const QJsonValue& value);
 
 /// 登录页面错误提示
 enum class TipErr : std::uint8_t
@@ -175,7 +202,7 @@ enum class ClickLabelState : std::uint8_t
 /// /user_login 响应中分配到的 ChatServer 信息
 struct ServerInfo
 {
-    int _uid = 0;
+    std::uint64_t _uid = 0;
     QString _token;
     QString _host;
     QString _port;

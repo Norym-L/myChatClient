@@ -122,6 +122,8 @@ void SearchList::slotItemClicked(QListWidgetItem* item)
         waitPending(true);
 
         // 发送请求给服务器
+        // 注意：搜索字段按《接口文档.md》是「对方的 uid 或用户名」，此处原样透传用户输入
+        // （输入 uid 时本身就是十进制字符串）。不要走 parseUid —— 那样就无法按用户名搜索
         QJsonObject json_object;
         json_object["uid"] = m_searchEditText;
 

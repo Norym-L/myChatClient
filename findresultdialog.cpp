@@ -43,12 +43,15 @@ void FindResultDialog::flashSearchInfo()
     {
         setWindowTitle("添加好友");
 
+        ui->add_friend_button->setText("添加好友");
+
         // 头像
         QString app_path = QCoreApplication::applicationDirPath();
         QString pix_path = QDir::toNativeSeparators(app_path + QDir::separator() + "static" + QDir::separator() + m_searchInfo->icon);
         QPixmap head_pix(pix_path);
         head_pix = head_pix.scaled(ui->head_label->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->head_label->setPixmap(head_pix);
+        ui->head_label->show();
 
         ui->name_label->setText(m_searchInfo->userName);
 
