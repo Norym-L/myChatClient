@@ -282,10 +282,11 @@ void ApplyFriend::addTipLabel(ClickedLabel* label, const QPoint current_point, Q
 	next_point.setY(label->pos().y());
 }
 
-void ApplyFriend::setSerachInfo(const std::shared_ptr<SearchInfo>& si){
-	m_searchInfo = si;
+void ApplyFriend::setSerachInfo(std::shared_ptr<SearchInfo> si){
+	m_searchInfo = std::move(si);
 	ui->verify_info_edit->setText("我是 " + UserManager::GetInstance().getName()); // 获取自己的名字
-	ui->back_name_edit->setText(si->userName);
+	ui->back_name_edit->setText(m_searchInfo->userName);
+	LOG_INFO() << "set search info, uid: " << m_searchInfo->uid;
 }
 
 bool ApplyFriend::eventFilter(QObject* object, QEvent* event)

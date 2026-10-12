@@ -110,25 +110,30 @@ void TCPManager::closeSession(const QString& reason)
     m_socket.abort();
 }
 
+QJsonObject TCPManager::ParseToJson(const QByteArray& body)
+{
+    QJsonParseError parse_error{};
+    // 文档：body 为多行 JSON，非 ASCII 字符可能被转义为 \uXXXX，按标准 JSON 解析
+    const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+    if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+    {
+        LOG_WARN() << "[tcp] resp json parse failed:" << parse_error.errorString() << body;
+        QJsonObject json;
+        json["error"] = ErrorCodes::ERROR_JSON;
+        return json;
+    }
+
+    const QJsonObject json_object = document.object();
+    return json_object;
+}
+
 void TCPManager::initHandlers()
 {
     m_handlers.emplace(
         ReqId::ID_CHAT_LOGIN_RSP,
         [this](const QByteArray& body)
             {
-                QJsonParseError parse_error{};
-                // 文档：body 为多行 JSON，非 ASCII 字符可能被转义为 \uXXXX，按标准 JSON 解析
-                const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
-                if (parse_error.error != QJsonParseError::NoError || !document.isObject())
-                {
-                    LOG_WARN() << "[tcp] login resp json parse failed:" << parse_error.errorString() <<
-                        body;
-                    emit sig_loginFailed(ErrorCodes::ERR_JSON);
-                    return;
-                }
-
-                const QJsonObject json_object = document.object();
-
+                const auto json_object = ParseToJson(body);
                 // 文档：失败响应仅含 error 字段（1011 uid非法 / 1012 token不一致 / 1002 RPC失败）
                 const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
                 if (error != ErrorCodes::SUCCESS)
@@ -164,25 +169,13 @@ void TCPManager::initHandlers()
         ReqId::ID_SEARCH_USER_RSP,
         [this](const QByteArray& body)
             {
-                QJsonParseError parse_error{};
-                // 文档：body 为多行 JSON，非 ASCII 字符可能被转义为 \uXXXX，按标准 JSON 解析
-                const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
-                if (parse_error.error != QJsonParseError::NoError || !document.isObject())
-                {
-                    LOG_WARN() << "[tcp] login resp json parse failed:" << parse_error.errorString() <<
-                        body;
-                    emit sig_loginFailed(ErrorCodes::ERR_JSON);
-                    return;
-                }
-
-                const QJsonObject json_object = document.object();
-
+                const auto json_object = ParseToJson(body);
                 // 文档：失败响应仅含 error 字段（1011 uid非法 / 1012 token不一致 / 1002 RPC失败）
                 const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
                 if (error != ErrorCodes::SUCCESS && error != ErrorCodes::USER_NOT_FOUND)
                 {
                     LOG_WARN() << "[tcp] search user failed, error:" << error;
-                    emit sig_loginFailed(error);
+                    emit sigUserSearchFinish(nullptr);
                     return;
                 }
 
@@ -212,6 +205,41 @@ void TCPManager::initHandlers()
 
                 emit sigUserSearchFinish(std::move(serch_info));
             });
+    // 收到好友申请
+    m_handlers.emplace(
+        ReqId::ID_AUTH_FRIEND_REQ,
+        [this](const QByteArray& body)
+            {
+                const auto json_object = ParseToJson(body);
+                const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+                if (error != ErrorCodes::SUCCESS)
+                {
+                    LOG_WARN() << "[tcp] receive a auth friend request failed, error:" << error;
+                    return;
+                }
+
+                const auto uid = parseUid(json_object.value("uid"));
+                if (!uid.has_value())
+                {
+                    LOG_WARN() << "[tcp] receive a auth friend request has invalid uid:" << json_object;
+                    return;
+                }
+                auto auth_friend_info = std::make_shared<AddFriendApply>(
+                    uid.value(),
+                    json_object["name"].toString(),
+                    json_object["verify_info"].toString(),
+                    json_object["icon"].toString()
+                );
+#ifdef _DEBUG
+                LOG_DEBUG() << "recv add friend request as <> id: "
+                    << uid
+                    << "name:" << json_object["name"].toString()
+                    << "verify_info: " << json_object["verify_info"].toString()
+                    << "icon: " << json_object["icon"].toString();
+#endif
+                sigReciveFriendApply(std::move(auth_friend_info));
+            }
+    );
 }
 
 void TCPManager::slot_tcpConnect(ServerInfo server_info)
@@ -274,7 +302,7 @@ void TCPManager::slotSendData(const ReqId req_id, QByteArray data)
     m_socket.write(block);
 }
 
-bool TCPManager::sendChatMessage(const ReqId req_id, const QJsonObject& body)
+bool TCPManager::sendJsonMessage(const ReqId req_id, const QJsonObject& body)
 {
     const std::optional<std::uint16_t> message_id = ChatProtocol::toMessageId(req_id);
     if (!message_id.has_value())

@@ -266,7 +266,7 @@ void LoginDialog::slot_tcpConnectFinish(bool success)
 	json_object.insert("uid", QString::number(m_uid));
 	json_object.insert("token", m_token);
 
-	if (!TCPManager::GetInstance().sendChatMessage(ReqId::ID_CHAT_LOGIN_REQ, json_object))
+	if (!TCPManager::GetInstance().sendJsonMessage(ReqId::ID_CHAT_LOGIN_REQ, json_object))
 	{
 		showTip(tr("登录消息发送失败"), false);
 		enableLoginButton(true);

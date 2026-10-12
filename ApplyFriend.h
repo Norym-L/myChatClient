@@ -40,7 +40,7 @@ public:
 	void initTipLabel();
 	// 添加用户标签（FriendLabel）
 	void addTipLabel(ClickedLabel* label, QPoint current_point, QPoint& next_point, int text_width, int text_height);
-	void setSerachInfo(const std::shared_ptr<SearchInfo>& si);
+	void setSerachInfo(std::shared_ptr<SearchInfo> si);
 
 protected:
 	bool eventFilter(QObject*, QEvent*) override;

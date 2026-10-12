@@ -66,6 +66,7 @@ void FindResultDialog::flashSearchInfo()
 void FindResultDialog::slotOnAddFriendButtonClickedifFined()
 {
     const auto apply_dialog = new ApplyFriend(m_parent);
+    apply_dialog->setSerachInfo(m_searchInfo);
     apply_dialog->show();
     hide();
 }

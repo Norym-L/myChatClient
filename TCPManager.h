@@ -34,7 +34,7 @@ public:
      * @param body 消息体，序列化为紧凑 JSON
      * @return false 表示未连接、编号无对应 message_id 或 body 超过 2048 字节
      */
-    bool sendChatMessage(ReqId req_id, const QJsonObject& body);
+    bool sendJsonMessage(ReqId req_id, const QJsonObject& body);
 
     /// 当前是否已与 ChatServer 建立连接
     [[nodiscard]] bool isConnected() const;
@@ -63,6 +63,8 @@ private:
     void handleMessage(std::uint16_t message_id, const QByteArray& body);
     /// 关闭并复位会话（不再对外发信号）
     void closeSession(const QString& reason);
+    /// 转化为qjson
+    static QJsonObject ParseToJson(const QByteArray& body);
 
     std::map<ReqId, std::function<void(const QByteArray&)>> m_handlers;
     QByteArray m_buffer;
