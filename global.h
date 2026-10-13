@@ -98,7 +98,7 @@ enum ErrorCodes : std::uint16_t
     ERR_REQUEST_TOO_LONG = 4, // 请求体超出服务端缓冲区上限
 
     /// 服务器返回值
-    ERROR_JSON = 1001, // Json解析错误或必填字段缺失
+    ERROR_JSON = 1001, // Json解析错误
     RPC_FAILED = 1002, // RPC请求失败
     VERIFY_CODE_EXPIRED = 1003, // 验证码过期
     VERIFY_CODE_ERROR = 1004, // 验证码错误
@@ -108,10 +108,14 @@ enum ErrorCodes : std::uint16_t
     PASSWORD_UP_FAILED = 1008, // 密码修改失败
     PASSWORD_INVALID = 1009, // 密码无效
     REGISTER_USER_FAILED = 1010, // 用户注册失败
-    USER_UID_INVALID = 1011, // 用户id非法或不存在
-    USER_TOKEN_INVALID = 1012, // token非法或已失效
-    SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis连接池超时或不可达）
-    USER_NOT_FOUND = 1014, // 未找到查询的用户
+    USER_UID_INVALID = 1011, // 非法用户id
+    USER_TOKEN_INVALID = 1012, // 用户token非法
+    SERVICE_UNAVAILABLE = 1013, // 依赖服务不可用（数据库/Redis 连接池超时或不可达）
+    USER_NOT_FOUND = 1014, // 查询的用户不存在
+    CAN_NOT_ADD_YOURSELF_AS_A_FRIEND = 1015, // 用户不能把自己作为添加好友的对象
+    USER_IS_YOUR_FRIEND_BEFOR = 1016, // 添加好友的对象已经是好友
+    CHACK_YOUR_RECEIVED_FRIEND_REQUEST = 1018, // 请检查好友申请列表，对方已经向你发起了好友申请
+    USER_OUTLINE = 1019, // 用户离线
 };
 
 /**

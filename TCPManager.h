@@ -90,7 +90,8 @@ signals:
     void sigUserSearchFinish(std::shared_ptr<SearchInfo> info); // 用户搜索收到回包
     void sigSendData(ReqId id, QByteArray data); // 发送数据
 
-    void sigReciveFriendApply(std::shared_ptr<AddFriendApply>); // 收到添加好友申请
+    void sigSendFriendApplySuccess(std::uint64_t add_friend_request_id); // 成功发送好友请求并返回好友请求编号
+    void sigReciveFriendApply(std::uint64_t add_friend_request_id); // 收到添加好友申请
     void sigAddAuthFriend(std::shared_ptr<AuthInfo>); // 对端同意添加好友
     void sigAuthRsp(std::shared_ptr<AuthRsp>); // 自己同意添加好友
 };

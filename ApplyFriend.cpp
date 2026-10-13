@@ -623,12 +623,10 @@ void ApplyFriend::slotApplySure()
 	emit TCPManager::GetInstance().sigSendData(ReqId::ID_ADD_FRIEDN_REQ, std::move(json_data));
 
 	hide();
-	deleteLater();
 }
 
 void ApplyFriend::slotApplyCancel()
 {
 	LOG_DEBUG() << "[friend apply page] slot apply cancel";
 	hide();
-	deleteLater();
 }

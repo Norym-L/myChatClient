@@ -207,39 +207,34 @@ void TCPManager::initHandlers()
             });
     // 收到好友申请
     m_handlers.emplace(
-        ReqId::ID_AUTH_FRIEND_REQ,
+        ReqId::ID_NOTIFY_ADD_FRIEND_REQ,
         [this](const QByteArray& body)
+        {
+            const auto json_object = ParseToJson(body);
+            const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+            if (error != ErrorCodes::SUCCESS)
             {
-                const auto json_object = ParseToJson(body);
-                const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
-                if (error != ErrorCodes::SUCCESS)
-                {
-                    LOG_WARN() << "[tcp] receive a auth friend request failed, error:" << error;
-                    return;
-                }
-
-                const auto uid = parseUid(json_object.value("uid"));
-                if (!uid.has_value())
-                {
-                    LOG_WARN() << "[tcp] receive a auth friend request has invalid uid:" << json_object;
-                    return;
-                }
-                auto auth_friend_info = std::make_shared<AddFriendApply>(
-                    uid.value(),
-                    json_object["name"].toString(),
-                    json_object["verify_info"].toString(),
-                    json_object["icon"].toString()
-                );
-#ifdef _DEBUG
-                LOG_DEBUG() << "recv add friend request as <> id: "
-                    << uid
-                    << "name:" << json_object["name"].toString()
-                    << "verify_info: " << json_object["verify_info"].toString()
-                    << "icon: " << json_object["icon"].toString();
-#endif
-                sigReciveFriendApply(std::move(auth_friend_info));
+                LOG_WARN() << "recv auth friend request failed, error: " << error;
             }
+            emit sigReciveFriendApply(json_object["add_friend_request_id"].toString().toULongLong()); // 在好友申请界面显示
+        }
     );
+    // 发送好友申请回包
+    m_handlers.emplace(
+        ReqId::ID_ADD_FRIEDN_RSP,
+        [this](const QByteArray& body)
+        {
+            const auto json_object = ParseToJson(body);
+            const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+            if (error != ErrorCodes::SUCCESS)
+            {
+                LOG_WARN() << "send add friend request failed, error: " << error;
+            }
+            emit sigSendFriendApplySuccess(json_object["add_friend_request_id"].toString().toULongLong());
+        }
+    );
+    
+        
 }
 
 void TCPManager::slot_tcpConnect(ServerInfo server_info)

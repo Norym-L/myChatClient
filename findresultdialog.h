@@ -3,8 +3,11 @@
 
 #include <QDialog>
 #include <memory>
+#include <QPointer>
 
 #include "UserData.h"
+
+class ApplyFriend;
 
 QT_BEGIN_NAMESPACE
 
@@ -37,6 +40,7 @@ private slots:
 private:
 	Ui::FindResultDialog* ui;
 
+	QPointer<ApplyFriend> m_applyFriendPage;
 	std::shared_ptr<SearchInfo> m_searchInfo;
 	QWidget* m_parent;
 };
