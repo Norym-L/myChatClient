@@ -209,32 +209,30 @@ void TCPManager::initHandlers()
     m_handlers.emplace(
         ReqId::ID_NOTIFY_ADD_FRIEND_REQ,
         [this](const QByteArray& body)
-        {
-            const auto json_object = ParseToJson(body);
-            const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
-            if (error != ErrorCodes::SUCCESS)
             {
-                LOG_WARN() << "recv auth friend request failed, error: " << error;
+                const auto json_object = ParseToJson(body);
+                const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+                if (error != ErrorCodes::SUCCESS)
+                {
+                    LOG_WARN() << "recv auth friend request failed, error: " << error;
+                }
+                emit sigReciveFriendApply(json_object["add_friend_request_id"].toString().toULongLong()); // 在好友申请界面显示
             }
-            emit sigReciveFriendApply(json_object["add_friend_request_id"].toString().toULongLong()); // 在好友申请界面显示
-        }
     );
     // 发送好友申请回包
     m_handlers.emplace(
         ReqId::ID_ADD_FRIEDN_RSP,
         [this](const QByteArray& body)
-        {
-            const auto json_object = ParseToJson(body);
-            const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
-            if (error != ErrorCodes::SUCCESS)
             {
-                LOG_WARN() << "send add friend request failed, error: " << error;
+                const auto json_object = ParseToJson(body);
+                const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+                if (error != ErrorCodes::SUCCESS)
+                {
+                    LOG_WARN() << "send add friend request failed, error: " << error;
+                }
+                emit sigSendFriendApplySuccess(json_object["add_friend_request_id"].toString().toULongLong());
             }
-            emit sigSendFriendApplySuccess(json_object["add_friend_request_id"].toString().toULongLong());
-        }
     );
-    
-        
 }
 
 void TCPManager::slot_tcpConnect(ServerInfo server_info)

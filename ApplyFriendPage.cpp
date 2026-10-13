@@ -104,7 +104,7 @@ void ApplyFriendPage::loadApplyList()
         const auto name_i = random_value % names.size();
 
         auto* contact_user_widget = new ApplyFriendItem();
-        const auto info = std::make_shared<ApplyInfo>(0, names[name_i], "测试用说明", heads[head_i], "", Sex::UNKNOWN, Status::WAITING);
+        const auto info = std::make_shared<ApplyInfo>(0, 0, names[name_i], "测试用说明", heads[head_i], "", Sex::UNKNOWN, Status::WAITING);
         addNewApply(info);
     }
 #endif
@@ -112,7 +112,7 @@ void ApplyFriendPage::loadApplyList()
 
 void ApplyFriendPage::slotAuthRsp(std::shared_ptr<AuthRsp> auth_rsp)
 {
-    const auto uid = auth_rsp->uid;
+    const auto uid = auth_rsp->m_add_friend_request_id;
     const auto it = m_unauthItems.find(uid);
     if (it == m_unauthItems.end())
     {
@@ -122,4 +122,3 @@ void ApplyFriendPage::slotAuthRsp(std::shared_ptr<AuthRsp> auth_rsp)
     it->second->showAddButton(false);
     it->second->setTipText(auth_rsp->status == Status::ACCEPTED ? tr("已接受") : tr("已拒绝"));
 }
-

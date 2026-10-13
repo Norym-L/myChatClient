@@ -31,11 +31,15 @@ public:
     /// 获取用户申请列表
     [[nodiscard]] std::vector<std::shared_ptr<ApplyInfo>> getApplyList() const { return m_applyList; }
 
+public slots:
+    void slotReceiveFriendApply(const std::uint64_t add_friend_request_id);
+
 private:
-    UserManager() = default;
+    UserManager();
 
     std::uint64_t m_uid = 0;
     QString m_name;
     QString m_token;
+    std::vector<std::uint64_t> m_friendRequestIds; // 存储所有好友请求编号
     std::vector<std::shared_ptr<ApplyInfo>> m_applyList;
 };
