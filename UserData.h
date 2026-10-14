@@ -36,10 +36,10 @@ struct SearchInfo
 struct AddFriendApply // 对方发送的添加好友申请
 {
     explicit AddFriendApply(const std::uint64_t add_friend_request_id, const std::uint64_t from_uid, QString name, QString desc, QString icon)
-        : m_add_friend_request_id(add_friend_request_id), from_uid(from_uid), name(std::move(name)), desc(std::move(desc)), icon(std::move(icon))
+        : add_friend_request_id(add_friend_request_id), from_uid(from_uid), name(std::move(name)), desc(std::move(desc)), icon(std::move(icon))
     {}
 
-    std::uint64_t m_add_friend_request_id;
+    std::uint64_t add_friend_request_id;
     std::uint64_t from_uid;
     QString name;
     QString desc;
@@ -48,25 +48,26 @@ struct AddFriendApply // 对方发送的添加好友申请
 
 struct ApplyInfo
 {
-    explicit ApplyInfo(const std::uint64_t add_friend_request_id, const std::uint64_t uid, QString name, QString desc, QString icon,
+    explicit ApplyInfo(const std::uint64_t add_friend_request_id, const std::uint64_t from_uid, const std::uint64_t to_uid, QString name, QString desc, QString icon,
                        QString nick, const Sex sex, const Status status)
-        : m_add_friend_request_id(add_friend_request_id), uid(uid), name(std::move(name)), desc(std::move(desc)), icon(std::move(icon)), nick(std::move(nick)), sex(sex), status(status)
+        : add_friend_request_id(add_friend_request_id), from_uid(from_uid), to_uid(to_uid), name(std::move(name)), desc(std::move(desc)), icon(std::move(icon)), nick(std::move(nick)), sex(sex), status(status)
     {}
 
     explicit ApplyInfo(const std::shared_ptr<AddFriendApply>& apply)
-        : m_add_friend_request_id(apply->m_add_friend_request_id), uid(apply->from_uid), name(apply->name), desc(apply->desc), icon(apply->icon)
+        : add_friend_request_id(apply->add_friend_request_id), from_uid(apply->from_uid), name(apply->name), desc(apply->desc), icon(apply->icon)
     {}
 
     void setIcon(const QString& head) { icon = head; }
 
-    std::uint64_t m_add_friend_request_id;
-    std::uint64_t uid{};
+    std::uint64_t add_friend_request_id;
+    std::uint64_t from_uid{};
+    std::uint64_t to_uid{};
     QString name{};
     QString desc{};
     QString icon{};
     QString nick{};
     Sex sex{Sex::UNKNOWN};
-    Status status{Status::WAITING}; // 是否接受33
+    Status status{Status::WAITING}; // 是否接受
 };
 
 struct AuthInfo

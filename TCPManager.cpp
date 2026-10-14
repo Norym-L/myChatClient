@@ -3,6 +3,7 @@
 #include <QDataStream>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QJsonArray>
 #include <QtEndian>
 
 #include "logger.h"
@@ -231,6 +232,47 @@ void TCPManager::initHandlers()
                     LOG_WARN() << "send add friend request failed, error: " << error;
                 }
                 emit sigSendFriendApplySuccess(json_object["add_friend_request_id"].toString().toULongLong());
+            }
+    );
+    // 同步服务器好友申请列表回包
+    m_handlers.emplace(
+        ReqId::ID_SYNC_FRIEND_REQUEST_RSP,
+        [this](const QByteArray& body)
+            {
+                const auto json_object = ParseToJson(body);
+                const int error = json_object.value("error").toInt(ErrorCodes::ERROR_JSON);
+                if (error != ErrorCodes::SUCCESS)
+                {
+                    LOG_WARN() << "send sync friend request failed, error: " << error;
+                }
+                if (json_object.value("count").toString().toULongLong() == 0)
+                {
+                    return;
+                }
+                const QJsonArray array = json_object.value("apply_infos").toArray();
+                std::vector<std::shared_ptr<ApplyInfo>> apply_infos;
+                apply_infos.reserve(json_object.value("count").toString().toULongLong());
+                for (const auto it : array)
+                {
+                    if (!it.isObject())
+                    {
+                        continue;
+                    }
+                    QJsonObject info = it.toObject();
+                    const auto apply_info = std::make_shared<ApplyInfo>(
+                        info["id"].toString().toULongLong(),
+                        info["from_uid"].toString().toULongLong(),
+                        info["to_uid"].toString().toULongLong(),
+                        info["name"].toString(),
+                        info["verify_info"].toString(),
+                        info["icon"].toString(),
+                        "",
+                        static_cast<Sex>(info["sex"].toInt()),
+                        static_cast<Status>(info["state"].toInt()));
+                    apply_infos.push_back(apply_info);
+                }
+
+                emit sigSyncFriendRequestFinish(apply_infos);
             }
     );
 }

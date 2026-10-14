@@ -78,40 +78,12 @@ namespace ChatProtocol
 {
 std::optional<std::uint16_t> toMessageId(const ReqId req_id)
 {
-    switch (req_id)
-    {
-    case ReqId::ID_CHAT_LOGIN_REQ:
-        return MESSAGE_CHAT_LOGIN_REQ;
-    case ReqId::ID_CHAT_LOGIN_RSP:
-        return MESSAGE_CHAT_LOGIN_RSP;
-    case ReqId::ID_SEARCH_USER_REQ:
-        return MESSAGE_SEARCH_USER_REQ;
-    case ReqId::ID_SEARCH_USER_RSP:
-        return MESSAGE_SEARCH_USER_RSP;
-    case ReqId::ID_ADD_FRIEDN_REQ:
-        return MESSAGE_ADD_FRIEND_REQ;
-    case ReqId::ID_ADD_FRIEDN_RSP:
-        return MESSAGE_ADD_FRIEND_RSP;
-    default:
-        return std::nullopt;
-    }
+    return req_id - 4;
 }
 
 std::optional<ReqId> toReqId(const std::uint16_t message_id)
 {
-    switch (message_id)
-    {
-    case MESSAGE_CHAT_LOGIN_REQ:
-        return ReqId::ID_CHAT_LOGIN_REQ;
-    case MESSAGE_CHAT_LOGIN_RSP:
-        return ReqId::ID_CHAT_LOGIN_RSP;
-    case MESSAGE_SEARCH_USER_REQ:
-        return ReqId::ID_SEARCH_USER_REQ;
-    case MESSAGE_SEARCH_USER_RSP:
-        return ReqId::ID_SEARCH_USER_RSP;
-    default:
-        return std::nullopt;
-    }
+    return static_cast<ReqId>(message_id + 4);
 }
 } // namespace ChatProtocol
 

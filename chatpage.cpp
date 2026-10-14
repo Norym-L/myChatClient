@@ -10,6 +10,7 @@
 
 #include "friendwidget.h"
 #include "loadingdialog.h"
+#include "UserManager.h"
 
 namespace
 {
@@ -302,6 +303,12 @@ void ChatPage::slotSideBarSwitchToContact()
     LOG_DEBUG() << "[ui][chat page] slotSideBarSwitchToContact";
     ui->stackedWidget->setCurrentWidget(ui->friend_apply_page);
     freshSideBarStateToSelected(ui->side_contact_widget, "sideBar");
+
+#ifdef _DEBUG // 测试用，在这里同步好友验证消息列表
+    emit UserManager::GetInstance().sigSyncriendRequest();
+    ui->friend_apply_page->loadApplyList();
+#endif
+
     m_state = ChatUiMode::CONTACT_MODE;
     showSerachList(false);
 }

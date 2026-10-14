@@ -23,13 +23,11 @@ public:
 
     // 添加新的申请（不管有没有接受）
     void addNewApply(std::shared_ptr<ApplyInfo> apply);
+    // 加载申请列表
+    void loadApplyList();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
-
-private:
-    // 加载申请列表
-    void loadApplyList();
 
 public slots:
     // 点击同意添加好友

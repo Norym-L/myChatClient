@@ -31,8 +31,17 @@ public:
     /// 获取用户申请列表
     [[nodiscard]] std::vector<std::shared_ptr<ApplyInfo>> getApplyList() const { return m_applyList; }
 
+    /// 同步服务器的好友请求
+    void syncFriendRequestFromServer() const;
+
+signals:
+    void sigSyncriendRequest();
+
 public slots:
-    void slotReceiveFriendApply(const std::uint64_t add_friend_request_id);
+    void slotReceiveFriendApply(const std::uint64_t add_friend_request_id) const;
+    void slotSyncFriendRequestFinish(std::vector<std::shared_ptr<ApplyInfo>> apply_infos);
+
+    void slotSyncriendRequest() const;
 
 private:
     UserManager();
@@ -40,6 +49,5 @@ private:
     std::uint64_t m_uid = 0;
     QString m_name;
     QString m_token;
-    std::vector<std::uint64_t> m_friendRequestIds; // 存储所有好友请求编号
     std::vector<std::shared_ptr<ApplyInfo>> m_applyList;
 };

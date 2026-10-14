@@ -71,5 +71,5 @@ QSize ApplyFriendItem::sizeHint() const
 
 std::uint64_t ApplyFriendItem::getUid() const
 {
-    return m_apply_info->uid;
+    return m_apply_info->from_uid;
 }

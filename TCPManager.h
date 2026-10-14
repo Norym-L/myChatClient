@@ -88,6 +88,7 @@ signals:
     void sig_tcpError(const QString& reason);
 
     void sigUserSearchFinish(std::shared_ptr<SearchInfo> info); // 用户搜索收到回包
+    void sigSyncFriendRequestFinish(std::vector<std::shared_ptr<ApplyInfo>> apply_infos); // 收到同步服务器好友申请回包
     void sigSendData(ReqId id, QByteArray data); // 发送数据
 
     void sigSendFriendApplySuccess(std::uint64_t add_friend_request_id); // 成功发送好友请求并返回好友请求编号

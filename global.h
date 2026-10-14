@@ -67,6 +67,8 @@ enum ReqId : std::uint16_t
     ID_SEARCH_USER_RSP, // 查询用户请求回包
     ID_ADD_FRIEDN_REQ, // 添加好友请求
     ID_ADD_FRIEDN_RSP, // 添加好友请求回包
+    ID_SYNC_FRIEND_REQUEST_REQ, // 获取好友申请列表
+    ID_SYNC_FRIEND_REQUEST_RSP, // 获取好友申请列表回包
     ID_NOTIFY_ADD_FRIEND_REQ, // 通知用户添加好友申请
     ID_AUTH_FRIEND_REQ, // 认证好友请求
     ID_AUTH_FRIEND_RSP, // 认证好友请求回包

@@ -28,6 +28,7 @@ ApplyFriendPage::~ApplyFriendPage()
 void ApplyFriendPage::addNewApply(std::shared_ptr<ApplyInfo> apply)
 {
     auto* apply_item = new ApplyFriendItem();
+    m_unauthItems.emplace(apply->add_friend_request_id, apply_item);
     apply_item->setInfo(std::move(apply));
     auto* item = new QListWidgetItem();
     item->setSizeHint(apply_item->sizeHint());
@@ -65,12 +66,18 @@ void ApplyFriendPage::paintEvent(QPaintEvent* event)
 void ApplyFriendPage::loadApplyList()
 {
     // 添加好友申请
-    for (const auto& apply : UserManager::GetInstance().getApplyList())
+    const auto apply_list = UserManager::GetInstance().getApplyList();
+    if (apply_list.size() > m_unauthItems.size())
     {
-        addNewApply(apply);
+        m_unauthItems.clear();
+        for (const auto& apply : UserManager::GetInstance().getApplyList())
+        {
+            addNewApply(apply);
+        }
     }
 
-#ifdef _DEBUG // 测试添加好友
+
+#if 0 // 测试添加好友
     static std::vector<QString> strs = {
         "hello world !",
         "nice to meet u",
