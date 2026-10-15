@@ -1,0 +1,95 @@
+# qtClient
+
+MyChat 桌面客户端。当前分支 `refactor/zmd-ui-qml` 正在把 UI 层从 Qt Widgets **整体重写为 Qt Quick**
+，视觉语言采用 [ZmdUI](third_party/ZmdUI) 组件库。
+
+> 深入设计见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+> 服务端接口见 `docs/ServerDocs/`（本机笔记，未入版本控制）与 [`接口文档.md`](接口文档.md)。
+
+## 当前状态
+
+| 已完成                                 | 未完成                       |
+|----------------------------------------|------------------------------|
+| 登录页、聊天空壳页、路由切换           | 注册、重置密码               |
+| 完整登录链路（HTTP → TCP 握手 → 切页） | 会话列表、消息气泡、输入框   |
+| core：协议 / 网络 / 会话 / 日志        | 联系人、好友搜索、加好友链路 |
+| 无 GUI 的命令行自检程序                | 好友验证消息列表             |
+
+## 技术栈
+
+- Qt 6.11.2 + C++20，Qt Quick / QML（ **不链接 QtWidgets**）
+- ZmdUI 1.0 组件库（vendor 在 `third_party/ZmdUI`，零图片资源，全 Shape/Canvas 绘制）
+- CMake ≥ 3.21 + Ninja，双工具链（MinGW / MSVC）
+
+## 构建
+
+### 命令行
+
+在仓库根执行：
+
+```bash
+cmake --preset mingw-debug
+cmake --build --preset mingw-debug
+```
+
+可用 preset：`mingw-debug`（推荐）、`mingw-release`、`msvc-debug`、`msvc-release`。
+产物在 `build/<preset>/`，构建后已自动 `windeployqt`，exe 旁边依赖齐全。
+
+> MSBuild 在本机被安全策略拦截，MSVC 配置只能用 Ninja 生成器 + 手铺环境变量。
+
+### CLion
+
+1. `File > Open` 打开 `C:/dev/MyChat/qtClient`
+2. `Settings > Build > CMake` 选 **`mingw-debug`**
+3. `Settings > Toolchains` 确认 MinGW（`C:/dev/Qt/Tools/mingw1310_64`）
+4. 直接 Run
+
+## 运行
+
+登录需要一个在跑的服务端。本地默认连 `http://localhost:8080`，
+可在 `assets/config.ini`（构建后复制到 exe 旁）里改：
+
+```ini
+[GateServer]
+host=localhost
+port=8080
+```
+
+登录链路需要 GateServer + ChatServer；注册还需要 Redis / MySQL / VerifyServer
+（端口分别是 6380 / 3308 / 50051，全都不是默认值，详见 `ARCHITECTURE.md` §8.2）。
+
+## 调试与自检
+
+```bash
+# 无 GUI 跑完整登录链路（exit 0 = 成功）
+qtClientLoginTest <uid> <password> [gateUrl]
+
+# 启动 GUI 并自动登录
+MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
+
+# 无头渲染一帧并抓图（用于自动化视觉验证）
+MYCHAT_SMOKE=<输出png> ./qtClient.exe
+```
+
+**任何一次运行都建议设 `QT_ASSUME_STDERR_HAS_CONSOLE=1`**，否则 Qt 日志走
+`OutputDebugString`，重定向后什么都看不到。
+详细用法见 [`tools/README.md`](tools/README.md)。
+
+## 目录一览
+
+```
+core/        协议 / 网络 / 会话 / 日志（自包含）
+src/         main.cpp、LoginController
+qml/         main.qml（路由壳）、pages/
+resources/   qml.qrc
+assets/      config.ini
+tests/       无 GUI 自检
+tools/       无头抓图用法
+third_party/ ZmdUI（vendor）
+```
+
+## 分支说明
+
+- `main`：旧的 Qt Widgets 前端（`.vcxproj`），保持可运行、可回退
+- `refactor/zmd-ui-qml`：本分支。旧前端源码已从本分支删除，
+  需要参考时用 `git show main:<路径>` / `git checkout main -- <路径>`

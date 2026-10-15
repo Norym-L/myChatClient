@@ -1,24 +1,29 @@
-# Visual Studio
+# ══════════════════════════════════════════════════════════════════════
+#  qtClient —— MyChat 客户端（Qt Quick + ZmdUI）
+#
+#  refactor/zmd-ui-qml 分支：旧的 Qt Widgets 前端已删除，只保留新客户端。
+#  main 分支保留旧代码，需要参考时用：
+#    git show main:<路径>            # 例：git show main:TCPManager.cpp
+#    git checkout main -- <路径>     # 取回单个文件
+# ══════════════════════════════════════════════════════════════════════
+
+# ── 构建产物（含 windeployqt 部署出来的 Qt 运行时，体积很大）────────────
+build/
+build-*/
+out/
+cmake-build-*/
+
+# ── IDE / 工具 ────────────────────────────────────────────────────────
+# CMakeUserPresets.json 是 IDE 自动生成的本地配置，环境相关，不进库
+.idea/
 .vs/
-x64/
-[Dd]ebug/
-[Rr]elease/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
 *.user
-*.suo
-*.userosscache
-*.opendb
-*.db
-*.ipch
 *.aps
 
-# CLion / CMake 历史遗留（防止误开误提交）
-.idea/
-cmake-build-*/
-/build/
-/out/
-compile_commands.json
-
-# 本地文档与工作区（不进库）
+# ── 本地文档与工作区（不进库）──────────────────────────────────────────
+# ⚠ /docs/ 下是 ServerDocs 接口文档，**未被 git 跟踪** —— 删掉了就找不回来
 /docs/
 /.workbuddy/
-/.af_verify

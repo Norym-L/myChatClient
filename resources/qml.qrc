@@ -1,0 +1,49 @@
+<!--
+    qtClient 资源清单。
+
+    资源路径与磁盘结构保持一致（:/qml/...），供 main.cpp 里
+    engine.addImportPath("qrc:/qml") 解析：
+
+      :/qml/ZmdUI/qmldir   →  "import ZmdUI 1.0"
+      :/qml/main.qml       →  应用窗口壳
+      :/qml/pages/*.qml    →  各页面
+
+    ZmdUI 是 vendor 进来的第三方组件库（third_party/ZmdUI），
+    升级时整目录替换即可，不要手工改动其中的文件。
+-->
+<RCC>
+    <qresource prefix="/qml">
+        <!-- ── 应用自身 QML ─────────────────────────────────────── -->
+        <file alias="main.qml">../qml/main.qml</file>
+        <file alias="pages/ChatShellPage.qml">../qml/pages/ChatShellPage.qml</file>
+        <file alias="pages/LoginPage.qml">../qml/pages/LoginPage.qml</file>
+
+        <!-- ── ZmdUI 组件库（vendor）─────────────────────────────── -->
+        <file alias="ZmdUI/qmldir">../third_party/ZmdUI/qmldir</file>
+        <file alias="ZmdUI/Theme.qml">../third_party/ZmdUI/Theme.qml</file>
+        <file alias="ZmdUI/ZButton.qml">../third_party/ZmdUI/ZButton.qml</file>
+        <file alias="ZmdUI/ZCheckBox.qml">../third_party/ZmdUI/ZCheckBox.qml</file>
+        <file alias="ZmdUI/ZCutRect.qml">../third_party/ZmdUI/ZCutRect.qml</file>
+        <file alias="ZmdUI/ZDialog.qml">../third_party/ZmdUI/ZDialog.qml</file>
+        <file alias="ZmdUI/ZGridBackground.qml">../third_party/ZmdUI/ZGridBackground.qml</file>
+        <file alias="ZmdUI/ZHatchPattern.qml">../third_party/ZmdUI/ZHatchPattern.qml</file>
+        <file alias="ZmdUI/ZIconButton.qml">../third_party/ZmdUI/ZIconButton.qml</file>
+        <file alias="ZmdUI/ZLineChart.qml">../third_party/ZmdUI/ZLineChart.qml</file>
+        <file alias="ZmdUI/ZListItem.qml">../third_party/ZmdUI/ZListItem.qml</file>
+        <file alias="ZmdUI/ZListView.qml">../third_party/ZmdUI/ZListView.qml</file>
+        <file alias="ZmdUI/ZPanel.qml">../third_party/ZmdUI/ZPanel.qml</file>
+        <file alias="ZmdUI/ZProgressBar.qml">../third_party/ZmdUI/ZProgressBar.qml</file>
+        <file alias="ZmdUI/ZRadioButton.qml">../third_party/ZmdUI/ZRadioButton.qml</file>
+        <file alias="ZmdUI/ZScrollBar.qml">../third_party/ZmdUI/ZScrollBar.qml</file>
+        <file alias="ZmdUI/ZSectionTitle.qml">../third_party/ZmdUI/ZSectionTitle.qml</file>
+        <file alias="ZmdUI/ZSideBar.qml">../third_party/ZmdUI/ZSideBar.qml</file>
+        <file alias="ZmdUI/ZSkewRect.qml">../third_party/ZmdUI/ZSkewRect.qml</file>
+        <file alias="ZmdUI/ZSlider.qml">../third_party/ZmdUI/ZSlider.qml</file>
+        <file alias="ZmdUI/ZStatusDot.qml">../third_party/ZmdUI/ZStatusDot.qml</file>
+        <file alias="ZmdUI/ZSwitch.qml">../third_party/ZmdUI/ZSwitch.qml</file>
+        <file alias="ZmdUI/ZTable.qml">../third_party/ZmdUI/ZTable.qml</file>
+        <file alias="ZmdUI/ZTag.qml">../third_party/ZmdUI/ZTag.qml</file>
+        <file alias="ZmdUI/ZTextField.qml">../third_party/ZmdUI/ZTextField.qml</file>
+        <file alias="ZmdUI/ZToolTip.qml">../third_party/ZmdUI/ZToolTip.qml</file>
+    </qresource>
+</RCC>

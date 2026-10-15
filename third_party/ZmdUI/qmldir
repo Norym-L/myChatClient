@@ -1,0 +1,28 @@
+module ZmdUI
+# ── 终末地工业机能风 QML 组件库 ─────────────────────────────────
+# 主题单例必须排在首位：组件的默认值绑定依赖它。
+singleton Theme 1.0 Theme.qml
+ZButton 1.0 ZButton.qml
+ZCheckBox 1.0 ZCheckBox.qml
+ZCutRect 1.0 ZCutRect.qml
+ZDialog 1.0 ZDialog.qml
+ZGridBackground 1.0 ZGridBackground.qml
+ZHatchPattern 1.0 ZHatchPattern.qml
+ZIconButton 1.0 ZIconButton.qml
+ZLineChart 1.0 ZLineChart.qml
+ZListItem 1.0 ZListItem.qml
+ZListView 1.0 ZListView.qml
+ZPanel 1.0 ZPanel.qml
+ZProgressBar 1.0 ZProgressBar.qml
+ZRadioButton 1.0 ZRadioButton.qml
+ZScrollBar 1.0 ZScrollBar.qml
+ZSectionTitle 1.0 ZSectionTitle.qml
+ZSideBar 1.0 ZSideBar.qml
+ZSkewRect 1.0 ZSkewRect.qml
+ZSlider 1.0 ZSlider.qml
+ZStatusDot 1.0 ZStatusDot.qml
+ZSwitch 1.0 ZSwitch.qml
+ZTable 1.0 ZTable.qml
+ZTag 1.0 ZTag.qml
+ZTextField 1.0 ZTextField.qml
+ZToolTip 1.0 ZToolTip.qml
