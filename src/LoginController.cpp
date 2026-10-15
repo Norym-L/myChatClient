@@ -1,8 +1,8 @@
 #include "LoginController.h"
 
 #include <QJsonObject>
-#include <QRegularExpression>
 
+#include "AccountValidator.h"
 #include "ChatSocket.h"
 #include "HttpClient.h"
 #include "SessionManager.h"
@@ -12,14 +12,6 @@
 namespace
 {
     using mychat::protocol::ErrorCode;
-
-    /// 账号：4 位以上数字且首位不为 0
-    const QRegularExpression kAccountRe(QStringLiteral(R"(^[1-9][0-9]{3,}$)"));
-
-    /// 密码：6~15 位，字母 / 数字 / !@#$%^&*
-/// 注意这里**不包含**下划线与点号 —— 必须与服务端实际接受的范围一致，
-/// 否则会出现「本地放行、服务端拒绝」或反之的错位。
-    const QRegularExpression kPasswordRe(QStringLiteral(R"(^[a-zA-Z0-9!@#$%^&*]{6,15}$)"));
 
     constexpr int kSuccess = static_cast<int>(ErrorCode::Success);
 } // namespace
@@ -43,20 +35,13 @@ LoginController::LoginController(QObject* parent)
 
 QString LoginController::CheckAccount(const QString& text)
 {
-    if (text.isEmpty())
-        return tr("请输入账号");
-    if (!kAccountRe.match(text).hasMatch())
-        return tr("账号格式错误：需为 4 位以上数字，且首位不能是 0");
-    return {};
+    // 规则与注册 / 重置共用同一份实现，避免三处各写一套正则而互相漂移
+    return AccountValidator::checkUid(text);
 }
 
 QString LoginController::CheckPassword(const QString& text)
 {
-    if (text.isEmpty())
-        return tr("请输入密码");
-    if (!kPasswordRe.match(text).hasMatch())
-        return tr("密码格式错误：6~15 位，仅限字母、数字与 !@#$%^&* 符号");
-    return {};
+    return AccountValidator::checkPassword(text);
 }
 
 void LoginController::login(const QString& account, const QString& password)
@@ -100,7 +85,7 @@ void LoginController::login(const QString& account, const QString& password)
     setTip(tr("正在登录…"));
 
     mychat::HttpClient::instance().post(
-        QStringLiteral("/user_login"), body,
+        mychat::protocol::reqPath(mychat::protocol::ReqId::LoginUser), body,
         [this](const bool ok, const QJsonObject& resp) { onHttpLoginDone(ok, resp); });
 }
 
@@ -108,10 +93,8 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
 {
     if (!ok)
     {
-        setBusy(false);
-        setTip(mychat::protocol::errorToTip(
-                   resp.value(QStringLiteral("error")).toInt()),
-               true);
+        fail(mychat::protocol::errorToTip(
+            resp.value(QStringLiteral("error")).toInt()));
         return;
     }
 
@@ -120,8 +103,7 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
                           .toInt(static_cast<int>(ErrorCode::ServerJsonError));
     if (error != kSuccess)
     {
-        setBusy(false);
-        setTip(mychat::protocol::errorToTip(error), true);
+        fail(mychat::protocol::errorToTip(error));
         return;
     }
 
@@ -131,8 +113,7 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
     if (!uid.has_value())
     {
         MCLOG_WARN() << "[login] 登录响应里的 uid 非法:" << resp;
-        setBusy(false);
-        setTip(tr("服务器返回数据不完整"), true);
+        fail(tr("服务器返回数据不完整"));
         return;
     }
 
@@ -143,8 +124,7 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
     if (token.isEmpty() || host.isEmpty() || port_text.isEmpty())
     {
         MCLOG_WARN() << "[login] 登录响应字段不完整:" << resp;
-        setBusy(false);
-        setTip(tr("服务器返回数据不完整"), true);
+        fail(tr("服务器返回数据不完整"));
         return;
     }
 
@@ -153,8 +133,7 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
     if (!be_valid_port || port == 0)
     {
         MCLOG_WARN() << "[login] 聊天服端口非法:" << port_text;
-        setBusy(false);
-        setTip(tr("服务器返回的聊天服端口无效"), true);
+        fail(tr("服务器返回的聊天服端口无效"));
         return;
     }
 
@@ -174,17 +153,13 @@ void LoginController::onSocketConnected()
     setTip(tr("已连接聊天服务器，正在登录…"));
 
     if (!mychat::ChatSocket::instance().login(m_uid, m_token))
-    {
-        setBusy(false);
-        setTip(tr("登录消息发送失败"), true);
-    }
+        fail(tr("登录消息发送失败"));
 }
 
 void LoginController::onSocketConnectFailed(const QString& reason)
 {
     MCLOG_WARN() << "[login] 连接聊天服务器失败:" << reason;
-    setBusy(false);
-    setTip(tr("连接聊天服务器失败，请稍后重试"), true);
+    fail(tr("连接聊天服务器失败，请稍后重试"));
 }
 
 void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QString& name,
@@ -206,15 +181,20 @@ void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QStrin
 void LoginController::onChatLoginFailed(const int error)
 {
     MCLOG_WARN() << "[login] 聊天服登录失败, error =" << error;
-    setBusy(false);
-    setTip(mychat::protocol::errorToTip(error), true);
+    fail(mychat::protocol::errorToTip(error));
 }
 
 void LoginController::onLinkError(const QString& reason)
 {
     MCLOG_WARN() << "[login] 链路异常:" << reason;
+    fail(mychat::protocol::errorToTip(static_cast<int>(ErrorCode::NetworkError)));
+}
+
+void LoginController::fail(const QString& reason)
+{
+    setTip(reason, true);
     setBusy(false);
-    setTip(mychat::protocol::errorToTip(static_cast<int>(ErrorCode::NetworkError)), true);
+    emit loginFailed(reason);
 }
 
 void LoginController::setTip(const QString& text, const bool is_error)

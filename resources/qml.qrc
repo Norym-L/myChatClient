@@ -17,6 +17,8 @@
         <file alias="main.qml">../qml/main.qml</file>
         <file alias="pages/ChatShellPage.qml">../qml/pages/ChatShellPage.qml</file>
         <file alias="pages/LoginPage.qml">../qml/pages/LoginPage.qml</file>
+        <file alias="pages/RegisterPage.qml">../qml/pages/RegisterPage.qml</file>
+        <file alias="pages/ResetPasswordPage.qml">../qml/pages/ResetPasswordPage.qml</file>
 
         <!-- ── ZmdUI 组件库（vendor）─────────────────────────────── -->
         <file alias="ZmdUI/qmldir">../third_party/ZmdUI/qmldir</file>

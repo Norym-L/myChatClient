@@ -8,12 +8,14 @@ MyChat 桌面客户端。当前分支 `refactor/zmd-ui-qml` 正在把 UI 层从 
 
 ## 当前状态
 
-| 已完成                                 | 未完成                       |
-|----------------------------------------|------------------------------|
-| 登录页、聊天空壳页、路由切换           | 注册、重置密码               |
-| 完整登录链路（HTTP → TCP 握手 → 切页） | 会话列表、消息气泡、输入框   |
-| core：协议 / 网络 / 会话 / 日志        | 联系人、好友搜索、加好友链路 |
-| 无 GUI 的命令行自检程序                | 好友验证消息列表             |
+| 已完成                                       | 未完成                       |
+|----------------------------------------------|------------------------------|
+| 认证三页：登录 / 注册 / 重置密码，含路由切换 | 会话列表、消息气泡、输入框   |
+| 登录链路（HTTP → TCP 握手 → 切页）           | 联系人、好友搜索、加好友链路 |
+| 注册与重置密码链路（邮箱验证码）             | 好友验证消息列表             |
+| 聊天空壳页                                   | 会话持久化（关掉就要重登）   |
+| core：协议 / 网络 / 会话 / 日志              |                              |
+| 三套无 GUI 的链路自检程序                    |                              |
 
 ## 技术栈
 
@@ -61,15 +63,23 @@ port=8080
 ## 调试与自检
 
 ```bash
-# 无 GUI 跑完整登录链路（exit 0 = 成功）
-qtClientLoginTest <uid> <password> [gateUrl]
+# 无 GUI 跑各条链路（exit 0 = 成功）
+qtClientLoginTest    <uid> <password> [gateUrl]
+qtClientRegisterTest <email> <nickname> <password> [verifyCode]
+qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
 
 # 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
 
 # 无头渲染一帧并抓图（用于自动化视觉验证）
 MYCHAT_SMOKE=<输出png> ./qtClient.exe
+
+# 指定起始页，否则只能截到登录页（Login / Register / Reset）
+MYCHAT_PAGE=Register MYCHAT_SMOKE=register.png ./qtClient.exe
 ```
+
+> 注册 / 重置需要邮箱验证码， **依赖 VerifyServer**。它没启动时验证码请求必然失败，
+> 可先 `redis-cli -p 6380 SET code_<email> 123456` 手工写一个来绕过。
 
 **任何一次运行都建议设 `QT_ASSUME_STDERR_HAS_CONSOLE=1`**，否则 Qt 日志走
 `OutputDebugString`，重定向后什么都看不到。

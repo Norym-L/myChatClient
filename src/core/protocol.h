@@ -52,7 +52,7 @@ namespace mychat::protocol
         NotifyTextChatMsgReq,
     };
 
-    /// 客户端内部请求编号（HTTP 用），与 MessageId 各自独立
+    /// 客户端内部请求编号（HTTP 用），与 TCP 的 MessageId 各自独立
     enum class ReqId : std::uint16_t
     {
         GetVerifyCode = 1001,
@@ -60,6 +60,15 @@ namespace mychat::protocol
         ResetPassword,
         LoginUser,
     };
+
+    /**
+     * ReqId -> HTTP 路径。
+     *
+     * 路径集中在这一处，避免各控制器各写一份字符串字面量 —— 服务端改路径时只需改这里。
+     * 注意 `/get_Verifycode` 的大小写就是服务端实际实现的写法（其余接口全小写），
+     * 不要"顺手"统一成小写。
+     */
+    [[nodiscard]] QString reqPath(ReqId id);
 
     /**
  * 错误码。1 起是客户端本地码；1001 起与 ServerDocs/error-codes.md 一致，
@@ -96,10 +105,20 @@ namespace mychat::protocol
         UserOutline = 1019,
     };
 
-    /// 错误码 -> 用户可读提示
-    [[nodiscard]] QString errorToTip(int code);
+/// 错误码 -> 用户可读提示
+[[nodiscard]] QString errorToTip(int code);
 
-    /**
+/**
+ * `/get_Verifycode` 专用的错误码 -> 提示。
+ *
+ * 这个接口的 `error` 语义与其它接口**不一样**：GateServer 会把 VerifyServer
+ * gRPC 返回的 `rsp.error()` 原样透传（见 LogicSystem 里 `root["error"] = rsp.error()`），
+ * 所以非零值往往是个小数字（如 1），并不是我们 ErrorCode 里的 1001/1002。
+ * 直接套 errorToTip 会把它误报成「服务器返回数据解析失败」—— 排查时极容易带偏方向。
+ */
+[[nodiscard]] QString verifyCodeErrorToTip(int code);
+
+/**
  * 从 JSON 字段解析 uid。
  *
  * 约定：uid 一律以 **uint64 的字符串**形式传递 —— QJsonValue 内部用 double 存数字，

@@ -93,6 +93,15 @@ int main(int argc, char* argv[])
         QCoreApplication::quit();
     });
 
+    // 失败即结束：没有这条的话，登录失败（比如密码错）要干等到超时才出结果
+    QObject::connect(&controller, &LoginController::loginFailed,
+                     [&exit_code](const QString& reason)
+                         {
+                             writeLine(stderr, QStringLiteral("\n[FAIL] %1").arg(reason));
+                             exit_code = 3;
+                             QCoreApplication::quit();
+                         });
+
     // 超时保护：服务端不可达时不要挂死
     QTimer::singleShot(kTimeoutMs, &app, [&exit_code]()
     {

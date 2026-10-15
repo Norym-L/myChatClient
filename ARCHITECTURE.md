@@ -45,16 +45,19 @@ ZmdUI 组件库（终末地工业机能风）。
 
 ### 当前已实现
 
-- ✅ 登录页、聊天空壳页，以及两者之间的路由切换
-- ✅ 完整登录链路：本地校验 → HTTP `/user_login` → 连 ChatServer → TCP 登录握手 → 切页
+- ✅ **认证三页**：登录 / 注册 / 重置密码，含彼此之间的路由切换
+- ✅ 登录链路：本地校验 → HTTP `/user_login` → 连 ChatServer → TCP 登录握手 → 切页
+- ✅ 注册链路：请求邮箱验证码 → HTTP `/user_register`
+- ✅ 重置密码链路：请求邮箱验证码 → HTTP `/reset_password`
 - ✅ 协议 / 网络 / 会话 / 日志四个 core 模块
-- ✅ 无 GUI 的命令行自检程序（复用同一控制器，验证的是真实链路）
+- ✅ 聊天空壳页（登录成功后进入）
+- ✅ 三套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- 注册、重置密码
 - 会话列表、消息气泡、聊天输入框
 - 联系人页、好友搜索、加好友链路、好友验证消息列表
+- 会话持久化（目前关掉进程就要重新登录）
 
 ---
 
@@ -66,24 +69,31 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 ├── CMakePresets.json          mingw-{debug,release}、msvc-{debug,release}
 ├── .gitignore
 │
-├── core/                      协议 / 网络 / 会话 / 日志（自包含，不依赖外部）
-│   ├── protocol.h/.cpp          帧格式、MessageId、ErrorCode、parseUid、errorToTip
-│   ├── HttpClient.h/.cpp        QNetworkAccessManager 单例
-│   ├── ChatSocket.h/.cpp        QTcpSocket 单例 + 帧组包/解包
-│   ├── SessionManager.h/.cpp    登录态（uid / name / token）
-│   └── logger.h/.cpp           mychat::log，级别过滤与统一格式
-│
-├── src/                       应用入口与控制器（QML 与 core 之间的唯一接口）
+├── src/                       应用代码（入口 / 控制器 / 被它们共用的 core）
 │   ├── main.cpp                 QGuiApplication + QML 引擎 + 单例注册
-│   └── LoginController.h/.cpp   登录链路的唯一对外入口
+│   │
+│   ├── AccountValidator.h/.cpp  本地校验规则的**唯一实现**（uid / 邮箱 / 密码 / 昵称 / 验证码）
+│   ├── LoginController.h/.cpp         登录链路
+│   ├── RegisterController.h/.cpp      注册链路（含验证码 60s 冷却）
+│   ├── ResetPasswordController.h/.cpp 重置密码链路
+│   │
+│   └── core/                   协议 / 网络 / 会话 / 日志（不依赖外部）
+│       ├── protocol.h/.cpp        帧格式、MessageId、ReqId→路径、ErrorCode、parseUid
+│       ├── HttpClient.h/.cpp      QNetworkAccessManager 单例
+│       ├── ChatSocket.h/.cpp      QTcpSocket 单例 + 帧组包/解包
+│       ├── SessionManager.h/.cpp  登录态（uid / name / token）
+│       └── logger.h/.cpp          mychat::log，级别过滤与统一格式
 │
 ├── qml/                       QML 页面
 │   ├── main.qml                窗口壳 + 路由容器
-│   └── pages/                  LoginPage.qml、ChatShellPage.qml
+│   └── pages/                  LoginPage / RegisterPage / ResetPasswordPage / ChatShellPage
 │
 ├── resources/qml.qrc          资源清单（应用 QML + ZmdUI 全部组件）
 ├── assets/config.ini          GateServer 地址（构建后拷到 exe 旁）
-├── tests/autologin.cpp        无 GUI 的登录链路自检程序
+├── tests/                     无 GUI 的链路自检（各自复用对应的控制器）
+│   ├── autologin.cpp            登录 → qtClientLoginTest
+│   ├── registerflow.cpp         注册 → qtClientRegisterTest
+│   └── resetflow.cpp            重置密码 → qtClientResetTest
 ├── tools/README.md            无头自检（抓图）用法
 ├── third_party/ZmdUI/         vendor 的组件库（升级时整目录替换，勿改其中文件）
 │
@@ -130,11 +140,13 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 
 ### CMake target
 
-| target              | 产物         | 用途                              |
-|---------------------|--------------|-----------------------------------|
-| `qtclient_core`     | 静态库       | core + 控制器，被下面两个共用     |
-| `qtClient`          | GUI 可执行   | 客户端本体                        |
-| `qtClientLoginTest` | 控制台可执行 | 无 GUI 跑登录链路，用于自动化验证 |
+| target                 | 产物         | 用途                                   |
+|------------------------|--------------|----------------------------------------|
+| `qtclient_core`        | 静态库       | core + 控制器 + 校验器，被下面几个共用 |
+| `qtClient`             | GUI 可执行   | 客户端本体                             |
+| `qtClientLoginTest`    | 控制台可执行 | 无 GUI 跑登录链路                      |
+| `qtClientRegisterTest` | 控制台可执行 | 无 GUI 跑注册链路                      |
+| `qtClientResetTest`    | 控制台可执行 | 无 GUI 跑重置密码链路                  |
 
 自检程序链接的是 **同一个** `qtclient_core`，所以不存在「测试另写一套逻辑」的问题。
 
@@ -168,7 +180,15 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 `QJsonValue` 内部用 double 存数字，只有 53 位有效整数，超过 `2^53` 会静默丢精度。
 为兼容旧服务端仍接受数字形式，但超出 double 精确范围时会记 WARN。
 
-> `ReqId`（HTTP 请求编号）目前定义了但 **尚未使用** —— HTTP 层直接按路径字符串调用。
+**ReqId → 路径**：HTTP 路径集中在 `protocol::reqPath()` 一处，各控制器不再各写一份
+字符串字面量。注意 `/get_Verifycode` 的大小写就是服务端实现的写法（其余接口全小写），
+不要顺手统一。
+
+**`verifyCodeErrorToTip`（容易踩）**：`/get_Verifycode` 的 `error` 语义与别的接口 **不同** ——
+GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] = rsp.error()`），
+所以非零值往往是个小数字（如 `1`），并不是 ErrorCode 里的 1001/1002。
+套 `errorToTip` 会把它误报成「服务器返回数据解析失败」，排查时严重带偏方向，
+因此这个接口单独走 `verifyCodeErrorToTip`。
 
 ### 4.2 HttpClient
 
@@ -219,27 +239,72 @@ QQmlApplicationEngine engine;
 **控制器必须比 `QQmlApplicationEngine` 活得久**，所以在 `main()` 里先声明、
 engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginController.xxx`。
 
-### 5.2 LoginController 对外接口
+三个认证控制器（`LoginController` / `RegisterController` / `ResetPasswordController`）
+在 `main()` 里同时注册为 `MyChat.Core` 模块的单例。
+
+### 5.2 校验规则的唯一实现 —— AccountValidator
+
+`src/AccountValidator.h/.cpp` 提供 `checkUid` / `checkEmail` / `checkPassword` /
+`checkNickname` / `checkVerifyCode`， **全部返回空串表示通过**。
+
+集中在一处是硬性要求：登录、注册、重置都要校验邮箱和密码，各自写一份正则迟早出现
+「本地放行、服务端拒绝」的错位 —— 这类 bug 表现随机、极难定位。
+`LoginController::CheckAccount/CheckPassword` 只是转发到这里。
+
+### 5.3 LoginController
 
 | 类型          | 名称                       | 说明                                            |
 |---------------|----------------------------|-------------------------------------------------|
 | `Q_INVOKABLE` | `login(account, password)` | 发起整条登录链路                                |
-| static        | `CheckAccount(text)`       | 返回错误串，空串表示通过                        |
+| static        | `CheckAccount(text)`       | 转发到 `AccountValidator`                       |
 | static        | `CheckPassword(text)`      | 同上                                            |
 | `Q_PROPERTY`  | `tip` / `tipIsError`       | 当前提示文案 / 是否错误（错误显示成红色）       |
 | `Q_PROPERTY`  | `busy`                     | 请求进行中，用于禁用输入与按钮                  |
 | `Q_PROPERTY`  | `userLabel`                | 登录后形如 `"UID 666672 · agentnjqi"`           |
 | signal        | `validationFailed(field)`  | 本地校验失败，`field` 为 `account` / `password` |
 | signal        | `loginSucceeded()`         | 整条链路成功，触发路由切页                      |
+| signal        | `loginFailed(reason)`      | 非校验类失败（网络 / 密码错 / 握手失败…）       |
 
 > `CheckAccount` / `CheckPassword` 是 static， **不能加 `Q_INVOKABLE`** ——
 > 元对象系统不会为 static 成员函数生成方法表项，加了 QML 也访问不到。
 > 这两个目前只给 C++ 侧用（自检程序），QML 通过 `login()` 触发校验。
+>
+> `loginFailed` 不是装饰：没有它，调用方只能靠 `busy` 变化 + `tip` 猜状态，
+> 自检程序遇到登录失败会一路干等到超时（实测一次 20 秒）。
 
-### 5.3 路由
+### 5.4 RegisterController / ResetPasswordController
 
-`qml/main.qml` 用 `Loader` 切换 `sourceComponent`，由 `LoginController.loginSucceeded`
-驱动。相比旧前端 `setCentralWidget` + `deleteLater` 的做法，`Loader` 卸载即断开连接，
+两者结构对称，都有 `requestVerifyCode(email)` + 各自的提交方法：
+
+| 控制器                    | 提交方法                                                       | 对应接口          |
+|---------------------------|----------------------------------------------------------------|-------------------|
+| `RegisterController`      | `registerUser(email, nickname, password, confirm, verifyCode)` | `/user_register`  |
+| `ResetPasswordController` | `resetPassword(uid, email, newPassword, verifyCode)`           | `/reset_password` |
+
+共同点：
+
+- `cooldown` 属性 —— 请求验证码后进入 **60 秒冷却**，QML 据此禁用按钮并显示倒计时
+- `verifyCodeRequested()` / `validationFailed(field)`
+- 验证码错误走 `verifyCodeErrorToTip`（见 §4.1，这个接口的 error 语义特殊）
+
+两个坑（都已修，但改代码时容易再踩）：
+
+1. **方法名不能叫 `register`** —— `register` 是 C++ 保留字。
+2. **`setBusy(false)` 必须放在回调的最后**。它会发 `busyChanged`，订阅方可能在回调里
+   立刻发起下一步（`qtClientRegisterTest` 就是这么写的）；提示若还没写好，
+   就会被下一步的提示覆盖，用户看到的是上一步的信息。
+
+### 5.5 路由
+
+`qml/main.qml` 用 `Loader` 切换 `sourceComponent`：
+
+```
+LoginPage ──loginSucceeded──▶ ChatShellPage
+          ──registerRequested──▶ RegisterPage ──backRequested──▶ LoginPage
+          ──resetRequested─────▶ ResetPasswordPage ──backRequested──▶ LoginPage
+```
+
+相比旧前端 `setCentralWidget` + `deleteLater` 的做法，`Loader` 卸载即断开连接，
 天然避免了「旧页面继续响应全局信号」的坑。
 
 ---
@@ -258,10 +323,12 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 ### 6.2 当前用到的组件
 
-| 页面            | 组件                                                 |
-|-----------------|------------------------------------------------------|
-| `LoginPage`     | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground` |
-| `ChatShellPage` | `ZPanel`、`ZGridBackground`                          |
+| 页面                | 组件                                                 |
+|---------------------|------------------------------------------------------|
+| `LoginPage`         | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground` |
+| `RegisterPage`      | 同上                                                 |
+| `ResetPasswordPage` | 同上                                                 |
+| `ChatShellPage`     | `ZPanel`、`ZGridBackground`                          |
 
 用到的 Theme 令牌：`bg` `ink` `inkSoft` `muted` `accent` `danger` `lineSoft`
 `gridLine` `gridLineMajor` `fontBody` `fontMonoMd` `spacingSm` `spacingMd` `spacingLg`
@@ -271,7 +338,9 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 ---
 
-## 7. 登录链路（端到端数据流）
+## 7. 链路（端到端数据流）
+
+### 7.1 登录
 
 ```
 LoginPage                LoginController                  core                服务端
@@ -301,6 +370,36 @@ LoginPage                LoginController                  core                �
 
 任一步失败都会通过 `tip` / `tipIsError` 呈现给用户，并结束 `busy` 态。
 GateServer 会在 8090 / 8091 两个 ChatServer 之间轮转分配，返回哪个就连哪个。
+
+### 7.2 注册
+
+```
+RegisterPage              RegisterController             core            服务端
+   │                            │                         │                │
+   │ requestVerifyCode(email)   │                         │                │
+   ├───────────────────────────▶│ 校验邮箱                 │                │
+   │                            ├────────────────────────▶│─/get_Verifycode▶│
+   │                            │◀────────────────────────┤◀───error/码────│
+   │  cooldown = 60s            │ （成功则开始冷却）        │                │
+   │◀───────────────────────────┤                         │                │
+   │                            │                         │                │
+   │ registerUser(email, nick,  │                         │                │
+   │   pwd, confirm, code)      │                         │                │
+   ├───────────────────────────▶│ 校验 5 项 + 两次密码一致  │                │
+   │                            ├────────────────────────▶│─/user_register─▶│
+   │                            │◀────────────────────────┤◀─{error,uid}───│
+   │  registerSucceeded(uid)    │                         │                │
+   │◀───────────────────────────┤                         │                │
+   │  提示 2 秒后自动回登录页    │                         │                │
+```
+
+### 7.3 重置密码
+
+与注册的差别只有一个：要额外填 **uid**。服务端靠 `(uid, email)` 配对校验
+（不匹配返回 `1007`），只给邮箱不够。提交走 `/reset_password`。
+
+⚠ 该接口的 `user` 字段服务端 **按字符串解析**（`LogicSystem` 里 "invalid uid string"
+那条日志），所以照字符串提交，与登录保持一致。
 
 ---
 
@@ -387,8 +486,10 @@ MSVC 那套在本机 **必须**先铺环境变量（`INCLUDE` / `LIB` / `PATH`�
 ## 10. 调试入口
 
 ```bash
-# 1) 无 GUI 跑完整登录链路（退出码 0 成功 / 2 参数错 / 3 失败 / 4 超时）
-qtClientLoginTest <uid> <password> [gateUrl]
+# 1) 无 GUI 跑各条链路（退出码 0 成功 / 2 参数错 / 3 失败 / 4 超时）
+qtClientLoginTest    <uid> <password> [gateUrl]
+qtClientRegisterTest <email> <nickname> <password> [verifyCode]
+qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
 
 # 2) 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
@@ -396,11 +497,17 @@ MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
 # 3) 无头渲染一帧并抓图落盘（0 成功 / 3 根对象不是 Window / 4 保存失败）
 MYCHAT_SMOKE=<输出png> ./qtClient.exe
 
-# 4) 二者合用：等「登录 → 切页」完成后再抓聊天页（等待自动放宽到 4s）
+# 4) 指定起始页 —— 否则只能测到登录页（取值 Login / Register / Reset，大小写不敏感）
+MYCHAT_PAGE=Register MYCHAT_SMOKE=register.png ./qtClient.exe
+
+# 5) 二者合用：等「登录 → 切页」完成后再抓聊天页（等待自动放宽到 4s）
 MYCHAT_AUTOLOGIN=<uid>:<password> MYCHAT_SMOKE=chat.png ./qtClient.exe
 ```
 
 详细用法见 `tools/README.md`。
+
+> 注册 / 重置的自检需要验证码。 **VerifyServer 没启动时验证码请求会失败**，
+> 先用 `redis-cli -p 6380 SET code_<email> <六位码>` 手工写一个即可绕过（见 §8.2）。
 
 ### ⚠ 必设的环境变量
 
@@ -419,11 +526,16 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **只实现了登录。** 注册、重置密码、会话列表、消息气泡、联系人、加好友链路均未做。
+1. **认证部分已完成，业务部分未做。** 会话列表、消息气泡、聊天输入框、联系人、
+   好友搜索与加好友链路都还没有（注册 / 重置密码已完成）。
    后续可参考 `docs/ServerDocs/api-http.md`、`api-tcp.md` 与根目录的 `接口文档.md`。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**
    目前未知 message_id 只打 WARN，后续要处理的业务消息在这里逐个加 case。
+   注意它目前只处理 `ChatLoginRsp`；登录之后的消息（好友、文本聊天）都还没接。
+
+2.1 **注册 / 重置密码依赖 VerifyServer。** 该服务未启动时 `/get_Verifycode`
+必然失败，属于环境问题而非客户端 bug —— 报错信息里已区分（见 §4.1）。
 
 3. **ZmdUI vendor 版本 `ae2bff2`。** 升级流程：
    ```bash

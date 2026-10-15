@@ -62,11 +62,22 @@ public:
     void validationFailed(const QString& field);
     /// 全链路登录成功（已与 ChatServer 完成握手）
     void loginSucceeded();
+    /**
+     * 登录失败（不含本地校验失败 —— 那种情况走 validationFailed）。
+     *
+     * 有它才能让调用方区分「还在进行中」和「已经失败」：只靠 tip 的话，
+     * 自检程序只能干等到超时，一次失败要 20 秒才出结果。
+     */
+    void loginFailed(const QString& reason);
 
 private:
     /// 设置提示文案；is_error 决定 QML 里的显示颜色
     void setTip(const QString& text, bool is_error = false);
     void setBusy(bool busy);
+
+    /// 统一的失败出口：设错误提示 + 结束忙碌态 + 发 loginFailed。
+    /// 分开写三句很容易漏掉其中一句（漏了 loginFailed 就是调用方干等到超时）。
+    void fail(const QString& reason);
 
     // 链路各阶段的回调
     void onHttpLoginDone(bool ok, const QJsonObject& resp);

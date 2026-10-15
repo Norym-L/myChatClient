@@ -12,8 +12,13 @@ import "pages"
     切换 sourceComponent 更自然，且天然避免了「旧页面继续响应全局信号」
     那个坑 —— Loader 卸载即断开连接。
 
-    路由由 LoginController.loginSucceeded 驱动：只有整条链路
-    （HTTP 登录 → 连接 ChatServer → TCP 登录握手）全部成功才切到聊天页。
+    路由表：
+      LoginPage  ──loginSucceeded──▶  ChatShellPage
+      LoginPage  ──registerRequested──▶  RegisterPage  ──backRequested──▶ LoginPage
+      LoginPage  ──resetRequested──────▶  ResetPasswordPage ──backRequested──▶ LoginPage
+
+    只有整条登录链路（HTTP 登录 → 连接 ChatServer → TCP 登录握手）全部成功
+    才切到聊天页，其余跳转都是用户主动导航。
 */
 Window {
     id: app
@@ -26,17 +31,51 @@ Window {
     title: "MyChat"
     color: Theme.bg
 
+    /**
+     * 起始页。正常就是登录页；设了环境变量 MYCHAT_PAGE 时由 main.cpp 覆盖，
+     * 用来配合 MYCHAT_SMOKE 对任意一个页面做无头抓图自检。
+     * 取值："Login"（默认）/ "Register" / "Reset"（大小写不敏感）。
+     */
+    property string startPage: "Login"
+
     Loader {
         id: pageLoader
         anchors.fill: parent
         sourceComponent: loginPageComponent
     }
 
+    // 起始页覆盖：只认大写开头的三个名字，写错直接回落登录页并告警，
+    // 免得静默起一个空白窗口让人以为是渲染坏了。
+    function applyStartPage() {
+        const p = app.startPage.toLowerCase()
+        if (p === "register") {
+            pageLoader.sourceComponent = registerPageComponent
+        } else if (p === "reset") {
+            pageLoader.sourceComponent = resetPageComponent
+        } else if (p !== "login") {
+            console.warn("[qtClient] 未知的 MYCHAT_PAGE:", app.startPage, "-> 回落登录页")
+        }
+    }
+
     Component {
         id: loginPageComponent
         LoginPage {
-            onRegisterRequested: console.log("[qtClient] 跳转注册页（未实现）")
-            onResetRequested: console.log("[qtClient] 跳转重置密码页（未实现）")
+            onRegisterRequested: pageLoader.sourceComponent = registerPageComponent
+            onResetRequested: pageLoader.sourceComponent = resetPageComponent
+        }
+    }
+
+    Component {
+        id: registerPageComponent
+        RegisterPage {
+            onBackRequested: pageLoader.sourceComponent = loginPageComponent
+        }
+    }
+
+    Component {
+        id: resetPageComponent
+        ResetPasswordPage {
+            onBackRequested: pageLoader.sourceComponent = loginPageComponent
         }
     }
 
@@ -53,4 +92,6 @@ Window {
             pageLoader.sourceComponent = chatShellComponent
         }
     }
+
+    Component.onCompleted: app.applyStartPage()
 }

@@ -2,11 +2,12 @@
 
 所有开关都是环境变量，对 **已构建好的 qtClient.exe** 生效（在 `build/<preset>/` 里）。
 
-| 环境变量                            | 作用                                                          | 退出码                                  |
-|-------------------------------------|---------------------------------------------------------------|-----------------------------------------|
-| `MYCHAT_SMOKE=<输出 png 路径>`      | 渲染一帧后抓图落盘并退出                                      | 0 成功；3 根对象不是 Window；4 保存失败 |
-| `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                        | 登录成功则切到聊天页                    |
-| `QT_ASSUME_STDERR_HAS_CONSOLE=1`    | 让 Qt 日志进 stderr（**必设**，否则重定向到文件什么也看不到） | —                                       |
+| 环境变量                            | 作用                                                            | 退出码                                  |
+|-------------------------------------|-----------------------------------------------------------------|-----------------------------------------|
+| `MYCHAT_SMOKE=<输出 png 路径>`      | 渲染一帧后抓图落盘并退出                                        | 0 成功；3 根对象不是 Window；4 保存失败 |
+| `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                          | 登录成功则切到聊天页                    |
+| `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset`，大小写不敏感 | —                                       |
+| `QT_ASSUME_STDERR_HAS_CONSOLE=1`    | 让 Qt 日志进 stderr（**必设**，否则重定向到文件什么也看不到）   | —                                       |
 
 ## 抓一张登录页的图
 
@@ -15,6 +16,17 @@ cd qtClient/build/mingw-debug
 export QT_ASSUME_STDERR_HAS_CONSOLE=1
 MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/login.png ./qtClient.exe
 ```
+
+## 抓注册页 / 重置密码页
+
+不加 `MYCHAT_PAGE` 的话永远只能抓到登录页：
+
+```bash
+MYCHAT_PAGE=Register MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/register.png ./qtClient.exe
+MYCHAT_PAGE=Reset    MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/reset.png    ./qtClient.exe
+```
+
+页名写错会回落登录页并在 stderr 打一条 WARN，不会静默起一个空白窗口。
 
 ## 抓「登录成功后的聊天页」
 

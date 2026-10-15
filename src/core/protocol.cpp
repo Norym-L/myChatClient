@@ -5,6 +5,39 @@
 
 namespace mychat::protocol
 {
+    QString reqPath(const ReqId id)
+    {
+        switch (id)
+        {
+            case ReqId::GetVerifyCode:
+                return QStringLiteral("/get_Verifycode");
+            case ReqId::RegisterUser:
+                return QStringLiteral("/user_register");
+            case ReqId::ResetPassword:
+                return QStringLiteral("/reset_password");
+            case ReqId::LoginUser:
+                return QStringLiteral("/user_login");
+        }
+        qWarning() << "[protocol] unknown ReqId:" << static_cast<int>(id);
+        return {};
+    }
+
+    QString verifyCodeErrorToTip(const int code)
+    {
+        switch (static_cast<ErrorCode>(code))
+        {
+            case ErrorCode::Success:
+                return {};
+            case ErrorCode::ServerJsonError:
+                return QObject::tr("请求参数错误");
+            case ErrorCode::RpcFailed:
+                return QObject::tr("验证码服务不可用，请确认 VerifyServer 已启动");
+            default:
+                // VerifyServer 透传上来的码，客户端无从翻译，如实报出来便于排查
+                return QObject::tr("验证码发送失败（服务端错误码 %1）").arg(code);
+        }
+    }
+
     QString errorToTip(const int code)
     {
         switch (static_cast<ErrorCode>(code))

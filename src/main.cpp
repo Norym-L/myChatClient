@@ -23,6 +23,8 @@
 
 #include "HttpClient.h"
 #include "LoginController.h"
+#include "RegisterController.h"
+#include "ResetPasswordController.h"
 #include "logger.h"
 
 namespace
@@ -75,10 +77,15 @@ int main(int argc, char* argv[])
 
     initGateUrl();
 
-    // 登录控制器：整条链路都在它内部，QML 只调 login() 并监听提示与结果。
-    // 注意声明顺序 —— 它必须比 engine 活得久（engine 先析构）。
+    // 控制器：各条链路分别封在各自内部，QML 只调方法、读属性、接信号。
+    // 注意声明顺序 —— 它们必须比 engine 活得久（engine 先析构）。
     LoginController login_controller;
+    RegisterController register_controller;
+    ResetPasswordController reset_controller;
+
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "LoginController", &login_controller);
+    qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "RegisterController", &register_controller);
+    qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ResetPasswordController", &reset_controller);
 
     QQmlApplicationEngine engine;
 
@@ -93,6 +100,19 @@ int main(int argc, char* argv[])
     engine.load(QUrl(QStringLiteral("qrc:/qml/main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;
+
+    QObject* const root = engine.rootObjects().constFirst();
+
+    // 开发 / 自动化用：MYCHAT_PAGE=<Login|Register|Reset> 指定起始页。
+    // 配合 MYCHAT_SMOKE 就能对任意一个页面做无头抓图自检 —— 否则只能测到登录页。
+    if (const QString start_page = qEnvironmentVariable("MYCHAT_PAGE"); !start_page.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_PAGE 已设置，起始页:" << start_page;
+        root->setProperty("startPage", start_page);
+        // Window 已完成构造（rootObjects 非空即代表 Component.onCompleted 跑过了），
+        // 所以这里要显式再调一次切换函数。
+        QMetaObject::invokeMethod(root, "applyStartPage", Qt::QueuedConnection);
+    }
 
     // 开发 / 自动化用：设了 MYCHAT_AUTOLOGIN="uid:password" 时自动发起一次登录。
     // 正常运行时不会走到这里；有它才能在无人值守的情况下验证
@@ -130,8 +150,6 @@ int main(int argc, char* argv[])
     const QString smoke_out = qEnvironmentVariable("MYCHAT_SMOKE");
     if (!smoke_out.isEmpty())
     {
-        QObject* const root = engine.rootObjects().constFirst();
-
         // 设了自动登录时多等一会儿，让「登录 → 切到聊天页」先完成再抓
         QTimer::singleShot(autologin.isEmpty() ? 1500 : 4000, &app, [root, smoke_out]()
         {
