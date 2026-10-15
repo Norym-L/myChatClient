@@ -50,13 +50,15 @@ ZmdUI 组件库（终末地工业机能风）。
 - ✅ 注册链路：请求邮箱验证码 → HTTP `/user_register`
 - ✅ 重置密码链路：请求邮箱验证码 → HTTP `/reset_password`
 - ✅ 协议 / 网络 / 会话 / 日志四个 core 模块
-- ✅ 聊天空壳页（登录成功后进入）
-- ✅ 三套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
+- ✅ **聊天主页**：左侧 ZSideBar 导航（会话 / 联系人 / 好友申请）+ 右侧分区内容
+- ✅ **好友链路**：搜索用户（1003）、发送好友申请（1005）、好友申请列表（1007）
+  —— 三条 TCP 消息均已与服务端实测闭环
+- ✅ 四套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- 会话列表、消息气泡、聊天输入框
-- 联系人页、好友搜索、加好友链路、好友验证消息列表
+- 会话列表、消息气泡、聊天输入框 —— **依赖服务端补齐**（好友列表接口是空函数，文本聊天消息无实现）
+- 好友列表（服务端未实现）、认证 / 拒绝好友申请（1009）
 - 会话持久化（目前关掉进程就要重新登录）
 
 ---
@@ -76,6 +78,7 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── LoginController.h/.cpp         登录链路
 │   ├── RegisterController.h/.cpp      注册链路（含验证码 60s 冷却）
 │   ├── ResetPasswordController.h/.cpp 重置密码链路
+│   ├── ContactController.h/.cpp       联系人 / 好友链路（搜索 / 发申请 / 申请列表）
 │   │
 │   └── core/                   协议 / 网络 / 会话 / 日志（不依赖外部）
 │       ├── protocol.h/.cpp        帧格式、MessageId、ReqId→路径、ErrorCode、parseUid
@@ -86,14 +89,16 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │
 ├── qml/                       QML 页面
 │   ├── main.qml                窗口壳 + 路由容器
-│   └── pages/                  LoginPage / RegisterPage / ResetPasswordPage / ChatShellPage
+│   ├── pages/                  LoginPage / RegisterPage / ResetPasswordPage / ChatPage
+│   └── components/ZAvatar.qml  首字母头像（自建，ZmdUI 目前没有头像组件）
 │
 ├── resources/qml.qrc          资源清单（应用 QML + ZmdUI 全部组件）
 ├── assets/config.ini          GateServer 地址（构建后拷到 exe 旁）
 ├── tests/                     无 GUI 的链路自检（各自复用对应的控制器）
 │   ├── autologin.cpp            登录 → qtClientLoginTest
 │   ├── registerflow.cpp         注册 → qtClientRegisterTest
-│   └── resetflow.cpp            重置密码 → qtClientResetTest
+│   ├── resetflow.cpp            重置密码 → qtClientResetTest
+│   └── contactflow.cpp          好友链路 → qtClientContactTest
 ├── tools/README.md            无头自检（抓图）用法
 ├── third_party/ZmdUI/         vendor 的组件库（升级时整目录替换，勿改其中文件）
 │
@@ -147,6 +152,7 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 | `qtClientLoginTest`    | 控制台可执行 | 无 GUI 跑登录链路                      |
 | `qtClientRegisterTest` | 控制台可执行 | 无 GUI 跑注册链路                      |
 | `qtClientResetTest`    | 控制台可执行 | 无 GUI 跑重置密码链路                  |
+| `qtClientContactTest`  | 控制台可执行 | 无 GUI 跑好友链路（两段式 A→B）        |
 
 自检程序链接的是 **同一个** `qtclient_core`，所以不存在「测试另写一套逻辑」的问题。
 
@@ -203,9 +209,11 @@ GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] 
 
 - `connectToServer(host, port)` —— 带超时定时器
 - `login(uid, token)` —— 发送 `ChatLoginReq`
+- `searchUser` / `sendFriendRequest` / `friendApplyList` —— 好友链路三条消息
 - `sendJson(message_id, body)` —— 组帧发送
 - `dispatchBuffer()` —— 循环解帧（粘包 / 半包都在这里处理）
-- `handleFrame()` —— 按编号分发； **未知编号打 WARN 但不断开连接**（这是后续扩展点）
+- `handleFrame()` —— 按编号分发；目前处理 `ChatLoginRsp` / `SearchUserRsp` /
+  `AddFriendRsp` / `SyncFriendRequestRsp` 四个回包，其余打 WARN 但不断开连接
 
 连接超时、socket 错误、对端断开分别发出 `connectFailed` / `linkError` 信号。
 
@@ -294,14 +302,36 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
    立刻发起下一步（`qtClientRegisterTest` 就是这么写的）；提示若还没写好，
    就会被下一步的提示覆盖，用户看到的是上一步的信息。
 
-### 5.5 路由
+### 5.5 ContactController
+
+联系人 / 好友链路的唯一入口，覆盖服务端 **已实现** 的三条 TCP 消息：
+
+| 方法                                           | 对应消息                                | 说明                                      |
+|------------------------------------------------|-----------------------------------------|-------------------------------------------|
+| `searchUser(keyword)`                          | `SearchUserReq/Rsp`（1003/1004）        | keyword 可为 uid 或用户名，服务端两种都认 |
+| `sendFriendRequest(toUid, verifyInfo, remark)` | `AddFriendReq/Rsp`（1005/1006）         | toUid 按字符串传                          |
+| `refreshApplyList()`                           | `SyncFriendRequestReq/Rsp`（1007/1008） | 拉取「别人发给我的」申请列表              |
+| `clearSearchResult()`                          | ——（本地）                              | 清空搜索态                                |
+
+属性：`tip` / `tipIsError` / `busy`、搜索结果 `hasSearchResult` / `searchUid` /
+`searchName` / `searchDesc` / `searchSex`、申请列表 `applyList`（`QVariantList`，
+每项含 `fromUid` / `name` / `verifyInfo` / `state`，供 Repeater 直接用）。
+
+信号：`searchFinished(found, error)`（未找到通常是 1014）、
+`friendRequestSent(ok, error)`、`validationFailed(field)`。
+
+⚠ 服务端的好友列表（`getUserApplyListAndFriendList`）是 **空函数**，
+认证好友（1009）与文本聊天（1012）也没实现 —— 会话列表因此拿不到任何真实数据。
+
+### 5.6 路由
 
 `qml/main.qml` 用 `Loader` 切换 `sourceComponent`：
 
 ```
-LoginPage ──loginSucceeded──▶ ChatShellPage
+LoginPage ──loginSucceeded──▶ ChatPage
           ──registerRequested──▶ RegisterPage ──backRequested──▶ LoginPage
           ──resetRequested─────▶ ResetPasswordPage ──backRequested──▶ LoginPage
+ChatPage  ──logoutRequested──▶ LoginPage
 ```
 
 相比旧前端 `setCentralWidget` + `deleteLater` 的做法，`Loader` 卸载即断开连接，
@@ -323,16 +353,16 @@ LoginPage ──loginSucceeded──▶ ChatShellPage
 
 ### 6.2 当前用到的组件
 
-| 页面                | 组件                                                 |
-|---------------------|------------------------------------------------------|
-| `LoginPage`         | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground` |
-| `RegisterPage`      | 同上                                                 |
-| `ResetPasswordPage` | 同上                                                 |
-| `ChatShellPage`     | `ZPanel`、`ZGridBackground`                          |
+| 页面                | 组件                                                                                               |
+|---------------------|----------------------------------------------------------------------------------------------------|
+| `LoginPage`         | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground`                                               |
+| `RegisterPage`      | 同上                                                                                               |
+| `ResetPasswordPage` | 同上                                                                                               |
+| `ChatPage`          | `ZSideBar`、`ZPanel`、`ZTextField`、`ZButton`、`ZSectionTitle`、`ZGridBackground` + 自建 `ZAvatar` |
 
-用到的 Theme 令牌：`bg` `ink` `inkSoft` `muted` `accent` `danger` `lineSoft`
-`gridLine` `gridLineMajor` `fontBody` `fontMonoMd` `spacingSm` `spacingMd` `spacingLg`
-`Variant.*`。
+用到的 Theme 令牌：`bg` `surface` `ink` `inkSoft` `muted` `accent` `danger` `lineSoft`
+`gridLine` `gridLineMajor` `fontBody` `fontStrong` `fontMonoMd` `fontMonoSm` `spacingSm`
+`spacingMd` `spacingLg` `Variant.*`。
 
 **业务 QML 里不写魔法数字和硬编码颜色**，一律取 `Theme`。
 
@@ -400,6 +430,36 @@ RegisterPage              RegisterController             core            服务�
 
 ⚠ 该接口的 `user` 字段服务端 **按字符串解析**（`LogicSystem` 里 "invalid uid string"
 那条日志），所以照字符串提交，与登录保持一致。
+
+### 7.4 好友链路（TCP）
+
+```
+ChatPage                ContactController              ChatSocket            ChatServer
+   │                         │                            │                     │
+   │ searchUser(keyword)     │                            │                     │
+   ├────────────────────────▶│ 本地校验 keyword            │                     │
+   │                         ├───────────────────────────▶│─1003 {uid,name}───▶│
+   │                         │◀───────────────────────────┤◀─1004 {error,       │
+   │  搜索结果卡               │                            │    uid,name,sex}───│
+   │◀──hasSearchResult───────┤                            │                     │
+   │                         │                            │                     │
+   │ sendFriendRequest(uid,  │                            │                     │
+   │   verifyInfo, remark)   │                            │                     │
+   ├────────────────────────▶│ 本地校验 toUid              │                     │
+   │                         ├───────────────────────────▶│─1005 {uid,touid,    │
+   │                         │                            │    verifyinfo}────▶│
+   │                         │◀───────────────────────────┤◀─1006 {error}──────│
+   │  friendRequestSent(ok)  │                            │                     │
+   │                         │                            │                     │
+   │ refreshApplyList()      │                            │                     │
+   ├────────────────────────▶├───────────────────────────▶│─1007 {uid}────────▶│
+   │                         │◀───────────────────────────┤◀─1007 {applylist:   │
+   │  applyList 更新          │                            │    [{from_uid,name, │
+   │◀──applyListChanged──────┤                            │     verifyinfo}...}]│
+```
+
+实测闭环：账号 666674 搜索 666672 → 发申请 → 666672 端 `applyList` 收到该条申请，
+GUI 抓图（`MYCHAT_AUTOLOGIN + MYCHAT_SMOKE`）确认渲染正常。
 
 ---
 
@@ -490,6 +550,7 @@ MSVC 那套在本机 **必须**先铺环境变量（`INCLUDE` / `LIB` / `PATH`�
 qtClientLoginTest    <uid> <password> [gateUrl]
 qtClientRegisterTest <email> <nickname> <password> [verifyCode]
 qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
+qtClientContactTest  <uidA> <passwordA> <uidB> <passwordB>
 
 # 2) 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
@@ -497,7 +558,7 @@ MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
 # 3) 无头渲染一帧并抓图落盘（0 成功 / 3 根对象不是 Window / 4 保存失败）
 MYCHAT_SMOKE=<输出png> ./qtClient.exe
 
-# 4) 指定起始页 —— 否则只能测到登录页（取值 Login / Register / Reset，大小写不敏感）
+# 4) 指定起始页 —— 否则只能测到登录页（取值 Login / Register / Reset / Chat，大小写不敏感）
 MYCHAT_PAGE=Register MYCHAT_SMOKE=register.png ./qtClient.exe
 
 # 5) 二者合用：等「登录 → 切页」完成后再抓聊天页（等待自动放宽到 4s）
@@ -526,13 +587,14 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **认证部分已完成，业务部分未做。** 会话列表、消息气泡、聊天输入框、联系人、
-   好友搜索与加好友链路都还没有（注册 / 重置密码已完成）。
+1. **认证 + 好友链路已完成；聊天业务未做。** 会话列表、消息气泡、聊天输入框都还没有。
+   其中一部分卡在服务端：好友列表接口是空函数、文本聊天消息（1013~1015）无实现。
    后续可参考 `docs/ServerDocs/api-http.md`、`api-tcp.md` 与根目录的 `接口文档.md`。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**
-   目前未知 message_id 只打 WARN，后续要处理的业务消息在这里逐个加 case。
-   注意它目前只处理 `ChatLoginRsp`；登录之后的消息（好友、文本聊天）都还没接。
+   目前已处理 4 个回包（登录 / 搜索 / 发申请 / 申请列表），未知编号打 WARN 不断连。
+   后续要接入的编号：`NotifyAddFriendReq`(1009，服务端主动推送，客户端暂未处理)、
+   `AuthFriend*`(1010/1011，服务端也未实现)、`TextChat*`(1013~1015)。
 
 2.1 **注册 / 重置密码依赖 VerifyServer。** 该服务未启动时 `/get_Verifycode`
 必然失败，属于环境问题而非客户端 bug —— 报错信息里已区分（见 §4.1）。

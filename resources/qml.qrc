@@ -15,10 +15,13 @@
     <qresource prefix="/qml">
         <!-- ── 应用自身 QML ─────────────────────────────────────── -->
         <file alias="main.qml">../qml/main.qml</file>
-        <file alias="pages/ChatShellPage.qml">../qml/pages/ChatShellPage.qml</file>
+        <file alias="pages/ChatPage.qml">../qml/pages/ChatPage.qml</file>
         <file alias="pages/LoginPage.qml">../qml/pages/LoginPage.qml</file>
         <file alias="pages/RegisterPage.qml">../qml/pages/RegisterPage.qml</file>
         <file alias="pages/ResetPasswordPage.qml">../qml/pages/ResetPasswordPage.qml</file>
+
+        <!-- ── 自建组件（ZmdUI 缺失、按同一设计语言补的）──────────────── -->
+        <file alias="components/ZAvatar.qml">../qml/components/ZAvatar.qml</file>
 
         <!-- ── ZmdUI 组件库（vendor）─────────────────────────────── -->
         <file alias="ZmdUI/qmldir">../third_party/ZmdUI/qmldir</file>

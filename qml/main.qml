@@ -4,6 +4,7 @@ import ZmdUI 1.0
 
 import MyChat.Core 1.0
 import "pages"
+import "components"
 
 /*!
     应用窗口壳（对应旧前端的 MainWindow —— 承担「路由容器」职责）。
@@ -13,7 +14,7 @@ import "pages"
     那个坑 —— Loader 卸载即断开连接。
 
     路由表：
-      LoginPage  ──loginSucceeded──▶  ChatShellPage
+      LoginPage  ──loginSucceeded──▶  ChatPage  ──logoutRequested──▶ LoginPage
       LoginPage  ──registerRequested──▶  RegisterPage  ──backRequested──▶ LoginPage
       LoginPage  ──resetRequested──────▶  ResetPasswordPage ──backRequested──▶ LoginPage
 
@@ -34,9 +35,20 @@ Window {
     /**
      * 起始页。正常就是登录页；设了环境变量 MYCHAT_PAGE 时由 main.cpp 覆盖，
      * 用来配合 MYCHAT_SMOKE 对任意一个页面做无头抓图自检。
-     * 取值："Login"（默认）/ "Register" / "Reset"（大小写不敏感）。
+     * 取值："Login"（默认）/ "Register" / "Reset" / "Chat"（大小写不敏感）。
+     *
+     * 注意 Chat 页在真实流程里是登录成功后才进的，直接跳过去只有 UI 壳，
+     * 没有任何业务数据 —— 抓图自检够用，别拿它当功能验证。
      */
     property string startPage: "Login"
+
+    /**
+     * 自动搜索关键字（自动化验证用）。配合 MYCHAT_AUTOLOGIN + MYCHAT_SMOKE：
+     * 登录成功进入聊天页后，自动切到「联系人」分区并发起一次搜索，
+     * 用于无头验证搜索结果列表（尤其是多结果）的渲染。
+     * 由 main.cpp 从环境变量 MYCHAT_SEARCH 注入，正常启动时为空。
+     */
+    property string autoSearch: ""
 
     Loader {
         id: pageLoader
@@ -52,6 +64,8 @@ Window {
             pageLoader.sourceComponent = registerPageComponent
         } else if (p === "reset") {
             pageLoader.sourceComponent = resetPageComponent
+        } else if (p === "chat") {
+            pageLoader.sourceComponent = chatPageComponent
         } else if (p !== "login") {
             console.warn("[qtClient] 未知的 MYCHAT_PAGE:", app.startPage, "-> 回落登录页")
         }
@@ -80,8 +94,13 @@ Window {
     }
 
     Component {
-        id: chatShellComponent
-        ChatShellPage {
+        id: chatPageComponent
+        ChatPage {
+            // 退出登录：回到登录页并断开聊天服连接
+            onLogoutRequested: {
+                LoginController.logout()
+                pageLoader.sourceComponent = loginPageComponent
+            }
         }
     }
 
@@ -89,7 +108,7 @@ Window {
         target: LoginController
 
         function onLoginSucceeded() {
-            pageLoader.sourceComponent = chatShellComponent
+            pageLoader.sourceComponent = chatPageComponent
         }
     }
 

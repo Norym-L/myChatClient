@@ -112,12 +112,47 @@ namespace mychat
         return sendJson(static_cast<std::uint16_t>(protocol::MessageId::ChatLoginReq), body);
     }
 
-    void ChatSocket::disconnectFromServer()
+bool ChatSocket::searchUser(const QString& keyword)
+{
+    if (keyword.trimmed().isEmpty())
     {
-        reset();
+        qWarning() << "[chat] 搜索关键字为空，请求被丢弃";
+        return false;
     }
 
-    void ChatSocket::reset()
+    // 服务端先按 uid 查、再按用户名查，所以关键字原样作为字符串发过去
+    QJsonObject body;
+    body.insert(QStringLiteral("uid"), keyword.trimmed());
+
+    return sendJson(static_cast<std::uint16_t>(protocol::MessageId::SearchUserReq), body);
+}
+
+bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint64_t toUid,
+                                   const QString& verifyInfo, const QString& remark)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("uid"), QString::number(selfUid));
+    body.insert(QStringLiteral("to_uid"), QString::number(toUid));
+    body.insert(QStringLiteral("verify_info"), verifyInfo);
+    body.insert(QStringLiteral("remark"), remark);
+
+    return sendJson(static_cast<std::uint16_t>(protocol::MessageId::AddFriendReq), body);
+}
+
+bool ChatSocket::syncFriendRequests(const std::uint64_t selfUid)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("uid"), QString::number(selfUid));
+
+    return sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestReq), body);
+}
+
+void ChatSocket::disconnectFromServer()
+{
+    reset();
+}
+
+void ChatSocket::reset()
     {
         m_connect_timer->stop();
         m_buffer.clear();
@@ -208,16 +243,31 @@ namespace mychat
 
     void ChatSocket::handleFrame(const std::uint16_t message_id, const QByteArray& body)
     {
-        switch (static_cast<protocol::MessageId>(message_id))
-        {
+    switch (static_cast<protocol::MessageId>(message_id))
+    {
         case protocol::MessageId::ChatLoginRsp:
             handleLoginResponse(body);
             break;
-        default:
-            // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接
-            qWarning() << "[chat] 暂未处理的 message_id:" << message_id;
+        case protocol::MessageId::SearchUserRsp:
+            handleSearchUserResponse(body);
             break;
-        }
+        case protocol::MessageId::AddFriendRsp:
+            handleAddFriendResponse(body);
+            break;
+        case protocol::MessageId::SyncFriendRequestRsp:
+            handleFriendRequestList(body);
+            break;
+        default:
+            // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
+            //
+            // 已知的、服务端**尚未实现**的编号（别误判成客户端问题）：
+            //   AuthFriendReq/Rsp (1010/1011)   服务端未注册处理器
+            //   TextChatMsg*      (1013~1015)   服务端完全没有相关实现
+            //   NotifyAddFriendReq(1009)        服务端主动推送，客户端暂未处理
+            qWarning() << "[chat] 暂未处理的 message_id:" << message_id
+                << messageIdName(message_id);
+            break;
+    }
     }
 
     void ChatSocket::handleLoginResponse(const QByteArray& body)
@@ -259,6 +309,85 @@ namespace mychat
         qInfo() << "[chat] 登录聊天服成功: uid =" << *uid << "name =" << name;
 
         emit loginSucceeded(*uid, name, token);
+    }
+
+    void ChatSocket::handleSearchUserResponse(const QByteArray& body)
+    {
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 搜索用户回包解析失败:" << parse_error.errorString();
+            emit searchUserResult(false, {}, static_cast<int>(protocol::ErrorCode::JsonError));
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::Success));
+
+        const QList<protocol::UserInfo> infos = protocol::parseSearchUserRsp(object);
+        if (infos.isEmpty())
+        {
+            // 服务端没找到用户时只回 {"error":1014}
+            qDebug() << "[chat] 未找到该用户, error =" << error;
+            emit searchUserResult(false, {}, error);
+            return;
+        }
+
+        qInfo() << "[chat] 搜索到用户:" << infos.size() << "个命中, 首个 uid =" << infos.first().uid;
+        emit searchUserResult(true, infos, error);
+    }
+
+    void ChatSocket::handleAddFriendResponse(const QByteArray& body)
+    {
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 好友申请回包解析失败:" << parse_error.errorString();
+            emit friendRequestResult(false, static_cast<int>(protocol::ErrorCode::JsonError), 0);
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::Success));
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 发送好友申请失败, error =" << error;
+            emit friendRequestResult(false, error, 0);
+            return;
+        }
+
+        // 服务端回的是申请记录 id（字符串形式）
+        const auto id = protocol::parseUid(object.value(QStringLiteral("add_friend_request_id")));
+        const std::uint64_t request_id = id.value_or(0);
+
+        qInfo() << "[chat] 好友申请已发送, request id =" << request_id;
+        emit friendRequestResult(true, error, request_id);
+    }
+
+    void ChatSocket::handleFriendRequestList(const QByteArray& body)
+    {
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 好友申请列表回包解析失败:" << parse_error.errorString();
+            emit friendRequestList({}, static_cast<int>(protocol::ErrorCode::JsonError));
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::Success));
+
+        const QList<protocol::FriendRequest> requests = protocol::parseFriendRequestList(object);
+        qInfo() << "[chat] 收到好友申请列表, 共" << requests.size() << "条";
+
+        emit friendRequestList(requests, error);
     }
 
     bool ChatSocket::sendJson(const std::uint16_t message_id, const QJsonObject& body)

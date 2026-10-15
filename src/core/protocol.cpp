@@ -1,6 +1,8 @@
 #include "protocol.h"
 
 #include <QDebug>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QObject>
 
 namespace mychat::protocol
@@ -117,5 +119,108 @@ namespace mychat::protocol
 
         qWarning() << "[protocol] uid field is missing or of unexpected type";
         return std::nullopt;
+    }
+
+    QList<UserInfo> parseSearchUserRsp(const QJsonObject& object)
+    {
+        QList<UserInfo> list;
+
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::Success));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qDebug() << "[protocol] 搜索用户失败, error =" << error;
+            return list; // 未找到（1014）或其它错误 → 空列表
+        }
+
+        // 命中时服务端返回 infos 数组，可能多条（按用户名搜索时同名用户都会带上）。
+        // 兼容旧版单结果回包：没有 infos 字段时回退到顶层 uid/user_name。
+        const QJsonArray items = object.value(QStringLiteral("infos")).toArray();
+        if (!items.isEmpty())
+        {
+            list.reserve(items.size());
+            for (const QJsonValue& item: items)
+            {
+                if (!item.isObject())
+                    continue;
+
+                const QJsonObject entry = item.toObject();
+                const auto uid = parseUid(entry.value(QStringLiteral("uid")));
+                if (!uid.has_value() || *uid == 0)
+                    continue;
+
+                UserInfo info;
+                info.uid = *uid;
+                info.name = entry.value(QStringLiteral("user_name")).toString();
+                info.desc = entry.value(QStringLiteral("desc")).toString();
+                info.sex = entry.value(QStringLiteral("sex")).toInt(2);
+                info.icon = entry.value(QStringLiteral("icon")).toString();
+                list.append(info);
+            }
+            return list;
+        }
+
+        // 旧版服务端回包形态：{"error":0, "uid":"...", "user_name":...}
+        const auto uid = parseUid(object.value(QStringLiteral("uid")));
+        if (!uid.has_value() || *uid == 0)
+            return list;
+
+        UserInfo info;
+        info.uid = *uid;
+        info.name = object.value(QStringLiteral("user_name")).toString();
+        info.desc = object.value(QStringLiteral("desc")).toString();
+        info.sex = object.value(QStringLiteral("sex")).toInt(2);
+        info.icon = object.value(QStringLiteral("icon")).toString();
+        list.append(info);
+        return list;
+    }
+
+    QList<FriendRequest> parseFriendRequestList(const QJsonObject& object)
+    {
+        QList<FriendRequest> list;
+
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::Success));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qDebug() << "[protocol] 获取好友申请列表失败, error =" << error;
+            return list;
+        }
+
+        // 注意 count 是**字符串**（服务端用 std::to_string 写的）
+        const QString count_text = object.value(QStringLiteral("count")).toString();
+        qDebug() << "[protocol] 好友申请条数:" << count_text;
+
+        const QJsonArray items = object.value(QStringLiteral("apply_infos")).toArray();
+        list.reserve(items.size());
+
+        for (const QJsonValue& item: items)
+        {
+            if (!item.isObject())
+                continue;
+
+            const QJsonObject entry = item.toObject();
+            FriendRequest request;
+
+            const auto id = parseUid(entry.value(QStringLiteral("id")));
+            request.id = id.value_or(0);
+
+            const auto from = parseUid(entry.value(QStringLiteral("from_uid")));
+            request.fromUid = from.value_or(0);
+
+            const auto to = parseUid(entry.value(QStringLiteral("to_uid")));
+            request.toUid = to.value_or(0);
+
+            request.name = entry.value(QStringLiteral("name")).toString();
+            request.verifyInfo = entry.value(QStringLiteral("verify_info")).toString();
+            request.icon = entry.value(QStringLiteral("icon")).toString();
+            request.sex = entry.value(QStringLiteral("sex")).toInt(2);
+            request.state = entry.value(QStringLiteral("state")).toInt(0);
+
+            if (request.valid())
+                list.append(request);
+        }
+
+        return list;
     }
 } // namespace mychat::protocol

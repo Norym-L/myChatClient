@@ -9,8 +9,11 @@
 /**
  * MyChat 客户端的协议层：帧格式、消息编号、错误码与 JSON 辅助。
  *
- * 这里的取值刻意对齐**服务端实现**，而不是照抄 docs/ServerDocs/*.md ——
+ * 这里的取值刻意对齐**服务端实现**，而不是照抄 docs/ServerDocs 下的 md 文档 ——
  * 两者存在已知分歧，详见 MessageId 的注释。
+ *
+ * （上面那句别写成「目录 + 斜杠 + 通配星号」的形式：斜杠紧跟星号会被当成
+ *   嵌套注释起始，GCC 会给 -Wcomment 警告。）
  */
 namespace mychat::protocol
 {
@@ -137,4 +140,45 @@ namespace mychat::protocol
         QString host;
         QString port;
     };
+
+    /// 搜索用户回包里的用户信息（MESSAGE_SEARCH_USER_RSP）
+    struct UserInfo
+    {
+        std::uint64_t uid = 0;
+        QString name;
+        /// 个性签名
+        QString desc;
+        /// 0 男 / 1 女 / 其余按未知处理
+        int sex = 2;
+        /// 头像地址；服务端目前没有头像服务，通常为空串
+        QString icon;
+
+        [[nodiscard]] bool valid() const { return uid != 0; }
+    };
+
+    /// 好友申请列表里的一项（MESSAGE_SYNC_FRIEND_REQUEST_RSP 的 apply_infos[]）
+    struct FriendRequest
+    {
+        /// 申请记录 id
+        std::uint64_t id = 0;
+        std::uint64_t fromUid = 0;
+        std::uint64_t toUid = 0;
+        QString name;
+        /// 对方填写的验证信息
+        QString verifyInfo;
+        QString icon;
+        int sex = 2;
+        /// 申请状态（MySQL 里的 status）
+        int state = 0;
+
+        [[nodiscard]] bool valid() const { return id != 0; }
+    };
+
+    /// 搜索用户回包 -> UserInfo 列表；未找到或失败时返回空列表。
+    /// 服务端命中时返回 {"error":0, "infos":[{uid,user_name,desc,sex,icon}, ...]}
+    /// （可能多条），没找到时只回 {"error":1014}。
+    [[nodiscard]] QList<UserInfo> parseSearchUserRsp(const QJsonObject& object);
+
+    /// 好友申请列表回包 -> FriendRequest 数组
+    [[nodiscard]] QList<FriendRequest> parseFriendRequestList(const QJsonObject& object);
 } // namespace mychat::protocol

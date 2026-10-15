@@ -21,6 +21,7 @@
 
 #include <QtQml>
 
+#include "ContactController.h"
 #include "HttpClient.h"
 #include "LoginController.h"
 #include "RegisterController.h"
@@ -82,10 +83,12 @@ int main(int argc, char* argv[])
     LoginController login_controller;
     RegisterController register_controller;
     ResetPasswordController reset_controller;
+    ContactController contact_controller;
 
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "LoginController", &login_controller);
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "RegisterController", &register_controller);
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ResetPasswordController", &reset_controller);
+    qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ContactController", &contact_controller);
 
     QQmlApplicationEngine engine;
 
@@ -112,6 +115,14 @@ int main(int argc, char* argv[])
         // Window 已完成构造（rootObjects 非空即代表 Component.onCompleted 跑过了），
         // 所以这里要显式再调一次切换函数。
         QMetaObject::invokeMethod(root, "applyStartPage", Qt::QueuedConnection);
+    }
+
+    // 开发 / 自动化用：MYCHAT_SEARCH=<关键字> 在进入聊天页后自动发起一次用户搜索。
+    // 配合 MYCHAT_AUTOLOGIN + MYCHAT_SMOKE 可无头验证搜索结果列表（含多结果）的渲染。
+    if (const QString auto_search = qEnvironmentVariable("MYCHAT_SEARCH"); !auto_search.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_SEARCH 已设置，自动搜索:" << auto_search;
+        root->setProperty("autoSearch", auto_search);
     }
 
     // 开发 / 自动化用：设了 MYCHAT_AUTOLOGIN="uid:password" 时自动发起一次登录。

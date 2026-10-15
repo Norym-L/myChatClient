@@ -11,11 +11,12 @@ MyChat 桌面客户端。当前分支 `refactor/zmd-ui-qml` 正在把 UI 层从 
 | 已完成                                       | 未完成                       |
 |----------------------------------------------|------------------------------|
 | 认证三页：登录 / 注册 / 重置密码，含路由切换 | 会话列表、消息气泡、输入框   |
-| 登录链路（HTTP → TCP 握手 → 切页）           | 联系人、好友搜索、加好友链路 |
-| 注册与重置密码链路（邮箱验证码）             | 好友验证消息列表             |
-| 聊天空壳页                                   | 会话持久化（关掉就要重登）   |
+| 登录链路（HTTP → TCP 握手 → 切页）           | 好友列表（**服务端未实现**） |
+| 注册与重置密码链路（邮箱验证码）             | 认证 / 拒绝好友申请          |
+| 聊天主页：侧栏（会话 / 联系人 / 好友申请）   | 文本聊天（**服务端未实现**） |
+| 好友链路：搜索用户 / 发申请 / 申请列表       | 会话持久化（关掉就要重登）   |
 | core：协议 / 网络 / 会话 / 日志              |                              |
-| 三套无 GUI 的链路自检程序                    |                              |
+| 四套无 GUI 的链路自检程序                    |                              |
 
 ## 技术栈
 
@@ -67,6 +68,7 @@ port=8080
 qtClientLoginTest    <uid> <password> [gateUrl]
 qtClientRegisterTest <email> <nickname> <password> [verifyCode]
 qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
+qtClientContactTest  <uidA> <passwordA> <uidB> <passwordB>   # 两段式：A 搜 B 加好友 → B 查申请列表
 
 # 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
@@ -74,7 +76,7 @@ MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
 # 无头渲染一帧并抓图（用于自动化视觉验证）
 MYCHAT_SMOKE=<输出png> ./qtClient.exe
 
-# 指定起始页，否则只能截到登录页（Login / Register / Reset）
+# 指定起始页，否则只能截到登录页（Login / Register / Reset / Chat）
 MYCHAT_PAGE=Register MYCHAT_SMOKE=register.png ./qtClient.exe
 ```
 
@@ -88,9 +90,8 @@ MYCHAT_PAGE=Register MYCHAT_SMOKE=register.png ./qtClient.exe
 ## 目录一览
 
 ```
-core/        协议 / 网络 / 会话 / 日志（自包含）
-src/         main.cpp、LoginController
-qml/         main.qml（路由壳）、pages/
+src/         main.cpp、控制器、core/（协议 / 网络 / 会话 / 日志）
+qml/         main.qml（路由壳）、pages/、components/（ZAvatar 等自建组件）
 resources/   qml.qrc
 assets/      config.ini
 tests/       无 GUI 自检

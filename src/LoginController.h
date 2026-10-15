@@ -52,6 +52,9 @@ public:
     /// 发起登录（本地校验 → HTTP → 连接 ChatServer → TCP 登录握手）
     Q_INVOKABLE void login(const QString& account, const QString& password);
 
+    /// 退出登录：断开与 ChatServer 的连接并清空会话（不清空 tip，方便页面提示）
+    Q_INVOKABLE void logout();
+
     signals :
 
     void tipChanged();

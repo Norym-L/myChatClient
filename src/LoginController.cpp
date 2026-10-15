@@ -89,6 +89,21 @@ void LoginController::login(const QString& account, const QString& password)
         [this](const bool ok, const QJsonObject& resp) { onHttpLoginDone(ok, resp); });
 }
 
+void LoginController::logout()
+{
+    // 先断链再清会话：顺序反了的话 socket 那边可能还在用旧 uid 发帧
+    mychat::ChatSocket::instance().disconnectFromServer();
+    mychat::SessionManager::instance().clear();
+
+    m_uid = 0;
+    m_token.clear();
+
+    m_user_label.clear();
+    emit userLabelChanged();
+
+    MCLOG_INFO() << "[login] 已退出登录";
+}
+
 void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
 {
     if (!ok)
