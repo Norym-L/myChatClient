@@ -24,6 +24,7 @@
 #include "ContactController.h"
 #include "HttpClient.h"
 #include "LoginController.h"
+#include "PresenceController.h"
 #include "RegisterController.h"
 #include "ResetPasswordController.h"
 #include "logger.h"
@@ -85,10 +86,11 @@ int main(int argc, char* argv[])
 
     // 控制器：各条链路分别封在各自内部，QML 只调方法、读属性、接信号。
     // 注意声明顺序 —— 它们必须比 engine 活得久（engine 先析构）。
-    LoginController login_controller;
+  LoginController login_controller;
     RegisterController register_controller;
     ResetPasswordController reset_controller;
     ContactController contact_controller;
+    PresenceController presence_controller;
 
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "LoginController",
                                &login_controller);
@@ -98,8 +100,10 @@ int main(int argc, char* argv[])
                                &reset_controller);
   qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ContactController",
                                &contact_controller);
+  qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "PresenceController",
+                               &presence_controller);
 
-  QQmlApplicationEngine engine;
+    QQmlApplicationEngine engine;
 
     // 让 QML 里的 "import ZmdUI 1.0" 能在 qrc 里解析到 :/qml/ZmdUI/qmldir
     engine.addImportPath(QStringLiteral("qrc:/qml"));
@@ -182,23 +186,44 @@ int main(int argc, char* argv[])
   // 退出码：0 = 抓图并保存成功；3 = 根对象不是 Window；4 = 保存失败。
   const QString smoke_out = qEnvironmentVariable("MYCHAT_SMOKE");
   if (!smoke_out.isEmpty()) {
-    // 设了自动登录时多等一会儿，让「登录 → 切到聊天页」先完成再抓
-    QTimer::singleShot(
-        autologin.isEmpty() ? 1500 : 4000, &app, [root, smoke_out]() {
-          auto *window = qobject_cast<QQuickWindow *>(root);
-          if (window == nullptr) {
-            MCLOG_ERROR() << "[smoke] 根对象不是 Window，无法抓图";
-            QCoreApplication::exit(3);
-            return;
-          }
+    // 设了自动登录时多等一会儿，让「登录 → 切到聊天页」先完成再抓。
+    // MYCHAT_SMOKE_DELAY=<ms> 可以覆盖：验证心跳这类"要等一会儿才发生"的行为时
+    // 1.5s / 4s 都不够（心跳间隔 10s，要看到两三跳得跑 25s+）。
+    int delay_ms = autologin.isEmpty() ? 1500 : 4000;
+    if (const QString custom = qEnvironmentVariable("MYCHAT_SMOKE_DELAY");
+        !custom.isEmpty())
+    {
+        bool be_valid = false;
+        const int parsed = custom.toInt(&be_valid);
+        if (be_valid && parsed >= 0)
+        {
+            delay_ms = parsed;
+            MCLOG_INFO() << "[smoke] 等待时长被 MYCHAT_SMOKE_DELAY 覆盖为" << delay_ms
+                << "ms";
+        }
+        else
+        {
+            MCLOG_WARN() << "[smoke] MYCHAT_SMOKE_DELAY 不是合法毫秒数:" << custom;
+        }
+    }
 
-          const QImage image = window->grabWindow();
-          const bool ok = !image.isNull() && image.save(smoke_out);
+    QTimer::singleShot(delay_ms, &app, [root, smoke_out]()
+                           {
+                               auto* window = qobject_cast<QQuickWindow*>(root);
+                               if (window == nullptr)
+                               {
+                                   MCLOG_ERROR() << "[smoke] 根对象不是 Window，无法抓图";
+                                   QCoreApplication::exit(3);
+                                   return;
+                               }
 
-          MCLOG_INFO() << "[smoke]" << (ok ? "OK" : "FAILED") << "->"
-              << smoke_out << image.size();
-          QCoreApplication::exit(ok ? 0 : 4);
-        });
+                               const QImage image = window->grabWindow();
+      const bool ok = !image.isNull() && image.save(smoke_out);
+
+      MCLOG_INFO() << "[smoke]" << (ok ? "OK" : "FAILED") << "->" << smoke_out
+                                   << image.size();
+                               QCoreApplication::exit(ok ? 0 : 4);
+                           });
   }
 
     return QGuiApplication::exec();

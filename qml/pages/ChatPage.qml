@@ -287,6 +287,8 @@ Item {
                                     size: 48
                                     name: modelData.name
                                     uid: modelData.uid
+                                    // 查到了才点亮；未知不点亮（和弹窗一个规矩）
+                                    online: PresenceController.online[modelData.uid] === true
                                 }
 
                                 Column {
@@ -431,6 +433,7 @@ Item {
                                             // ⚠ 必须用 peerUid —— 服务端返回的列表里
                                             //   我发出的那条 fromUid 是我本人（name 却是对方的）
                                             uid: modelData.peerUid
+                                            online: PresenceController.online[modelData.peerUid] === true
                                         }
 
                                         Column {
@@ -550,6 +553,23 @@ Item {
     }
 
     /*!
+        在线状态查询结果回来 → 刷弹窗上的那一个（列表里的点点是绑定，自己会更新）。
+
+        \note 只认当前这一个 uid：控制器回包不带 uid，所以在飞的那一发是谁，
+              得看它说的 uid 跟弹窗里的是不是同一个（对不上就不动）。
+    */
+    Connections {
+        target: PresenceController
+
+        function onStateChanged(uid, online) {
+            if (userInfoDialog.visible && uid === userInfoDialog.userId) {
+                userInfoDialog.online = online
+                userInfoDialog.onlineKnown = true
+            }
+        }
+    }
+
+    /*!
         打开某人资料。
 
         \a user 可直接传 searchResults / applyList 里的 modelData。
@@ -573,8 +593,10 @@ Item {
         userInfoDialog.sex = user.sex !== undefined ? user.sex : 2
         userInfoDialog.desc = user.desc !== undefined ? user.desc : ""
         userInfoDialog.avatarUrl = user.icon !== undefined ? user.icon : ""
-        // 服务端目前不下发在线状态，先按离线显示
-        userInfoDialog.online = user.online === true
+        // 在线状态：先用缓存（已知就直接显示），未知就先按未知渲染，查询结果回来再刷
+        userInfoDialog.onlineKnown = PresenceController.hasState(uid)
+        userInfoDialog.online = PresenceController.isOnline(uid)
+        PresenceController.refresh(uid)
         // 搜到自己 / 从申请列表点到自己 → 走可编辑形态，免得给自己发好友申请
         userInfoDialog.isSelf = uid.length > 0 && uid === LoginController.uid
 
@@ -601,6 +623,17 @@ Item {
         return null
     }
 
+    /// 批量问一批列表项（搜索结果 / 申请列表）的在线状态。
+    /// 控制器与 ChatSocket 都会去重、并串行发（回包不带 uid，不能并发）。
+    function refreshPresenceOf(list) {
+        for (let i = 0; i < list.length; ++i) {
+            const uid = list[i].peerUid !== undefined ? String(list[i].peerUid)
+                : (list[i].uid !== undefined ? String(list[i].uid) : "")
+            if (uid.length > 0)
+                PresenceController.refresh(uid)
+        }
+    }
+
     /// 打开自己的资料卡（顶部头像点击）。本人资料服务端不下发，昵称只从会话里取
     function openSelfInfo() {
         userInfoDialog.userName = LoginController.name
@@ -609,7 +642,9 @@ Item {
         userInfoDialog.sex = 2
         userInfoDialog.desc = ""
         userInfoDialog.avatarUrl = ""
+        // 自己当然是"在线且已知" —— 我们正连着聊天服
         userInfoDialog.online = true
+        userInfoDialog.onlineKnown = true
         userInfoDialog.isSelf = true
         userInfoDialog.requestInfo = null
         userInfoDialog.showHint("本人的性别 / 签名服务端暂不下发，保存接口也尚未提供", false)
@@ -688,6 +723,12 @@ Item {
 
         function onApplyListChanged() {
             page.tryPendingApplyOpen()
+            page.refreshPresenceOf(ContactController.applyList)
+        }
+
+        // 搜索结果出来后顺带问一下各自在不在线（人数很少，一问一个）
+        function onSearchResultsChanged() {
+            page.refreshPresenceOf(ContactController.searchResults)
         }
 
         function onValidationFailed(field) {

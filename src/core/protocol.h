@@ -53,7 +53,22 @@ namespace mychat::protocol
         TextChatMsgReq,
         TextChatMsgRsp,
         NotifyTextChatMsgReq,
+        HeartBeatReq,         // 1016
+        HeartBeatRsp,         // 1017
+        CheckIsUserOnlineReq, // 1018
+        CheckIsUserOnlineRsp, // 1019
     };
+
+    /**
+     * 心跳发送间隔（毫秒）。
+     *
+     * 服务端用 Redis 的 `uip_<uid>` 键做在线标记，TTL = `HEART_BEAT_EXPIRE_SECONDS`（30 秒）：
+     * 30 秒内没收到心跳，键过期，别人查你就是 offline，好友申请也不会被推送过来。
+     *
+     * 取 10 秒 = 每个 TTL 窗口有 3 次机会 —— 一次丢包/一次卡顿不至于把人打成离线。
+     * 再密就是白耗流量，再疏（比如 25 秒）就没有容错余量了。
+     */
+    inline constexpr int HEARTBEAT_INTERVAL_MS = 10000;
 
     /// 客户端内部请求编号（HTTP 用），与 TCP 的 MessageId 各自独立
     enum class ReqId : std::uint16_t
@@ -181,4 +196,14 @@ namespace mychat::protocol
 
     /// 好友申请列表回包 -> FriendRequest 数组
     [[nodiscard]] QList<FriendRequest> parseFriendRequestList(const QJsonObject& object);
+
+    /**
+     * 「查询用户是否在线」回包。
+     *
+     * 服务端回的字段是 `error`（SUCCESS / SERVICE_UNAVAILABLE）与
+     * `online`（**字符串** "online" / "offline"，不是布尔）。
+     *
+     * @return 有 error 且非 0、或 online 字段缺失/取值不认识时返回 std::nullopt
+     */
+    [[nodiscard]] std::optional<bool> parseUserOnlineRsp(const QJsonObject& object);
 } // namespace mychat::protocol

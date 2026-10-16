@@ -48,6 +48,14 @@ namespace mychat
                 return "TextChatMsgRsp";
             case protocol::MessageId::NotifyTextChatMsgReq:
                 return "NotifyTextChatMsgReq";
+            case protocol::MessageId::HeartBeatReq:
+                return "HeartBeatReq";
+            case protocol::MessageId::HeartBeatRsp:
+                return "HeartBeatRsp";
+            case protocol::MessageId::CheckIsUserOnlineReq:
+                return "CheckIsUserOnlineReq";
+            case protocol::MessageId::CheckIsUserOnlineRsp:
+                return "CheckIsUserOnlineRsp";
             }
             return "Unknown";
         }
@@ -63,6 +71,8 @@ namespace mychat
         : QObject(parent)
           , m_socket(new QTcpSocket(this))
           , m_connect_timer(new QTimer(this))
+          , m_heartbeat_timer(new QTimer(this))
+        , m_online_timer(new QTimer(this))
     {
         m_connect_timer->setSingleShot(true);
         connect(m_connect_timer, &QTimer::timeout, this, [this]()
@@ -71,6 +81,36 @@ namespace mychat
             reset();
             emit connectFailed(tr("连接聊天服务器超时"));
         });
+
+        /*
+         * 心跳：登录成功后开始跳，断开就停。
+         *
+         * 不加"先等一拍"的措辞 —— 登录本身已经把在线 key 写进去了
+         * （服务端 loginHandler 里 set(USER_IP_PERFIX + uid)），所以不必登录后立刻补一发。
+         */
+        m_heartbeat_timer->setInterval(protocol::HEARTBEAT_INTERVAL_MS);
+        connect(m_heartbeat_timer, &QTimer::timeout, this, [this]()
+                    {
+                        sendHeartbeat();
+                    });
+
+        /*
+         * 「查在线」是串行的（回包不带 uid，见 pumpOnlineQueue 的说明）。
+         * 串行就得防"回包永远不来"：否则一次丢回包就把整条队列堵死，
+         * 表现出来是"在线状态的点点再也不更新了"，而且完全静默。
+         * 本地服务端正常是毫秒级，3 秒足够宽松。
+         */
+        m_online_timer->setSingleShot(true);
+        m_online_timer->setInterval(kOnlineReplyTimeoutMs);
+        connect(m_online_timer, &QTimer::timeout, this, [this]()
+                    {
+                        if (m_online_in_flight.isEmpty())
+                            return;
+
+                        qWarning() << "[chat] 查询在线状态超时:" << m_online_in_flight;
+                        m_online_in_flight.clear();
+                        pumpOnlineQueue();
+                    });
 
         connect(m_socket, &QTcpSocket::connected, this, &ChatSocket::onConnected);
         connect(m_socket, &QTcpSocket::disconnected, this, &ChatSocket::onDisconnected);
@@ -147,6 +187,67 @@ bool ChatSocket::syncFriendRequests(const std::uint64_t selfUid)
     return sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestReq), body);
 }
 
+bool ChatSocket::sendHeartbeat()
+{
+    if (!isConnected() || !m_logged_in)
+    {
+        // 未登录/已断开时静默跳过：这时候发心跳没有任何意义，也不该刷警告
+        return false;
+    }
+
+    // 服务端 heartbeatHandler 整个忽略了 message_data，规格也是"不带数据"，
+    // 所以这里发 body_len = 0 的空帧。
+    // （实测过：体长 0 与 "{}" 服务端都正常回 HeartBeatRsp —— 服务端拆帧在
+    //   message_len == 0 时会走 AsyncReadBody(0)，那条路是通的，
+    //   用裸 socket 探过两个 ChatServer 实例。）
+    return sendFrame(static_cast<std::uint16_t>(protocol::MessageId::HeartBeatReq), {});
+}
+
+bool ChatSocket::checkUserOnline(const QString& uid)
+{
+    if (uid.trimmed().isEmpty())
+    {
+        qWarning() << "[chat] 查在线的 uid 为空，请求被丢弃";
+        return false;
+    }
+    if (!isConnected() || !m_logged_in)
+    {
+        qWarning() << "[chat] 未登录，无法查询在线状态:" << uid;
+        return false;
+    }
+
+    const QString key = uid.trimmed();
+
+    // 已经在队列里/正在查，就当成功 —— 调用方不需要关心去重
+    if (key == m_online_in_flight || m_online_queue.contains(key))
+        return true;
+
+    m_online_queue.append(key);
+    pumpOnlineQueue();
+    return true;
+}
+
+void ChatSocket::pumpOnlineQueue()
+{
+    if (!m_online_in_flight.isEmpty() || m_online_queue.isEmpty())
+        return;
+
+    const QString uid = m_online_queue.takeFirst();
+
+    QJsonObject body;
+    body.insert(QStringLiteral("uid"), uid);
+
+    if (sendJson(static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineReq), body))
+    {
+        m_online_in_flight = uid;
+        m_online_timer->start();
+        return;
+    }
+
+    qWarning() << "[chat] 查询在线状态发送失败:" << uid;
+    m_online_queue.clear();
+}
+
 void ChatSocket::disconnectFromServer()
 {
     reset();
@@ -155,8 +256,12 @@ void ChatSocket::disconnectFromServer()
 void ChatSocket::reset()
     {
         m_connect_timer->stop();
+        m_heartbeat_timer->stop();
+        m_online_timer->stop();
         m_buffer.clear();
         m_logged_in = false;
+        m_online_in_flight.clear();
+        m_online_queue.clear();
 
         if (m_socket->state() != QAbstractSocket::UnconnectedState)
             m_socket->abort();
@@ -174,7 +279,13 @@ void ChatSocket::reset()
     void ChatSocket::onDisconnected()
     {
         m_connect_timer->stop();
+        // 心跳必须在这里停：不然断开后定时器还在跑，每次都撞到
+        // sendHeartbeat() 的"未登录"分支白跑
+        m_heartbeat_timer->stop();
+        m_online_timer->stop();
         m_buffer.clear();
+        m_online_in_flight.clear();
+        m_online_queue.clear();
 
         const bool was_logged_in = m_logged_in;
         m_logged_in = false;
@@ -257,6 +368,12 @@ void ChatSocket::reset()
         case protocol::MessageId::SyncFriendRequestRsp:
             handleFriendRequestList(body);
             break;
+        case protocol::MessageId::HeartBeatRsp:
+            handleHeartbeatResponse(body);
+            break;
+        case protocol::MessageId::CheckIsUserOnlineRsp:
+            handleUserOnlineResponse(body);
+            break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
             //
@@ -307,6 +424,11 @@ void ChatSocket::reset()
 
         m_logged_in = true;
         qInfo() << "[chat] 登录聊天服成功: uid =" << *uid << "name =" << name;
+
+        // 登录成功就开始心跳。服务端的在线标记是 Redis 里 30 秒 TTL 的 uip_<uid>，
+        // 不续期的话别人查你就是 offline，好友申请也不会被推过来。
+        if (!m_heartbeat_timer->isActive())
+            m_heartbeat_timer->start();
 
         emit loginSucceeded(*uid, name, token);
     }
@@ -363,10 +485,22 @@ void ChatSocket::reset()
 
         // 服务端回的是申请记录 id（字符串形式）
         const auto id = protocol::parseUid(object.value(QStringLiteral("add_friend_request_id")));
-        const std::uint64_t request_id = id.value_or(0);
+        if (!id.has_value() || *id == 0)
+        {
+            /*
+             * 成功的 AddFriendRsp 一定带 add_friend_request_id（存储过程把新记录的 id 回给上层）。
+             * 缺了说明这条"1006"根本不是正常的申请回包 —— 现实里就发生过：
+             * 服务端 checkIsUserOnlineHandler 误用 MESSAGE_ADD_FRIEND_RSP 发查在线回包
+             * （`{"error":0,"online":"offline"}`），这里若照单全收，界面会凭空弹一句
+             * "好友申请已发送"。按失败上报，至少不会撒谎。
+             */
+            qWarning() << "[chat] 好友申请回包缺少 add_friend_request_id，按失败处理:" << object;
+            emit friendRequestResult(false, static_cast<int>(protocol::ErrorCode::JsonError), 0);
+            return;
+        }
 
-        qInfo() << "[chat] 好友申请已发送, request id =" << request_id;
-        emit friendRequestResult(true, error, request_id);
+        qInfo() << "[chat] 好友申请已发送, request id =" << *id;
+        emit friendRequestResult(true, error, *id);
     }
 
     void ChatSocket::handleFriendRequestList(const QByteArray& body)
@@ -390,6 +524,76 @@ void ChatSocket::reset()
         emit friendRequestList(requests, error);
     }
 
+    void ChatSocket::handleHeartbeatResponse(const QByteArray& body)
+    {
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 心跳回包解析失败:" << parse_error.errorString();
+            emit heartbeatResult(false, static_cast<int>(protocol::ErrorCode::JsonError));
+            return;
+        }
+
+        const int error = document.object().value(QStringLiteral("error"))
+                                  .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 续期失败＝在线状态已经开始倒计时，值得一条警告
+            qWarning() << "[chat] 心跳续期失败, error =" << error;
+            emit heartbeatResult(false, error);
+            return;
+        }
+
+        qDebug() << "[chat] 心跳续期成功";
+        emit heartbeatResult(true, error);
+    }
+
+    void ChatSocket::handleUserOnlineResponse(const QByteArray& body)
+    {
+        // 超时已经把这发作废了、或者根本没有在飞的请求 → 这条回包无人认领，丢掉。
+        // 宁可少一个状态，也不能把它安到别人头上。
+        if (m_online_in_flight.isEmpty())
+        {
+            qWarning() << "[chat] 收到没有对应请求的在线状态回包，已忽略";
+            return;
+        }
+
+        // 不管解析成功与否都要把 in-flight 清掉并放行下一个，
+        // 否则一次脏回包就能把整条队列卡死
+        const QString uid = m_online_in_flight;
+        m_online_in_flight.clear();
+        m_online_timer->stop();
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+
+        bool online = false;
+        int error = static_cast<int>(protocol::ErrorCode::JsonError);
+
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 在线状态回包解析失败:" << parse_error.errorString();
+        }
+        else
+        {
+            const QJsonObject object = document.object();
+            error = object.value(QStringLiteral("error"))
+                          .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+            const std::optional<bool> state = protocol::parseUserOnlineRsp(object);
+            online = state.value_or(false);
+        }
+
+        const std::uint64_t target = uid.toULongLong();
+        qDebug() << "[chat] 用户在线状态: uid =" << uid << "online =" << online
+            << "error =" << error;
+
+        emit userOnlineResult(target, online, error);
+
+        pumpOnlineQueue();
+    }
+
     bool ChatSocket::sendJson(const std::uint16_t message_id, const QJsonObject& body)
     {
         if (!isConnected())
@@ -399,6 +603,17 @@ void ChatSocket::reset()
         }
 
         const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        return sendFrame(message_id, payload);
+    }
+
+    bool ChatSocket::sendFrame(const std::uint16_t message_id, const QByteArray& payload)
+    {
+        if (!isConnected())
+        {
+            qWarning() << "[chat] 未连接，消息被丢弃:" << messageIdName(message_id);
+            return false;
+        }
+
         if (payload.size() > protocol::MAX_BODY_LEN)
         {
             qWarning() << "[chat] body 过长:" << payload.size() << ">" << protocol::MAX_BODY_LEN;
@@ -424,7 +639,8 @@ void ChatSocket::reset()
         }
         m_socket->flush();
 
-        qDebug() << "[chat] 发送" << messageIdName(message_id) << QString::fromUtf8(payload);
+        qDebug() << "[chat] 发送" << messageIdName(message_id)
+            << (payload.isEmpty() ? QStringLiteral("(无 body)") : QString::fromUtf8(payload));
         return true;
     }
 } // namespace mychat

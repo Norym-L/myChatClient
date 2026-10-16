@@ -5,6 +5,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include <cstdint>
 
@@ -59,6 +60,25 @@ namespace mychat
         /// 拉取「别人发给我的」好友申请列表（message_id = SyncFriendRequestReq）
         bool syncFriendRequests(std::uint64_t selfUid);
 
+        /**
+         * 心跳（message_id = HeartBeatReq）。
+         *
+         * 登录成功后由内部定时器按 HEARTBEAT_INTERVAL_MS 自动发送，外部一般不用调。
+         * 服务端只是拿它给 Redis 里的 `uip_<uid>` 续期（30 秒 TTL）—— 30 秒没续上，
+         * 别人查你就是 offline。**服务端不校验 body**，但这里仍发一个空 JSON 对象
+         * 而不是 0 长度 body：服务端的拆帧在 body_len == 0 时会走到
+         * `async_read_some(零长缓冲)` 那条没被验证过的路径（asio 可能当成 EOF 直接关会话）。
+         */
+        bool sendHeartbeat();
+
+        /**
+         * 查询某个用户是否在线（message_id = CheckIsUserOnlineReq）。
+         *
+         * @param uid 目标 uid（服务端要求**字符串**形式，和别处一致）
+         * 结果走 \l userOnlineResult 信号
+         */
+        bool checkUserOnline(const QString& uid);
+
         /// 断开并复位全部状态
         void disconnectFromServer();
 
@@ -82,6 +102,11 @@ namespace mychat
         /// 好友申请列表
         void friendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
 
+        /// 一次心跳的结果（error 非 0 说明续期失败，比如 Redis 挂了）
+        void heartbeatResult(bool ok, int error);
+        /// 某个用户的在线状态；error 非 0 时 online 无意义
+        void userOnlineResult(std::uint64_t uid, bool online, int error);
+
     private
         slots :
 
@@ -102,17 +127,42 @@ namespace mychat
         void handleSearchUserResponse(const QByteArray& body);
         void handleAddFriendResponse(const QByteArray& body);
         void handleFriendRequestList(const QByteArray& body);
+        void handleHeartbeatResponse(const QByteArray& body);
+        /// 回包**不带 uid**，所以靠 m_online_in_flight 记住这一发问的是谁
+        void handleUserOnlineResponse(const QByteArray& body);
         bool sendJson(std::uint16_t message_id, const QJsonObject& body);
+        /// 直接发一段已序列化好的 body（心跳要发体长 0 的空帧，走不了 sendJson）
+        bool sendFrame(std::uint16_t message_id, const QByteArray& payload);
+        /// 一次只发一个「查在线」请求；上一个回包了就接着发下一个
+        void pumpOnlineQueue();
 
         /// 文档：服务端无读超时，客户端自己做连接超时
         static constexpr int kConnectTimeoutMs = 5000;
+        /// 「查在线」回包超时：串行队列靠它自愈（回包不来时不能把后面的全堵死）
+        static constexpr int kOnlineReplyTimeoutMs = 3000;
 
         QTcpSocket* m_socket = nullptr;
         QTimer* m_connect_timer = nullptr;
+        QTimer* m_heartbeat_timer = nullptr;
+        QTimer* m_online_timer = nullptr;
 
         QByteArray m_buffer;
         QString m_host;
         quint16 m_port = 0;
         bool m_logged_in = false;
+
+        /*
+         * 「查在线」回包里只有 error / online，**没有 uid** —— 想同时查多个人，
+         * 回包就没法和请求对上号。
+         *
+         * 服务端只有一个 dealMessage 处理线程、每次请求必回一包，所以理论上可以按 FIFO
+         * 配对；但那是在赌"一请求一回包"永远成立，一旦哪天有分支不回包，
+         * 在线状态就会张冠李戴（而且错得很安静）。
+         *
+         * 所以这里选择**串行**：一次只发一个，回来了再发下一个。少一点并发，
+         * 换来不依赖任何顺序假设。要真正并发，得先请服务端把 uid 回显回来。
+         */
+        QString m_online_in_flight;
+        QStringList m_online_queue;
     };
 } // namespace mychat

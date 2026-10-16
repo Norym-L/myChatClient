@@ -236,4 +236,26 @@ namespace mychat::protocol
 
         return list;
     }
+
+    std::optional<bool> parseUserOnlineRsp(const QJsonObject& object)
+    {
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::JsonError));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qWarning() << "[protocol] 查询在线状态失败, error =" << error;
+            return std::nullopt;
+        }
+
+        // 服务端回的是字符串 "online" / "offline"，不是布尔 —— 别用 toBool()，
+        // 非空字符串会被 QJsonValue::toBool() 判成 true，"offline" 也会变在线。
+        const QString online = object.value(QStringLiteral("online")).toString();
+        if (online == QLatin1String("online"))
+            return true;
+        if (online == QLatin1String("offline"))
+            return false;
+
+        qWarning() << "[protocol] 在线状态回包里的 online 取值无法识别:" << online;
+        return std::nullopt;
+    }
 } // namespace mychat::protocol

@@ -61,8 +61,14 @@ ZDialog {
     property var sex: 2
     /// 个性签名
     property string desc: ""
-    /// 在线状态。服务端目前不下发，恒为 false
+    /*!
+        在线状态。**只有 \l onlineKnown 为真时才有意义** —— 以前服务端不下发在线状态，
+        这里一律按 false（离线）显示；现在能查了（CheckIsUserOnlineReq），
+        但"还没查到结果"和"查到了、离线"是两件事，不能都显示成 OFFLINE。
+    */
     property bool online: false
+    /// 在线状态是否已知；false → 界面显示 UNKNOWN，而不是假装离线
+    property bool onlineKnown: false
     /*!
         头像地址。服务端还没有头像服务（`UserInfo.icon` 恒为空串），
         这里先把入口留出来：将来上传成功拿到 URL 后，由页面赋值即可显示。
@@ -188,7 +194,8 @@ ZDialog {
                     size: avatarBox.width
                     name: dialog.userName
                     uid: dialog.userId
-                    online: dialog.online
+                    // 未知时不点亮，免得看着像"在线"
+                    online: dialog.onlineKnown && dialog.online
                     source: dialog.avatarUrl
                     clickable: dialog.isSelf
                     onClicked: dialog.toggleEdit()
@@ -249,9 +256,12 @@ ZDialog {
                     }
 
                     ZTag {
-                        text: dialog.online ? "ONLINE" : "OFFLINE"
-                        tone: dialog.online ? Theme.Tone.Accent : Theme.Tone.Muted
-                        dotColor: dialog.online ? Theme.cyan : "transparent"
+                        text: !dialog.onlineKnown ? "UNKNOWN"
+                            : (dialog.online ? "ONLINE" : "OFFLINE")
+                        tone: dialog.onlineKnown && dialog.online
+                            ? Theme.Tone.Accent : Theme.Tone.Muted
+                        dotColor: dialog.onlineKnown && dialog.online
+                            ? Theme.cyan : "transparent"
                     }
                 }
 

@@ -114,6 +114,8 @@ add_library(qtclient_core STATIC
         src/ContactController.cpp
         src/LoginController.h
         src/LoginController.cpp
+        src/PresenceController.h
+        src/PresenceController.cpp
         src/RegisterController.h
         src/RegisterController.cpp
         src/ResetPasswordController.h

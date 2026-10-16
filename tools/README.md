@@ -5,6 +5,7 @@
 | 环境变量                            | 作用                                                                                                                                         | 退出码                                  |
 |-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
 | `MYCHAT_SMOKE=<输出 png 路径>`      | 渲染一帧后抓图落盘并退出                                                                                                                     | 0 成功；3 根对象不是 Window；4 保存失败 |
+| `MYCHAT_SMOKE_DELAY=<ms>`           | 覆盖抓图前的等待时长（默认 1.5s，带 `AUTOLOGIN` 时 4s）。验心跳这类"要等一会儿才发生"的行为时，要跑到 25s+                                   | —                                       |
 | `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                                                                                                       | 登录成功则切到聊天页                    |
 | `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset` / `Chat`，大小写不敏感                                                                     | —                                       |
 | `MYCHAT_SEARCH=<关键字>`            | 进聊天页后自动发起一次用户搜索（切到「联系人」分区）                                                                                         | —                                       |
@@ -40,6 +41,30 @@ MYCHAT_PAGE=Reset    MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/reset.png    ./qt
 MYCHAT_AUTOLOGIN="666672:Test@12345" \
 MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat.png ./qtClient.exe
 ```
+
+## 协议探针（不依赖客户端）
+
+服务端是"会动的那一端"时，先用裸帧把「服务端到底怎么回」钉死，再回头改客户端 ——
+比在客户端里加日志猜要快得多。两个脚本只用 Python 标准库。
+
+```bash
+PY=C:/Users/Norym/.workbuddy/binaries/python/versions/3.13.12/python.exe
+
+# 心跳帧的两种 body 形态 + 「查在线」回包的真实 message_id（后面的 uid 可省）
+"$PY" tools/probe-tcp.py 8090 666673
+
+# 在线 key 的 TTL：心跳有没有真的在续期
+"$PY" tools/probe-redis.py uip_666672
+```
+
+判读要点：
+
+- 未登录也能发心跳 —— 服务端会回 `error=1011` 且 **不关连接**，所以不用登录就能验帧路径。
+- `probe-tcp.py` 打印的 `message_id` 是 **回包自己带的编号**。踩过：服务端
+  `checkIsUserOnlineHandler` 里 `send(...)` 误用 `MESSAGE_ADD_FRIEND_RSP`（1006），
+  而客户端在等 1019 —— 这种错帧只看客户端日志很难定位。
+- `probe-redis.py` 的推理：客户端只跑 15 秒、退出后立刻读 TTL， **≈25 才说明 t=10s 的心跳续上了**（登录那次写的此刻只该剩
+  ≈15）。
 
 ## 抓「用户资料」弹窗
 
