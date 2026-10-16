@@ -81,6 +81,17 @@ Button {
     readonly property bool showEdge: edgeVisibleFor(variant, skew, _isOn, enabled)
     readonly property color edgeColor: edgeColorFor(variant, _isOn)
 
+    /*!
+        底板的切角。**底板、Ghost 悬浮叠加层、焦点环共用这一份取值**。
+
+        抽出来是因为这三块画的是"同一个形状"，各写各的迟早会漂移 —— Ghost 的悬浮底
+        当初就是漏抄了这两个值，于是它退化成一块直角矩形、悬浮时直接戳出底板轮廓，
+        表现成"别的按钮是六边形、只有『了解更多』悬浮时是方块"。改一处、三处同步，
+        这个 bug 就不可能再出现。
+    */
+    readonly property real cutTopRightSize: enabled ? cutSize : 0
+    readonly property real cutBottomLeftSize: enabled ? Theme.cutSm : 0
+
     /*! 悬停 / 聚焦的过渡时长。所有状态动画共用它，保证节奏一致。 */
     readonly property int stateDuration: Theme.durBase
 
@@ -97,7 +108,8 @@ Button {
             case Theme.Variant.Danger:
                 return Theme.subBg
             default:
-                return _isOn ? Theme.surfaceHover : "transparent"
+                // Ghost：底板恒为透明，"有没有底"交给下面那块独立叠加层
+                return "transparent"
         }
     }
 
@@ -132,8 +144,8 @@ Button {
             color: control._fill
             strokeColor: control._stroke
             strokeWidth: control._stroke.a > 0 ? Theme.border : 0
-            cutTopRight: control.enabled ? control.cutSize : 0
-            cutBottomLeft: control.enabled ? Theme.cutSm : 0
+            cutTopRight: control.cutTopRightSize
+            cutBottomLeft: control.cutBottomLeftSize
 
             // 悬停/聚焦时底色平滑过渡（黄底黑字 ↔ 黑底黄字这类反色不再是硬切）
             Behavior on color {
@@ -153,6 +165,35 @@ Button {
 
             Behavior on color {
                 ColorAnimation {
+                    duration: control.stateDuration; easing.type: Theme.easingStd
+                }
+            }
+        }
+
+        // ── Ghost 的悬浮底：独立叠加层，用 opacity 过渡 ──
+        //
+        // 为什么不让底板自己做 "transparent ↔ surfaceHover" 的颜色过渡：
+        //   · 底板的 color 是四个形态共用的，而 Ghost 是唯一一个"底色靠 alpha=0
+        //     表示不存在"的形态 —— "有没有底"和"底是什么颜色"被混在同一条通道上；
+        //   · 这条颜色过渡和左竖条的宽度过渡挤在同一次状态变化里，状态一抖动
+        //     动画就被反复重启，最先出问题的是它；
+        //   · 挪到独立的不透明度通道后，悬浮底的显隐与底板颜色彻底解耦，
+        //     任何形态的底色动画都影响不到它。
+        ZCutRect {
+            id: ghostHoverFill
+            anchors.fill: parent
+            visible: control.variant === Theme.Variant.Ghost
+            color: Theme.surfaceHover
+            opacity: control._isOn ? 1 : 0
+
+            // 切角必须和底板一模一样：叠加层是"铺在底板上"的替身，
+            // 少了这两个切角它就退化成一块直角矩形，悬浮时右上 / 左下会戳出底板轮廓外 ——
+            // 用户看到的"了解更多悬浮是方角、别的按钮是六边形"就是这个。
+            cutTopRight: control.cutTopRightSize
+            cutBottomLeft: control.cutBottomLeftSize
+
+            Behavior on opacity {
+                NumberAnimation {
                     duration: control.stateDuration; easing.type: Theme.easingStd
                 }
             }
@@ -194,8 +235,8 @@ Button {
             color: "transparent"
             strokeColor: Theme.accent
             strokeWidth: 2
-            cutTopRight: control.cutSize
-            cutBottomLeft: Theme.cutSm
+            cutTopRight: control.cutTopRightSize
+            cutBottomLeft: control.cutBottomLeftSize
         }
     }
 
@@ -229,10 +270,14 @@ Button {
         }
     }
 
-    // 悬停提示：文案非空时自动显示。宿主类型明确（control 是 ZButton），
-    // 所以不需要在调用处写 parent.hovered，静态检查也不会有 missing-property 噪音。
+    // 悬停提示：文案非空时自动挂一个 ZToolTip（调用处不必再写 parent.hovered）。
+    //
+    // ⚠️ 这里**不能自己绑 visible**。ToolTip 的显隐状态机在 C++ 的 T.ToolTip 里
+    //    （它管 hovered + delay + timeout 三件事），一旦在外面把 visible 绑上，
+    //    等于把整套逻辑覆盖掉：提示框会"一碰就弹"（delay: 300 形同虚设），
+    //    而且弹层出现时抓走鼠标、可能反过来扰动宿主按钮的 hovered，
+    //    表现就是"背景闪一下又变回白色"。
     ZToolTip {
         text: control.tooltip
-        visible: control.tooltip.length > 0 && control.hovered
     }
 }

@@ -17,16 +17,18 @@ Item {
     id: page
 
     /*! 跳转注册页 */
-    signal registerRequested()
+        signal
+    registerRequested
 
     /*! 跳转重置密码页 */
-    signal resetRequested()
+        signal
+    resetRequested
 
     /// 提交登录：先清掉上一次的高亮，校验交给 C++
     function doLogin() {
-        accountEdit.invalid = false
-        passEdit.invalid = false
-        LoginController.login(accountEdit.text, passEdit.text)
+        accountEdit.invalid = false;
+        passEdit.invalid = false;
+        LoginController.login(accountEdit.text, passEdit.text);
     }
 
     // ── 工程图纸网格铺底 ──────────────────────────────────────
@@ -123,11 +125,11 @@ Item {
 
         function onValidationFailed(field) {
             if (field === "account") {
-                accountEdit.invalid = true
-                accountEdit.forceActiveFocus()
+                accountEdit.invalid = true;
+                accountEdit.forceActiveFocus();
             } else if (field === "password") {
-                passEdit.invalid = true
-                passEdit.forceActiveFocus()
+                passEdit.invalid = true;
+                passEdit.forceActiveFocus();
             }
         }
     }

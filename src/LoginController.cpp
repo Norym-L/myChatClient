@@ -44,6 +44,19 @@ QString LoginController::CheckPassword(const QString& text)
     return AccountValidator::checkPassword(text);
 }
 
+QString LoginController::uid() const
+{
+    // 未登录时 uid 为 0，这里返回空串而不是 "0"：
+    // QML 侧比的是字符串，空串才不会跟某个真实 uid 撞上。
+    const std::uint64_t value = mychat::SessionManager::instance().uid();
+    return value == 0 ? QString() : QString::number(value);
+}
+
+QString LoginController::name() const
+{
+    return mychat::SessionManager::instance().name();
+}
+
 void LoginController::login(const QString& account, const QString& password)
 {
     if (m_busy)

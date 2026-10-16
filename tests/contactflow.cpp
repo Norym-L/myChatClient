@@ -143,7 +143,10 @@ int main(int argc, char* argv[])
                                 break;
                             }
                         }
-                        contact.sendFriendRequest(target, verify_info, QStringLiteral(""));
+                        // 第 4 个参数是对方的显示名，只用于控制器本地补的那条「已发出」记录；
+                        // 自检程序手里只有 uid，传空串即可（列表里会显示成只有 UID）
+                        contact.sendFriendRequest(target, verify_info, QStringLiteral(""),
+                                                  QStringLiteral(""));
                     }
                     break;
 

@@ -22,10 +22,17 @@
  *
  * QML 侧：
  *   ContactController.searchUser(keyword)
- *   ContactController.sendFriendRequest(toUid, verifyInfo, remark)
+ *   ContactController.sendFriendRequest(toUid, verifyInfo, remark, peerName)
  *   ContactController.refreshApplyList()
  *   读 searchResults / searchResultCount / applyList
  *     （searchResults 每项为 QVariantMap：uid / name / desc / sex / icon）
+ *     （applyList 每项为 QVariantMap：id / fromUid / toUid / peerUid / received /
+ *       name / verifyInfo / sex / state / stateText）
+ *
+ *   ⚠ applyList 里**我发出的和我收到的混在一起**（服务端查询是
+ *     `applicant_uid = ? OR receiver_uid = ?`），而 name/icon/sex 取的是对方的。
+ *     UI 要显示"对面是谁"，请一律用 **peerUid**，别用 fromUid；
+ *     received 表示方向（true = 别人发给我的）。
  */
 class ContactController : public QObject
 {
@@ -58,9 +65,18 @@ public:
     /// 搜索用户：keyword 可以是 uid，也可以是用户名（服务端两种都认）
     Q_INVOKABLE void searchUser(const QString& keyword);
 
-    /// 发送好友申请
+    /**
+     * 发送好友申请。
+     *
+     * @param toUid     目标 uid（字符串形式的 uint64）
+     * @param verifyInfo 验证信息
+     * @param remark    备注：加好友时给对方起的别名（服务端会落库）
+     * @param peerName  对方的显示名。**只用于本地那条乐观记录** ——
+     *                  AddFriendRsp 只回一个 request id，不带名字；
+     *                  不传的话刚发出的那条申请只能显示 uid，直到下次刷新。
+     */
     Q_INVOKABLE void sendFriendRequest(const QString& toUid, const QString& verifyInfo,
-                                       const QString& remark);
+                                       const QString& remark, const QString& peerName);
 
     /// 刷新「别人发给我的」好友申请列表
     Q_INVOKABLE void refreshApplyList();
@@ -89,6 +105,16 @@ private:
     /// 自己的 uid；未登录时为 0
     [[nodiscard]] std::uint64_t selfUid() const;
 
+    /**
+     * 发送成功后，**立刻在本地补一条「已发出」的申请记录**。
+     *
+     * 为什么不等刷新：用户刚点完「加好友」，界面上必须马上能看到这条，
+     * 更要紧的是 —— 弹窗要据此立刻切到「申请详情」，不再给「加好友」按钮，
+     * 否则同一秒内连点就会发出多条重复申请。
+     * 补出来的记录与服务端回包同形，下次 refreshApplyList() 会被真实数据覆盖。
+     */
+    void appendLocalSentRequest(std::uint64_t requestId);
+
     void onSearchResult(bool found, const QList<mychat::protocol::UserInfo>& infos, int error);
     void onFriendRequestResult(bool ok, int error, std::uint64_t requestId);
     void onFriendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
@@ -99,4 +125,9 @@ private:
 
     QVariantList m_search_results;
     QVariantList m_apply_list;
+
+    // 本次「发送好友申请」的目标信息，成功后用来补那条本地记录
+    std::uint64_t m_pending_peer_uid = 0;
+    QString m_pending_peer_name;
+    QString m_pending_verify;
 };

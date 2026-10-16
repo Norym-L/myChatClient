@@ -20,6 +20,8 @@
         <file alias="pages/RegisterPage.qml">../qml/pages/RegisterPage.qml</file>
         <file alias="pages/ResetPasswordPage.qml">../qml/pages/ResetPasswordPage.qml</file>
 
+        <file alias="dialog/UserInfoDialog.qml">../qml/dialog/UserInfoDialog.qml</file>
+
         <!-- ── 自建组件（ZmdUI 缺失、按同一设计语言补的）──────────────── -->
         <file alias="components/ZAvatar.qml">../qml/components/ZAvatar.qml</file>
 

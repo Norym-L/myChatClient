@@ -33,6 +33,10 @@ class LoginController : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     /// 登录成功后的用户标识，形如 "UID 1001 · norym"，供聊天页显示
     Q_PROPERTY(QString userLabel READ userLabel NOTIFY userLabelChanged)
+    /// 当前登录 uid（未登录时为空串）。QML 用它判断"这个人是不是自己"
+    Q_PROPERTY(QString uid READ uid NOTIFY userLabelChanged)
+    /// 当前登录昵称（未登录时为空串）
+    Q_PROPERTY(QString name READ name NOTIFY userLabelChanged)
 
 public:
     explicit LoginController(QObject* parent = nullptr);
@@ -41,6 +45,16 @@ public:
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
     [[nodiscard]] bool busy() const { return m_busy; }
     [[nodiscard]] QString userLabel() const { return m_user_label; }
+
+    /**
+     * 当前 uid / 昵称，直接取自 SessionManager。
+     *
+     * 不缓存成成员变量：uid 的唯一事实来源在 SessionManager，本类再存一份就等于
+     * 有了第二处真相 —— 迟早会出现"登录了但控制器里还是旧 uid"这类偏差。
+     * 两者都挂在 userLabelChanged 上通知：登录 / 退出都会发它，正好覆盖生命周期。
+     */
+    [[nodiscard]] QString uid() const;
+    [[nodiscard]] QString name() const;
 
     /// 校验账号：返回空串表示通过，否则是给用户看的错误提示。
     /// 无状态所以是 static；注意 Q_INVOKABLE 对 static 函数无效（QML 访问不到），

@@ -4,6 +4,7 @@ import ZmdUI 1.0
 
 import MyChat.Core 1.0
 import "../components"
+import "../dialog"
 
 /*!
     聊天主页 —— 左侧导航（会话 / 联系人 / 好友申请）+ 右侧内容区。
@@ -15,6 +16,10 @@ import "../components"
         文本聊天消息完全没有相关代码）→ 本页只放说明，等服务端补齐后再接
 
     网络与协议全部交给 ContactController，本页不含任何协议细节。
+
+    用户资料卡（UserInfoDialog）的两个入口：
+      · 顶部自己的头像 → openSelfInfo() → 可编辑本人资料
+      · 搜索结果 / 申请列表点整行 → openUserInfo() → 可发好友申请
 */
 Item {
     id: page
@@ -27,6 +32,10 @@ Item {
 
     Component.onCompleted: {
         ContactController.refreshApplyList()
+
+        // 自动化验证：MYCHAT_OPENDLG 打开资料弹窗（弹窗无头抓图抓不到，得自己弹出来）
+        if (app.autoDialog !== "")
+            Qt.callLater(page.openAutoDialog)
 
         // 自动化验证：MYCHAT_SEARCH 注入的关键字 —— 切到联系人分区发起搜索。
         // ⚠ refreshApplyList 已把控制器置 busy，直接 searchUser 会被静默丢弃
@@ -42,6 +51,12 @@ Item {
     /// MYCHAT_SEARCH 挂起的搜索关键字；空串表示没有待发的搜索
     property string pendingSearch: ""
 
+    /// MYCHAT_OPENDLG=sendfriend 时挂起的"替用户点一次加好友"
+    property bool pendingFriendSend: false
+
+    /// MYCHAT_OPENDLG=applyreceived / applysent 时挂起的"打开申请列表里的某一条"
+    property string pendingApplyOpen: ""
+
     function tryAutoSearch() {
         if (pendingSearch === "")
             return
@@ -50,6 +65,42 @@ Item {
         const kw = pendingSearch
         pendingSearch = ""
         ContactController.searchUser(kw)
+    }
+
+    /// 与 tryAutoSearch 同一个道理：控制器忙的时候发的请求会被静默丢弃
+    function tryPendingFriendSend() {
+        if (!pendingFriendSend || ContactController.busy)
+            return
+        pendingFriendSend = false
+        userInfoDialog.primaryAction()
+    }
+
+    /// 同上的道理：申请列表要等回包到了才有数据
+    function tryPendingApplyOpen() {
+        if (pendingApplyOpen === "" || ContactController.busy)
+            return
+
+        const list = ContactController.applyList
+        // ⚠ ContactController 是先 setBusy(false) 再更新列表的，所以 busyChanged 那一拍
+        //   列表还是空的。这里必须等 applyListChanged —— 空列表不算"没找到"。
+        if (list.length === 0)
+            return
+
+        const want = pendingApplyOpen === "applyreceived"
+        for (let i = 0; i < list.length; ++i) {
+            if (Boolean(list[i].received) === want) {
+                pendingApplyOpen = ""
+                const item = list[i]
+                // 延到下一拍再开：控制器是在 emit applyListChanged **之后**才 setTip
+                // 的，此刻同步开弹窗会被随后的 tipChanged 把底栏提示覆盖掉。
+                // 真实用户点击本来就发生在这一切之后，所以这里只为还原真实行为。
+                Qt.callLater(() => page.openUserInfo(item, item))
+                return
+            }
+        }
+
+        pendingApplyOpen = ""
+        console.warn("[chat] 申请列表里没有「" + (want ? "收到" : "已发出") + "」的条目")
     }
 
     // ── 工程图纸网格铺底 ──────────────────────────────────────
@@ -108,11 +159,14 @@ Item {
                     anchors.margins: Theme.spacingMd
                     spacing: Theme.spacingMd
 
+                    // 顶部这个就是"自己"：点它打开自己的资料卡，进去就能编辑
                     ZAvatar {
                         size: 32
-                        name: page.displayName()
-                        uid: page.displayUid()
+                        name: LoginController.name
+                        uid: LoginController.uid
                         online: true
+                        clickable: true
+                        onClicked: page.openSelfInfo()
                     }
 
                     Text {
@@ -272,32 +326,27 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: searchArea.selectedUid = modelData.uid
+                                // 点整行 = 选中 + 打开资料卡（加好友在资料卡里做）。
+                                // ⚠ 只留这一个处理器：头像上再挂一个 TapHandler 的话，
+                                //   两个都会响应，弹窗会被连着 open 两次。
+                                onClicked: {
+                                    searchArea.selectedUid = modelData.uid
+                                    page.openUserInfo(modelData)
+                                }
                             }
                         }
                     }
 
-                    // 给选中用户发申请：验证信息 + 提交
-                    ZTextField {
-                        id: verifyEdit
+                    // 加好友的入口统一收进资料弹窗（点整行即打开）：
+                    // 验证信息、网络结果提示都在那儿，避免同一页出现两套"加好友"流程。
+                    Text {
                         width: parent.width
                         visible: searchArea.selectedUid !== ""
-                        label: "VERIFY INFO"
-                        unit: "MSG"
-                        placeholderText: "给 " + searchArea.selectedUid + " 的验证信息"
-                        enabled: !ContactController.busy
-                        onAccepted: page.doAddFriend()
-                    }
-
-                    ZButton {
-                        visible: searchArea.selectedUid !== ""
-                        text: ContactController.busy
-                            ? "提交中…"
-                            : "向 UID " + searchArea.selectedUid + " 添加好友"
-                        variant: Theme.Variant.Primary
-                        mono: "SEND"
-                        enabled: !ContactController.busy
-                        onClicked: page.doAddFriend()
+                        text: "已选中 UID " + searchArea.selectedUid
+                            + " —— 在资料卡里填写验证信息后发送好友申请"
+                        font: Theme.fontBody
+                        color: Theme.muted
+                        wrapMode: Text.WordWrap
                     }
 
                     // 提示行
@@ -379,18 +428,31 @@ Item {
                                         ZAvatar {
                                             size: 36
                                             name: modelData.name
-                                            uid: modelData.fromUid
+                                            // ⚠ 必须用 peerUid —— 服务端返回的列表里
+                                            //   我发出的那条 fromUid 是我本人（name 却是对方的）
+                                            uid: modelData.peerUid
                                         }
 
                                         Column {
-                                            width: parent.width - 36 - parent.spacing
+                                            width: parent.width - 36 - parent.spacing - direction.width
+                                                - Theme.spacingMd
                                             anchors.verticalCenter: parent.verticalCenter
                                             spacing: 2
 
-                                            Text {
-                                                text: modelData.name + "  (UID " + modelData.fromUid + ")"
-                                                font: Theme.fontStrong
-                                                color: Theme.ink
+                                            Row {
+                                                spacing: Theme.spacingSm
+
+                                                Text {
+                                                    text: modelData.name
+                                                    font: Theme.fontStrong
+                                                    color: Theme.ink
+                                                }
+
+                                                Text {
+                                                    text: "UID " + modelData.peerUid
+                                                    font: Theme.fontMonoSm
+                                                    color: Theme.muted
+                                                }
                                             }
                                             Text {
                                                 width: parent.width
@@ -403,14 +465,37 @@ Item {
                                         }
                                     }
 
-                                    // 右侧状态：服务端 state 语义未文档化，这里原样显示
-                                    Text {
+                                    // 右侧：方向 + 状态。服务端 state 语义未文档化，原样显示
+                                    Row {
+                                        id: direction
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
                                         anchors.rightMargin: Theme.spacingMd
-                                        text: "STATE " + modelData.state
-                                        font: Theme.fontMonoSm
-                                        color: Theme.muted
+                                        spacing: Theme.spacingSm
+
+                                        ZTag {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.received ? "收到" : "已发出"
+                                            tone: modelData.received ? Theme.Tone.Accent
+                                                : Theme.Tone.Muted
+                                            uppercase: false
+                                            mono: false
+                                        }
+
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.stateText
+                                            font: Theme.fontMonoSm
+                                            color: Theme.muted
+                                        }
+                                    }
+
+                                    // 点整行打开申请人资料卡 —— 并带上这条申请本身，
+                                    // 弹窗会切成"申请详情"形态，不再给「加好友」
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: page.openUserInfo(modelData, modelData)
                                     }
                                 }
                             }
@@ -421,28 +506,175 @@ Item {
         }
     }
 
+    /*
+        用户资料弹窗。
+
+        为什么由页面持有、而不是塞进 ZAvatar 里自己创建：
+        UserInfoDialog 的内容里就有 ZAvatar，如果 ZAvatar 反过来再引用
+        UserInfoDialog，两个文件互相依赖 → QML 报
+          "Cyclic dependency detected between ZAvatar.qml and UserInfoDialog.qml"
+        → 连 main.qml 都加载不了（engine.rootObjects() 为空，进程直接退出）。
+        单向依赖：页面 → 弹窗 → 头像，就不会有这个问题，也顺带把"展示组件"和
+        "业务弹窗"解耦了。
+    */
+    UserInfoDialog {
+        id: userInfoDialog
+
+        // 只读绑定：本页不会给它赋值，所以绑定不会被破坏
+        busy: ContactController.busy
+
+        // 加好友：转给 ContactController。结果提示由下面的 onTipChanged 镜像回弹窗。
+        // 第 4 个参数是对方的显示名 —— AddFriendRsp 只回 request id，不带名字，
+        // 控制器要靠它补那条"已发出"的本地记录。
+        onFriendRequestRequested: (uid, verifyInfo, remark) => {
+            ContactController.sendFriendRequest(uid, verifyInfo, remark, userInfoDialog.userName)
+        }
+
+        // 保存本人资料：服务端没有这个接口，先如实说明（接口就绪后换成控制器调用）
+        onProfileSaveRequested: (name, sex, desc) => {
+            console.log("[chat] 待接入的资料保存请求:", name, sex, desc)
+            userInfoDialog.showHint("资料保存接口尚未接入（服务端暂无该接口），本次修改未提交", true)
+        }
+
+        // 预留的头像上传接口：接上文件选择 + 上传后，把返回的 URL 写回 avatarUrl
+        onAvatarUploadRequested: {
+            userInfoDialog.showHint("头像上传接口尚未接入（服务端暂无头像服务）", false)
+        }
+    }
+
+    /// 仅自动化用：MYCHAT_OPENDLG=sendfriend 时补的第二次「加好友」点击
+    Timer {
+        id: doubleSendTimer
+        interval: 1500
+        onTriggered: userInfoDialog.primaryAction()
+    }
+
+    /*!
+        打开某人资料。
+
+        \a user 可直接传 searchResults / applyList 里的 modelData。
+        \a request 传 applyList 里的那一项时，弹窗切成「申请详情」形态
+        （只展示那条申请，不再提供「加好友」）；不传则自动去申请列表里找
+        有没有跟这个人的往来记录。
+    */
+    function openUserInfo(user, request) {
+        // uid 一律当字符串比：服务端是 uint64，QML 里的 number 只有 53 位精度。
+        // ⚠ 优先级 peerUid > uid > fromUid：
+        //   申请列表的每项都带 peerUid（对方），而它的 fromUid 在"我发出的"那条里
+        //   就是我本人 —— 用 fromUid 会把自己判成"自己"，弹成可编辑的「我的资料」。
+        const uid = user.peerUid !== undefined ? String(user.peerUid)
+            : (user.uid !== undefined ? String(user.uid)
+                : (user.fromUid !== undefined ? String(user.fromUid) : ""))
+
+        userInfoDialog.userName = user.name !== undefined ? user.name : ""
+        userInfoDialog.userId = uid
+        userInfoDialog.nickName = user.nick !== undefined ? user.nick
+            : (user.remark !== undefined ? user.remark : "")
+        userInfoDialog.sex = user.sex !== undefined ? user.sex : 2
+        userInfoDialog.desc = user.desc !== undefined ? user.desc : ""
+        userInfoDialog.avatarUrl = user.icon !== undefined ? user.icon : ""
+        // 服务端目前不下发在线状态，先按离线显示
+        userInfoDialog.online = user.online === true
+        // 搜到自己 / 从申请列表点到自己 → 走可编辑形态，免得给自己发好友申请
+        userInfoDialog.isSelf = uid.length > 0 && uid === LoginController.uid
+
+        const req = request !== undefined && request !== null
+            ? request : page.findRequestFor(uid)
+        userInfoDialog.requestInfo = req
+
+        if (req !== null)
+            userInfoDialog.showHint(req.received
+                ? "对方发来的申请；接受 / 拒绝接口服务端还没提供" : "这条申请是我发出的，等待对方处理", false)
+        else
+            userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
+
+        userInfoDialog.open()
+    }
+
+    /// 申请列表里跟这个 uid 有关的往来记录（没有就返回 null）
+    function findRequestFor(uid) {
+        const list = ContactController.applyList
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].peerUid) === uid)
+                return list[i]
+        }
+        return null
+    }
+
+    /// 打开自己的资料卡（顶部头像点击）。本人资料服务端不下发，昵称只从会话里取
+    function openSelfInfo() {
+        userInfoDialog.userName = LoginController.name
+        userInfoDialog.userId = LoginController.uid
+        userInfoDialog.nickName = ""
+        userInfoDialog.sex = 2
+        userInfoDialog.desc = ""
+        userInfoDialog.avatarUrl = ""
+        userInfoDialog.online = true
+        userInfoDialog.isSelf = true
+        userInfoDialog.requestInfo = null
+        userInfoDialog.showHint("本人的性别 / 签名服务端暂不下发，保存接口也尚未提供", false)
+        userInfoDialog.open()
+    }
+
     function doSearch() {
         ContactController.searchUser(keywordEdit.text)
     }
 
-    function doAddFriend() {
-        if (searchArea.selectedUid === "")
+    /*
+        自动化验证：MYCHAT_OPENDLG=<other|self|selfedit|sendfriend|applyreceived|applysent>
+        时开屏就打开资料弹窗。
+
+        弹窗是 Popup，无头抓图默认抓不到它 —— 有它才能对各个形态分别留证据。
+        参数走 main.qml 的 autoDialog（由 main.cpp 从环境变量注入）。
+    */
+    function openAutoDialog() {
+        if (app.autoDialog === "self" || app.autoDialog === "selfedit") {
+            page.openSelfInfo()
+        } else if (app.autoDialog.startsWith("sendfriend")) {
+            // 目标 uid 可选：`sendfriend:<uid>`；不给就用一个格式合法但不存在的 uid
+            // —— 用来分别验证「服务端回错误」和「服务端回真实请求编号」两条路。
+            const parts = app.autoDialog.split(":")
+            const target = parts.length > 1 && parts[1].length > 0 ? parts[1] : "999999999"
+            page.openUserInfo({uid: target, name: "自检目标"})
+            // 顺带把随申请一起发出去的两条信息填上，日志里就能看到它们真的进了 AddFriendReq
+            userInfoDialog.verifyInfo = "自动化自检：验证信息"
+            userInfoDialog.remark = "自动化自检：备注"
+            // ⚠ refreshApplyList 刚把控制器置 busy，此刻直接发会被静默丢弃
+            //   （和 MYCHAT_SEARCH 踩的是同一个竞态）→ 挂起，等 busy 空闲再发
+            page.pendingFriendSend = true
+            page.tryPendingFriendSend()
+            // 回包之后再替用户点一次「加好友」：此刻弹窗应已切成「申请详情」，
+            // 这次点击必须是空操作 —— 日志里只应出现一条 AddFriendReq
+            doubleSendTimer.restart()
             return
-        ContactController.sendFriendRequest(searchArea.selectedUid, verifyEdit.text, "")
-    }
+        } else if (app.autoDialog === "applylist") {
+            // 只看申请列表本身（不弹资料卡）：验证方向标签与对面 uid 的显示
+            page.section = 2
+            return
+        } else if (app.autoDialog === "applyreceived" || app.autoDialog === "applysent") {
+            // 自动化验证：打开申请列表里「收到」/「已发出」的第一条 ——
+            // 用来确认弹出来的资料卡是**对方**的，而不是被判成"自己"的编辑态。
+            // （服务端列表把「我发出的」也返回，那条的 fromUid 是我本人，是踩过的坑）
+            page.section = 2
+            page.pendingApplyOpen = app.autoDialog
+            page.tryPendingApplyOpen()
+            return
+        } else {
+            page.openUserInfo({
+                // 假数据，只为把"他人资料卡"渲染出来；uid 故意避开测试账号 666672，
+                // 免得带 MYCHAT_AUTOLOGIN 联调时被判定成"自己"而走了编辑形态
+                uid: "666673",
+                name: "三花木尼",
+                nick: "三花木尼",
+                desc: "林中抚琴曲委婉，群山听懂我悲欢",
+                sex: 0,
+                icon: "",
+                online: true
+            })
+        }
 
-    /// 顶部头像显示用：从 LoginController.userLabel 里拆不出 uid，
-    /// 这里改由 ContactController 的搜索态之外单独取 —— 简单起见用 SessionManager 的标签兜底
-    function displayName() {
-        const label = LoginController.userLabel
-        const idx = label.indexOf("·")
-        return idx >= 0 ? label.substring(idx + 1).trim() : label
-    }
-
-    function displayUid() {
-        const label = LoginController.userLabel
-        const idx = label.indexOf("·")
-        return idx >= 0 ? label.substring(0, idx).replace("UID", "").trim() : ""
+        if (app.autoDialog === "selfedit")
+            userInfoDialog.enterEdit()
     }
 
     Connections {
@@ -450,11 +682,36 @@ Item {
 
         function onBusyChanged() {
             page.tryAutoSearch()
+            page.tryPendingFriendSend()
+            page.tryPendingApplyOpen()
+        }
+
+        function onApplyListChanged() {
+            page.tryPendingApplyOpen()
         }
 
         function onValidationFailed(field) {
             if (field === "keyword")
                 keywordEdit.invalid = true
+        }
+
+        // 弹窗开着时把服务端提示镜像进去（写函数而不是绑属性，避免破坏弹窗里的绑定）
+        function onTipChanged() {
+            if (userInfoDialog.visible)
+                userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
+        }
+
+        /*
+            申请发送成功 → 立刻把弹窗切成「申请详情」。
+
+            ContactController 成功时已经往本地补了一条「已发出」记录，所以这里一定找得到。
+            切过去之后主按钮就是禁用的「申请已发送」，同一个弹窗里连点也不会再发 ——
+            光靠按钮文案不够，得让状态真的变掉。
+        */
+        function onFriendRequestSent(ok, error) {
+            if (!ok || !userInfoDialog.visible)
+                return
+            userInfoDialog.requestInfo = page.findRequestFor(userInfoDialog.userId)
         }
     }
 }

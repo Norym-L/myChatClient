@@ -50,6 +50,14 @@ Window {
      */
     property string autoSearch: ""
 
+    /**
+     * 自动打开用户资料弹窗（自动化验证用）。配合 MYCHAT_PAGE=Chat + MYCHAT_SMOKE：
+     * 弹窗是 Popup，离屏抓图默认抓不到它，得让它自己弹出来才留得下证据。
+     * 取值："other"（他人资料卡）/ "self"（自己的资料卡）/ "selfedit"（编辑态），
+     * 由 main.cpp 从环境变量 MYCHAT_OPENDLG 注入，正常启动时为空。
+     */
+    property string autoDialog: ""
+
     Loader {
         id: pageLoader
         anchors.fill: parent

@@ -65,13 +65,26 @@ namespace mychat::protocol
         case ErrorCode::RegisterUserFailed:
             return QObject::tr("注册失败，该邮箱可能已被注册");
         case ErrorCode::UserUidInvalid:
-            return QObject::tr("用户不存在或登录状态已失效");
+            // 服务端的注释就是"非法用户id"（const.h:1011），登录 / 搜索 / 加好友都用它
+            return QObject::tr("用户不存在（uid 无效）");
         case ErrorCode::UserTokenInvalid:
             return QObject::tr("登录凭据已失效，请重新登录");
         case ErrorCode::ServiceUnavailable:
             return QObject::tr("服务器暂时不可用，请稍后重试");
         case ErrorCode::UserNotFound:
             return QObject::tr("用户不存在");
+        /*
+         * 下面这三条是**加好友业务失败**，长期是"够不到的代码" ——
+         * 服务端 `MySqlDao::sendFriendRequest` 返回类型曾是 uint64，
+         * 导致 LogicSystem 里 `if (code < 0)` 恒为假，-3/-4/-5 全被当成成功。
+         * 服务端修好之后它们才真正会下发，客户端必须给得出人话。
+         */
+        case ErrorCode::CanNotAddYourselfAsFriend:
+            return QObject::tr("不能添加自己为好友");
+        case ErrorCode::UserIsYourFriendBefore:
+            return QObject::tr("你们已经是好友了");
+        case ErrorCode::CheckYourReceivedFriendRequest:
+            return QObject::tr("对方已经给你发过好友申请，去「好友申请」里处理吧");
         case ErrorCode::JsonError:
             return QObject::tr("服务器返回数据解析失败");
         case ErrorCode::NetworkError:

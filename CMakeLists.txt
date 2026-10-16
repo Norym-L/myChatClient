@@ -78,6 +78,21 @@ if (MSVC AND QT6_INSTALL_PREFIX MATCHES "mingw")
             "请改用 --preset msvc-debug，或把 CMAKE_PREFIX_PATH 指向 C:/dev/Qt/6.11.2/msvc2022_64")
 endif ()
 
+# ── 引入 third_party/ZmdUI ─────────────────────────────────────────────
+set(ZMDUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ZmdUI")
+if (EXISTS "${ZMDUI_ROOT}")
+    # 1. 告诉 CMake 和 CLion 语言服务器去哪里找 ZmdUI 模块
+    list(APPEND QML_IMPORT_PATH "${ZMDUI_ROOT}")
+    set(QML_IMPORT_PATH "${QML_IMPORT_PATH}" CACHE STRING "QML import paths" FORCE)
+
+    # 2. 如果你需要把 ZmdUI 编译进资源，可以在这里添加它的 qrc（如果它有的话）
+    # 大多数第三方 QML 组件库直接用文件系统路径即可，这里先不加进 qrc
+
+    message(STATUS "qtClient: 已配置 ZmdUI 导入路径: ${ZMDUI_ROOT}/qml")
+else ()
+    message(WARNING "qtClient: 未找到 third_party/ZmdUI/qml，请检查目录结构！")
+endif ()
+
 qt_standard_project_setup()
 
 # ── core：协议 / 网络 / 会话 / 日志（本工程自包含）─────────────────────
