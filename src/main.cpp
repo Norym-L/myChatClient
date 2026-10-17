@@ -127,6 +127,19 @@ int main(int argc, char* argv[])
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "PresenceController",
                                &presence_controller);
 
+    /*
+     * 好友列表 → 会话列表的接线。
+     *
+     * 好友是**联系域**数据（归 ContactController），会话只是它的投影（ChatController）。
+     * 与其让 QML 每次去读 ContactController.friendList 再喂给 ChatController，
+     * 不如在这里连一次：谁关心谁，一眼看得见；QML 也就不用碰控制器之间的数据搬运。
+     */
+    QObject::connect(&contact_controller, &ContactController::friendListChanged,
+                     &chat_controller, [&contact_controller, &chat_controller]()
+                         {
+                             chat_controller.syncFriends(contact_controller.friendList());
+                         });
+
     QQmlApplicationEngine engine;
 
     // 让 QML 里的 "import ZmdUI 1.0" 能在 qrc 里解析到 :/qml/ZmdUI/qmldir

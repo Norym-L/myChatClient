@@ -247,6 +247,54 @@ namespace mychat::protocol
         return list;
     }
 
+    QList<FriendInfo> parseFriendList(const QJsonObject& object)
+    {
+        QList<FriendInfo> list;
+
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::Success));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qDebug() << "[protocol] 获取好友列表失败, error =" << error;
+            return list;
+        }
+
+        /*
+         * `count` 服务端是 std::to_string 出来的字符串（文档 §8.2 写成 number 是错的），
+         * 这里只当日志用 —— 真正相信的是 friends 数组的长度，
+         * 因为资料查不到的好友服务端会跳过，count 与实际条数可能对不上。
+         */
+        const QString count_text = object.value(QStringLiteral("count")).toString();
+        qDebug() << "[protocol] 好友列表条数(count 字段):" << count_text;
+
+        // 没有好友时服务端回 "friends": null —— toArray() 对 null 返回空数组，正好走空态
+        const QJsonArray items = object.value(QStringLiteral("friends")).toArray();
+        list.reserve(items.size());
+
+        for (const QJsonValue& item: items)
+        {
+            if (!item.isObject())
+                continue;
+
+            const QJsonObject entry = item.toObject();
+            const auto uid = parseUid(entry.value(QStringLiteral("uid")));
+            if (!uid.has_value() || *uid == 0)
+                continue;
+
+            FriendInfo info;
+            info.uid = *uid;
+            info.name = entry.value(QStringLiteral("name")).toString();
+            info.desc = entry.value(QStringLiteral("desc")).toString();
+            // nick = 我给对方设置的备注；没设置时服务端给空串
+            info.nick = entry.value(QStringLiteral("nick")).toString();
+            info.sex = entry.value(QStringLiteral("sex")).toInt(2);
+            info.icon = entry.value(QStringLiteral("icon")).toString();
+            list.append(info);
+        }
+
+        return list;
+    }
+
     std::optional<bool> parseUserOnlineRsp(const QJsonObject& object)
     {
         const int error = object.value(QStringLiteral("error"))

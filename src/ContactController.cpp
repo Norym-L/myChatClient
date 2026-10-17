@@ -57,6 +57,8 @@ ContactController::ContactController(QObject* parent)
             this, &ContactController::onAuthFriendResult);
     connect(&socket, &mychat::ChatSocket::friendRequestHandled,
             this, &ContactController::onFriendRequestHandled);
+    connect(&socket, &mychat::ChatSocket::friendListResult,
+            this, &ContactController::onFriendList);
 }
 
 std::uint64_t ContactController::selfUid() const
@@ -187,6 +189,65 @@ void ContactController::startApplyListRefresh()
         setBusy(false);
         setTip(QStringLiteral("刷新请求发送失败"), true);
     }
+}
+
+void ContactController::refreshFriendList()
+{
+    // 用户 / 页面主动刷新：完事要报一句结果
+    m_silent_friend_refresh = false;
+    startFriendListRefresh();
+}
+
+void ContactController::startFriendListRefresh()
+{
+    if (m_busy)
+    {
+        /*
+         * 忙就排队，别丢 —— 和 refreshApplyList 不同：好友列表的自动刷新是
+         * "接受完申请要看到新好友"这种必须发生的事，丢了界面上就少一个人。
+         * 由 setBusy(false) 里的 flushPendingFriendRefresh() 兜底补发。
+         */
+        m_friend_refresh_pending = true;
+        return;
+    }
+
+    if (selfUid() == 0)
+    {
+        m_silent_friend_refresh = false;
+        m_friend_refresh_pending = false;
+        setTip(QStringLiteral("未登录，无法获取好友列表"), true);
+        return;
+    }
+
+    if (!mychat::ChatSocket::instance().isLoggedIn())
+    {
+        m_silent_friend_refresh = false;
+        m_friend_refresh_pending = false;
+        setTip(QStringLiteral("未连接到聊天服务器，请先登录"), true);
+        return;
+    }
+
+    setBusy(true);
+    if (!m_silent_friend_refresh)
+        setTip(QStringLiteral("正在获取好友列表…"));
+
+    if (!mychat::ChatSocket::instance().syncFriendList())
+    {
+        m_silent_friend_refresh = false;
+        setBusy(false);
+        setTip(QStringLiteral("获取好友列表请求发送失败"), true);
+    }
+}
+
+void ContactController::flushPendingFriendRefresh()
+{
+    if (!m_friend_refresh_pending || m_busy)
+        return; // 忙就先不动：setBusy(false) 会再喊一次
+
+    m_friend_refresh_pending = false;
+    // 自动触发（刚接受完申请）不覆盖提示 —— 用户这会儿要看的是"已接受好友申请"
+    m_silent_friend_refresh = true;
+    startFriendListRefresh();
 }
 
 void ContactController::handleFriendRequest(const QString& requestId, const int state)
@@ -420,6 +481,54 @@ void ContactController::onFriendRequestList(const QList<mychat::protocol::Friend
                    : QStringLiteral("共 %1 条好友申请").arg(list.size()));
 }
 
+void ContactController::onFriendList(const QList<mychat::protocol::FriendInfo>& friends,
+                                     const int error)
+{
+    if (error != kSuccess)
+    {
+        m_silent_friend_refresh = false;
+        setTip(mychat::protocol::errorToTip(error), true);
+        emit friendListRefreshed(false, error);
+        // 按约定放最后：busyChanged 会让订阅方立刻进入下一步
+        setBusy(false);
+        return;
+    }
+
+    QVariantList list;
+    list.reserve(friends.size());
+
+    for (const mychat::protocol::FriendInfo& f: friends)
+    {
+        QVariantMap item;
+        item.insert(QStringLiteral("uid"), QString::number(f.uid));
+        item.insert(QStringLiteral("name"), f.name);
+        item.insert(QStringLiteral("desc"), f.desc);
+        // nick = 我给这个好友设置的备注（服务端 user_friend.remark）
+        item.insert(QStringLiteral("nick"), f.nick);
+        // 显示名：备注优先，其次昵称。放在 C++ 里算，QML 各处直接用
+        item.insert(QStringLiteral("displayName"), f.nick.isEmpty() ? f.name : f.nick);
+        item.insert(QStringLiteral("sex"), f.sex);
+        item.insert(QStringLiteral("icon"), f.icon);
+        list.append(item);
+    }
+
+    m_friend_list = list;
+    emit friendListChanged();
+
+    const bool silent = m_silent_friend_refresh;
+    m_silent_friend_refresh = false;
+
+    if (!silent)
+        setTip(list.isEmpty()
+                   ? QStringLiteral("你还没有好友，去「联系人」里搜索并添加吧")
+                   : QStringLiteral("共 %1 位好友").arg(list.size()));
+
+    MCLOG_INFO() << "[contact] 好友列表已更新, 共" << list.size() << "位";
+    emit friendListRefreshed(true, kSuccess);
+
+    setBusy(false);
+}
+
 void ContactController::onFriendRequestNotified(const std::uint64_t requestId)
 {
     MCLOG_INFO() << "[contact] 收到好友申请推送, request id =" << requestId;
@@ -478,6 +587,17 @@ void ContactController::onAuthFriendResult(const bool ok, const int error,
     {
         m_refresh_pending = true;
         QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
+    }
+
+    /*
+     * 接受成功 = 多了一个好友 → 好友列表必须补刷，否则会话列表里根本没有这个人，
+     * 用户会觉得"接受了但没生效"。走挂起意图而不是直接发：此刻控制器还 busy，
+     * 由 setBusy(false) 里的 flushPendingFriendRefresh() 落地。
+     */
+    if (ok && state == 1)
+    {
+        m_friend_refresh_pending = true;
+        QTimer::singleShot(0, this, &ContactController::flushPendingFriendRefresh);
     }
 
     // 按约定放最后：busyChanged 会让订阅方立刻进入下一步
@@ -545,4 +665,8 @@ void ContactController::setBusy(const bool busy)
      */
     if (!busy && m_refresh_pending)
         QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
+
+    // 好友列表同理（接受完申请 / 用户连续点两次刷新都会被排到这里）
+    if (!busy && m_friend_refresh_pending)
+        QTimer::singleShot(0, this, &ContactController::flushPendingFriendRefresh);
 }

@@ -82,6 +82,17 @@ namespace mychat
         bool authFriendRequest(std::uint64_t requestId, int state);
 
         /**
+         * 拉取好友列表（message_id = SyncFriendListReq 1020）。
+         *
+         * 服务端**不解析 body**（用户取 `session->getUserId()`），所以发空 JSON `{}` 即可 ——
+         * 不要像 1007 那样把 selfUid 塞进去，服务端根本不看，反而容易让人误以为
+         * "传谁就查谁"。未登录时服务端回 1011。
+         *
+         * 结果走 \l friendListResult。
+         */
+        bool syncFriendList();
+
+        /**
          * 心跳（message_id = HeartBeatReq）。
          *
          * 登录成功后由内部定时器按 HEARTBEAT_INTERVAL_MS 自动发送，外部一般不用调。
@@ -122,6 +133,14 @@ namespace mychat
         void friendRequestResult(bool ok, int error, std::uint64_t requestId);
         /// 好友申请列表
         void friendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
+
+        /**
+         * 好友列表（1020/1021）。
+         *
+         * 空列表是**正常结果**（还没有好友），不是错误 —— 判断失败要看 error。
+         * 超时也会走到这里（error = \l RequestTimeout），否则调用方会一直等。
+         */
+        void friendListResult(const QList<mychat::protocol::FriendInfo>& friends, int error);
 
         /**
          * 服务端**主动推送**「有人申请加你为好友」（message_id = 1009 NotifyAddFriendReq）。
@@ -219,6 +238,8 @@ namespace mychat
         void handleSearchUserResponse(const QByteArray& body);
         void handleAddFriendResponse(const QByteArray& body);
         void handleFriendRequestList(const QByteArray& body);
+        /// 好友列表回包（1021）
+        void handleFriendList(const QByteArray& body);
         /// 服务端主动推送：只有 request id，没有回包可发
         void handleNotifyAddFriendRequest(const QByteArray& body);
         /// 处理好友申请的回包（1011，只有 error）

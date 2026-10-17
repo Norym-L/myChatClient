@@ -58,6 +58,7 @@ enum class Step
     AddFriend,
     SyncList,
     AuthFriend,
+    SyncFriendList,
     Done
 };
 
@@ -71,6 +72,7 @@ QString stepName(const Step step)
         case Step::AddFriend: return QStringLiteral("发送好友申请");
         case Step::SyncList: return QStringLiteral("拉取好友申请列表");
         case Step::AuthFriend: return QStringLiteral("处理好友申请");
+        case Step::SyncFriendList: return QStringLiteral("拉取好友列表");
         case Step::Done: return QStringLiteral("完成");
     }
     return QStringLiteral("?");
@@ -174,6 +176,10 @@ int main(int argc, char* argv[])
                     socket.authFriendRequest(12, 1);
                     break;
                 case Step::AuthFriend:
+                    step = Step::SyncFriendList;
+                    socket.syncFriendList();
+                    break;
+                case Step::SyncFriendList:
                     step = Step::Done;
                     writeLine(stdout, QStringLiteral("\n[PASS] 所有请求都会自己超时收尾，没有一条卡死"));
                     app.exit(0);
@@ -231,6 +237,13 @@ int main(int argc, char* argv[])
                              Q_UNUSED(requestId)
                              Q_UNUSED(state)
                              finishStep(error, Step::AuthFriend);
+                         });
+
+    QObject::connect(&socket, &mychat::ChatSocket::friendListResult, &app,
+                     [&](const QList<mychat::protocol::FriendInfo>& friends, const int error)
+                         {
+                             Q_UNUSED(friends)
+                             finishStep(error, Step::SyncFriendList);
                          });
 
     QObject::connect(&socket, &mychat::ChatSocket::connected, &app, [&]()

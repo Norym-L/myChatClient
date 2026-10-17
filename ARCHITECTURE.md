@@ -57,16 +57,17 @@ ZmdUI 组件库（终末地工业机能风）。
   客户端收到后自动回拉列表（离线不补推）
 - ✅ **好友验证**：接受 / 拒绝收到的申请（1010/1011）、自己发出的申请被处理时的推送
   （1012 NotifyAuthFriendReq）—— 两条链路均已与服务端实测闭环（`api-friend.md`）
+- ✅ **好友列表**（1020/1021）：`ContactController.refreshFriendList()` → **会话列表由它驱动**
+  （`ChatController.syncFriends()`，在 `main.cpp` 里接线）；备注 `nick` 优先作为显示名
 - ✅ **会话界面**（会话列表 / 消息气泡 / 输入框 / 未读角标）—— 版式与交互已就绪，
-  但数据是 **本地演示**（标 DEMO）：服务端既没有好友列表也没有文本消息。
-  接服务器只需接 `ChatController` 头文件里标注的那三个点（发 / 收 / 拉历史）
-- ✅ 四套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
+  会话列表来自好友列表； **历史消息为空**（服务端没有拉历史接口），发出的消息只在本机回显。
+  演示数据只在 `MYCHAT_DEMO=1` 时注入（用于版式自检）
+- ✅ 五套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- **聊天的数据源**：好友列表（`getUserApplyListAndFriendList` 是空函数）→ 列不出真实会话；
-  文本消息 `TextChatMsg*`（1013~1015）只有编号没有处理器 → 消息发不出去
-- 好友列表本身（接受申请后服务端已经建立了关系，但没有接口能把它列出来）
+- **文本消息**：`TextChatMsg*`（1013~1015）只有编号没有处理器 → 消息发不出去
+- **历史消息**：服务端没有"拉历史"接口，每个会话的初始消息都是空的
 - 会话持久化（目前关掉进程就要重新登录）
 
 ---
@@ -330,13 +331,14 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 联系人 / 好友链路的唯一入口，覆盖服务端 **已实现** 的五条 TCP 消息：
 
-| 方法                                           | 对应消息                                | 说明                                                 |
-|------------------------------------------------|-----------------------------------------|------------------------------------------------------|
-| `searchUser(keyword)`                          | `SearchUserReq/Rsp`（1003/1004）        | keyword 可为 uid 或用户名，服务端两种都认            |
-| `sendFriendRequest(toUid, verifyInfo, remark)` | `AddFriendReq/Rsp`（1005/1006）         | toUid 按字符串传                                     |
-| `refreshApplyList()`                           | `SyncFriendRequestReq/Rsp`（1007/1008） | 拉取「别人发给我的」申请列表                         |
-| `handleFriendRequest(requestId, state)`        | `AuthFriendReq/Rsp`（1010/1011）        | `state` 1 接受 / 2 拒绝；1011 回显编号但不回显 state |
-| `clearSearchResult()`                          | ——（本地）                              | 清空搜索态                                           |
+| 方法                                           | 对应消息                                | 说明                                                     |
+|------------------------------------------------|-----------------------------------------|----------------------------------------------------------|
+| `searchUser(keyword)`                          | `SearchUserReq/Rsp`（1003/1004）        | keyword 可为 uid 或用户名，服务端两种都认                |
+| `sendFriendRequest(toUid, verifyInfo, remark)` | `AddFriendReq/Rsp`（1005/1006）         | toUid 按字符串传                                         |
+| `refreshApplyList()`                           | `SyncFriendRequestReq/Rsp`（1007/1008） | 拉取「别人发给我的」申请列表                             |
+| `handleFriendRequest(requestId, state)`        | `AuthFriendReq/Rsp`（1010/1011）        | `state` 1 接受 / 2 拒绝；1011 回显编号但不回显 state     |
+| `refreshFriendList()`                          | `SyncFriendListReq/Rsp`（1020/1021）    | 请求体发 `{}`（服务端不解析，取会话 uid）；见下方 5.5 注 |
+| `clearSearchResult()`                          | ——（本地）                              | 清空搜索态                                               |
 
 推送（服务端主动，无回包）：`NotifyAddFriendReq`（1009，有人申请加你）、
 `NotifyAuthFriendReq`（1012，你发出的申请被处理）。两者收到后都会自动回拉一次列表， **但补拉是静默的** —— 不会用"共 N
@@ -344,35 +346,50 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 属性：`tip` / `tipIsError` / `busy`、搜索结果 `hasSearchResult` / `searchUid` /
 `searchName` / `searchDesc` / `searchSex`、申请列表 `applyList`（`QVariantList`，
-每项含 `fromUid` / `name` / `verifyInfo` / `state`，供 Repeater 直接用）。
+每项含 `fromUid` / `name` / `verifyInfo` / `state`，供 Repeater 直接用）、
+好友列表 `friendList` / `friendCount`（每项含 `uid` / `name` / `desc` / `nick` /
+`displayName` / `sex` / `icon`）。
+
+⚠ `1021` 的三个实测坑：`count` 是 **字符串**；没有好友时 `friends` 是 **null**（不是缺字段）；
+好友资料查不到的那条服务端会跳过（count 可能大于条数）。解析全在
+`protocol::parseFriendList()` 里兜住，不要在校验层重写一遍。
 
 信号：`searchFinished(found, error)`（未找到通常是 1014）、
 `friendRequestSent(ok, error)`、`validationFailed(field)`。
 
-⚠ 服务端的好友列表（`getUserApplyListAndFriendList`）是 **空函数**，
-认证好友（1009）与文本聊天（1012）也没实现 —— 会话列表因此拿不到任何真实数据。
+⚠ 好友列表（1020/1021）走本类而不是 ChatController：好友是 **联系域**数据，
+会话列表只是它的投影（`main.cpp` 把 `friendListChanged` 接到 `ChatController::syncFriends`）。
+收到的 `friends` 里 `nick` 是我给对方的备注，C++ 已算好 `displayName`（备注优先）。
 
 ### 5.6 ChatController
 
-会话 / 消息的唯一入口。 **服务端目前没有这两样东西**（好友列表是空函数、文本消息无实现），
-所以它现在给的是一份明确的本地演示数据，界面标 `DEMO`。
+会话 / 消息的唯一入口。 **会话列表由好友列表驱动**（`syncFriends()`）；
+文本消息服务端仍未实现，所以历史为空、发送只在本机回显（标「仅本地」）。
+`MYCHAT_DEMO=1` 时才注入演示会话（`demo: true`，`syncFriends` 不会清掉它们）。
 
 | 方法                            | 用途                                                           |
 |---------------------------------|----------------------------------------------------------------|
 | `openConversation(uid, name)`   | 打开会话（顺带清未读）；没有选中时页面自动开第一条             |
+| `syncFriends(friends)`          | 用好友列表重建会话：资料字段取新的，未读/摘要沿用旧的          |
 | `sendText(text)` → bool         | 追加到本地并 `emit textMessageOutgoing()`；空串/超长返回 false |
 | `markRead(uid)`                 | 清未读角标                                                     |
 | `appendIncoming(uid, text, t)`  | **待接**：收到 1015 推送的落点（置顶 + 未读 +1）               |
 | `markMessageState(uid, id, st)` | **待接**：把某条消息从 `local` 改成 `sent` / `failed`          |
 
 属性：`conversations` / `conversationCount` / `messages` / `hasActiveConversation` /
-`activePeerUid` / `activePeerName` / `serverSupportsText`（恒 false）/ `tip` / `tipIsError`。
+`activePeerUid` / `activePeerName` / `activePeerIsDemo` / `serverSupportsText`（恒 false）/
+`tip` / `tipIsError`。
 
 **与服务器的三个接线点**（服务端补齐后只改这几处）：
 
 1. 发：`sendText()` 末尾的 `emit textMessageOutgoing(peerUid, text)` → `ChatSocket` 发 1013
 2. 收：`ChatSocket` 收到 1015 → 调 `appendIncoming()`
-3. 列表 / 历史：把好友列表灌进 `conversations`、把历史消息灌进 `m_history`
+3. 历史：服务端有拉历史接口后，灌进 `m_history`
+
+⚠ **`syncFriends()` 里的信号重入陷阱**：`emit conversationsChanged()` 之后 QML 会 **同步**
+自动打开第一个会话（`ChatPage` 的 handler），所以"原来有没有活动会话"必须在 emit **之前**
+记下来。之前写成 emit 之后再判断，结果订阅方刚打开就被 `closeConversation()` 关掉 ——
+现象是列表里有好友、右侧停在「未选择会话」，日志完全正常。
 
 ⚠ **QML 绑定的坑**：`PresenceController.hasState(uid)` 这类 **函数调用**在 QML 眼里是黑盒，
 属性变了也不会重算绑定（曾表现为日志里明明回了 offline、界面一直停在"状态未知"）。
@@ -661,8 +678,8 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **认证 + 好友链路已完成；聊天业务未做。** 会话列表、消息气泡、聊天输入框都还没有。
-   其中一部分卡在服务端：好友列表接口是空函数、文本聊天消息（1013~1015）无实现。
+1. **认证 + 好友链路 + 好友列表已完成；聊天业务未做。** 会话列表现在由好友列表驱动，
+   消息气泡 / 输入框版式已就绪，但文本消息（1013~1015）服务端无实现、也没有拉历史接口。
    后续可参考 `docs/ServerDocs/api-http.md`、`api-tcp.md` 与根目录的 `接口文档.md`。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**

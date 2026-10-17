@@ -10,10 +10,10 @@ import "../dialog"
     聊天主页 —— 左侧导航（会话 / 联系人 / 好友申请）+ 右侧内容区。
 
     ⚠ 能力边界（取决于服务端，不是客户端偷懒）：
-      · **会话 / 消息气泡**：版式已就绪，但服务端**没有文本消息**
-        （`TextChatMsg*` 只有编号没有处理器）也**没有好友列表**
-        （`getUserApplyListAndFriendList` 是空函数）→ 现在是本地演示数据，
-        页面上标着 DEMO；接法见 ChatController 头部的"与服务器的接口"。
+      · **会话列表**：由**好友列表**驱动（1020/1021），每个好友一个会话入口。
+      · **消息气泡**：服务端**没有文本消息**（`TextChatMsg*` 只有编号没有处理器），
+        所以历史为空、发出的消息只在本机回显（标「仅本地」）。
+        演示数据只剩 `MYCHAT_DEMO=1` 时才注入，平时界面上没有假数据。
       · **联系人**（搜索用户 / 发好友申请）服务端已实现 → 可用
       · **好友申请列表** 服务端已实现 → 可用
 
@@ -39,6 +39,9 @@ Item {
 
     Component.onCompleted: {
         ContactController.refreshApplyList()
+        // 好友列表：失败/忙碌都不要紧，refreshFriendList 会排队（见控制器注释）。
+        // 会话列表要靠它才有内容，所以两个都发。
+        ContactController.refreshFriendList()
         page.initChat()
 
         // 自动化验证：MYCHAT_SENDMSG 注入的一句话 —— 延到下一拍，
@@ -79,6 +82,9 @@ Item {
 
     /// MYCHAT_AUTHAPPLY=accept|refuse 时挂起的「接受 / 拒绝」动作（"1" / "2"）
     property string pendingAuthAction: ""
+
+    /// 上一次批量查在线问的是哪几个 uid（拼成字符串）—— 同一批不重复问
+    property string presenceKey: ""
 
     /*!
         输入区的临时提示（附件被退回、超长被拦下……）。
@@ -255,6 +261,16 @@ Item {
                         return sum
                     }
 
+                    /// 列表里有没有演示会话（只有 MYCHAT_DEMO=1 时会有）—— 决定底部标注写法
+                    readonly property bool hasDemoConversation: {
+                        const list = ChatController.conversations
+                        for (let i = 0; i < list.length; ++i) {
+                            if (list[i].demo === true)
+                                return true
+                        }
+                        return false
+                    }
+
                     function reloadConversations() {
                         const all = ChatController.conversations
                         const kw = convSearch.text.trim().toLowerCase()
@@ -266,7 +282,9 @@ Item {
                         const out = []
                         for (let i = 0; i < all.length; ++i) {
                             const c = all[i]
-                            if (String(c.name).toLowerCase().indexOf(kw) >= 0
+                            // displayName = 备注优先（服务端 nick）；没备注时就是昵称
+                            if (String(c.displayName).toLowerCase().indexOf(kw) >= 0
+                                || String(c.name).toLowerCase().indexOf(kw) >= 0
                                 || String(c.uid).indexOf(kw) >= 0
                                 || String(c.lastText).toLowerCase().indexOf(kw) >= 0)
                                 out.push(c)
@@ -323,6 +341,18 @@ Item {
                                         color: Theme.muted
                                         opacity: 0.7
                                     }
+
+                                    // 好友列表是手动可刷的（进页面自动拉一次，之后靠这个按钮）
+                                    ZIconButton {
+                                        id: friendRefresh
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        glyph: "⟳"
+                                        tooltip: ContactController.busy ? "正在刷新…"
+                                            : "刷新好友列表"
+                                        enabled: !ContactController.busy
+                                        onClicked: ContactController.refreshFriendList()
+                                    }
                                 }
 
                                 ZTextField {
@@ -363,7 +393,8 @@ Item {
 
                                                     width: convColumn.width
                                                     uid: String(modelData.uid)
-                                                    name: modelData.name
+                                                    // 备注优先：控制器已经把 displayName 算好了
+                                                    name: String(modelData.displayName)
                                                     lastText: modelData.lastText
                                                     lastTime: modelData.lastTime
                                                     unread: Number(modelData.unread) || 0
@@ -371,7 +402,7 @@ Item {
                                                     // 未知 ≠ 离线：没查到状态就不点亮
                                                     online: PresenceController.online[String(modelData.uid)] === true
                                                     onClicked: ChatController.openConversation(String(modelData.uid),
-                                                        modelData.name)
+                                                        String(modelData.displayName))
                                                 }
                                             }
                                         }
@@ -380,19 +411,28 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         visible: sectionChat.visibleConversations.length === 0
-                                        text: convSearch.text.length > 0 ? "没有匹配的会话" : "暂无会话"
+                                        text: convSearch.text.length > 0
+                                            ? "没有匹配的会话"
+                                            : (ContactController.busy ? "正在获取好友列表…"
+                                                : "暂无好友 —— 去「联系人」里搜索并添加")
                                         font: Theme.fontBody
                                         color: Theme.muted
                                     }
                                 }
 
-                                // 数据来源如实标注：这些不是服务端给的
+                                /*
+                                    数据来源如实标注：
+                                      · 有演示会话（MYCHAT_DEMO=1）→ 明说那是本地演示数据；
+                                      · 平时 → 会话来自好友列表，标出好友数。
+                                */
                                 Text {
                                     id: listNote
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
-                                    text: "DEMO · 本地演示数据"
+                                    text: sectionChat.hasDemoConversation
+                                        ? "含 DEMO · 本地演示数据"
+                                        : "FRIENDS · " + ContactController.friendCount + " 位好友"
                                     font: Theme.fontMonoSm
                                     color: Theme.muted
                                     opacity: 0.6
@@ -523,6 +563,8 @@ Item {
                                             text: "DEMO"
                                             tone: Theme.Tone.Muted
                                             uppercase: false
+                                            // 只有点开演示会话时才挂这个标：真实好友的会话挂 DEMO 会误导
+                                            visible: ChatController.activePeerIsDemo
                                         }
 
                                         ZIconButton {
@@ -1213,9 +1255,23 @@ Item {
             userInfoDialog.requestInfo = fresh
     }
 
-    /// 批量问一批列表项（搜索结果 / 申请列表）的在线状态。
+    /// 批量问一批列表项（搜索结果 / 申请列表 / 会话）的在线状态。
     /// 控制器与 ChatSocket 都会去重、并串行发（回包不带 uid，不能并发）。
+    ///
+    /// \a presenceKey 用来记住"上一次问的是这批人"，同一批人不重复问 ——
+    /// 会话列表在发一条消息时也会 emit conversationsChanged，没有这道判断就会
+    /// 每发一条消息都把全列表的在线状态重问一遍。
     function refreshPresenceOf(list) {
+        let key = ""
+        for (let i = 0; i < list.length; ++i) {
+            const uid = list[i].peerUid !== undefined ? String(list[i].peerUid)
+                : (list[i].uid !== undefined ? String(list[i].uid) : "")
+            key += uid + ","
+        }
+        if (key === page.presenceKey)
+            return
+        page.presenceKey = key
+
         for (let i = 0; i < list.length; ++i) {
             const uid = list[i].peerUid !== undefined ? String(list[i].peerUid)
                 : (list[i].uid !== undefined ? String(list[i].uid) : "")
@@ -1422,6 +1478,18 @@ Item {
 
         function onConversationsChanged() {
             sectionChat.reloadConversations()
+
+            /*
+             * 好友列表比页面晚到（页面开屏就发请求，回包是异步的），所以"进来就自动
+             * 打开第一个会话"这件事不能只在 initChat() 里做一次 —— 那一刻列表还是空的。
+             * 这里补一次：没有活动会话、但有会话了就开第一个。
+             */
+            const list = ChatController.conversations
+            if (!ChatController.hasActiveConversation && list.length > 0)
+                ChatController.openConversation(String(list[0].uid),
+                    String(list[0].displayName))
+
+            page.refreshPresenceOf(list)
         }
 
         function onMessagesChanged() {

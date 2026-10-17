@@ -2,6 +2,9 @@
 
 #include <QTime>
 #include <QVariantMap>
+#include <QtGlobal>
+
+#include "logger.h"
 
 namespace
 {
@@ -30,7 +33,13 @@ QVariantMap makeMessage(const int id, const bool from_self, const QString& text,
 ChatController::ChatController(QObject* parent)
     : QObject(parent)
 {
-    seedDemoData();
+    /*
+     * 演示数据默认**不注入**：会话列表现在由好友列表驱动（syncFriends），
+     * 真实好友已经有内容可看。只有需要核对气泡 / 列表版式时才开
+     * MYCHAT_DEMO=1（无头抓图自检用），避免平时界面上出现假会话。
+     */
+    if (qEnvironmentVariable("MYCHAT_DEMO") == QLatin1String("1"))
+        seedDemoData();
 }
 
 int ChatController::indexOf(const QString& peerUid) const
@@ -46,10 +55,10 @@ int ChatController::indexOf(const QString& peerUid) const
 void ChatController::seedDemoData()
 {
     /*
-     * ⚠ 演示数据 —— 服务端有接口后整段删掉。
+     * ⚠ 演示数据 —— 只在 MYCHAT_DEMO=1 时注入（见构造函数）。
      *
-     * 之所以现在就要有：会话列表 / 气泡 / 输入区这些版式，没有内容根本看不出对不对。
-     * 界面上会把它们标成 DEMO，避免被当成真消息。
+     * 之所以还留着：会话列表 / 气泡 / 输入区这些版式，没有内容根本看不出对不对。
+     * 每项都带 demo = true，界面据此挂 DEMO 标签，syncFriends() 也不会把它们清掉。
      */
     struct DemoConv
     {
@@ -72,9 +81,15 @@ void ChatController::seedDemoData()
         QVariantMap item;
         item.insert(QStringLiteral("uid"), QString::fromUtf8(c.uid));
         item.insert(QStringLiteral("name"), QString::fromUtf8(c.name));
+        item.insert(QStringLiteral("nick"), QString());
+        item.insert(QStringLiteral("displayName"), QString::fromUtf8(c.name));
+        item.insert(QStringLiteral("icon"), QString());
+        item.insert(QStringLiteral("desc"), QString());
+        item.insert(QStringLiteral("sex"), 2);
         item.insert(QStringLiteral("lastText"), QString::fromUtf8(c.last_text));
         item.insert(QStringLiteral("lastTime"), QString::fromUtf8(c.last_time));
         item.insert(QStringLiteral("unread"), c.unread);
+        item.insert(QStringLiteral("demo"), true);
         m_conversations.append(item);
     }
 
@@ -120,12 +135,105 @@ void ChatController::openConversation(const QString& peerUid, const QString& pee
     m_active_uid = peerUid;
     m_active_name = peerName;
 
+    // DEMO 标签要跟着会话走：点开演示会话才挂标，点开真实好友不该挂
+    const int index = indexOf(peerUid);
+    m_active_is_demo = index >= 0 && m_conversations.at(index).toMap()
+                                                    .value(QStringLiteral("demo"))
+                                                    .toBool();
+
     markRead(peerUid);
 
     if (changed)
         emit activeConversationChanged();
     // 同一个会话重复点开也要刷一次消息（真实链路里这里该去拉历史）
     emit messagesChanged();
+}
+
+void ChatController::syncFriends(const QVariantList& friends)
+{
+    /*
+     * 会话列表 = 好友列表（投影），但**不能直接替换**：
+     *   已有会话的未读 / 摘要 / 顺序是会话状态，重建会把它们清掉。
+     * 所以按 uid 做一次合并：资料字段用新的，会话状态沿用旧的。
+     *
+     * demo = true 的那几条（只有 MYCHAT_DEMO=1 才有）原样追加到末尾 ——
+     * 它们是版式自检数据，不该被真实好友列表冲掉。
+     */
+    QVariantList next;
+    next.reserve(friends.size() + m_conversations.size());
+
+    for (const QVariant& entry: friends)
+    {
+        const QVariantMap f = entry.toMap();
+        const QString uid = f.value(QStringLiteral("uid")).toString();
+        if (uid.isEmpty())
+            continue;
+
+        QVariantMap conv;
+        conv.insert(QStringLiteral("uid"), uid);
+        conv.insert(QStringLiteral("name"), f.value(QStringLiteral("name")));
+        conv.insert(QStringLiteral("nick"), f.value(QStringLiteral("nick")));
+        conv.insert(QStringLiteral("displayName"), f.value(QStringLiteral("displayName")));
+        conv.insert(QStringLiteral("icon"), f.value(QStringLiteral("icon")));
+        conv.insert(QStringLiteral("desc"), f.value(QStringLiteral("desc")));
+        conv.insert(QStringLiteral("sex"), f.value(QStringLiteral("sex")));
+        conv.insert(QStringLiteral("demo"), false);
+
+        // 会话状态沿用上一个版本的（首次出现就是空的）
+        const int old = indexOf(uid);
+        const QVariantMap prev = old >= 0 ? m_conversations.at(old).toMap() : QVariantMap();
+        // ⚠ 一定要给默认值：QVariantMap 里插一个无效 QVariant，QML 那边读到的就是
+        //   undefined → ConversationRow 的 QString 属性会刷 "Unable to assign [undefined]"
+        conv.insert(QStringLiteral("lastText"), prev.value(QStringLiteral("lastText"), QString()));
+        conv.insert(QStringLiteral("lastTime"), prev.value(QStringLiteral("lastTime"), QString()));
+        conv.insert(QStringLiteral("unread"), prev.value(QStringLiteral("unread"), 0));
+
+        next.append(conv);
+    }
+
+    for (const QVariant& entry: m_conversations)
+    {
+        if (entry.toMap().value(QStringLiteral("demo")).toBool())
+            next.append(entry);
+    }
+
+    m_conversations = next;
+
+    /*
+     * 活动会话还在不在？不在（好友被删 / 首次同步）就关掉，别留着对空 uid 发呆。
+     *
+     * ⚠ 先把"发信号之前有没有活动会话"记下来：conversationsChanged 的订阅方
+     *   （ChatPage）会在信号里**自动打开第一个会话**，如果这里在 emit 之后才判断
+     *   "原来是不是没有会话"，就会把订阅方刚打开的那个立刻关掉 ——
+     *   症状是列表里有好友、右侧却停在「未选择会话」，而且日志一切正常。
+     */
+    const bool had_active = !m_active_uid.isEmpty();
+    bool active_alive = false;
+    if (had_active)
+    {
+        const int index = indexOf(m_active_uid);
+        if (index >= 0)
+        {
+            active_alive = true;
+            // 备注可能刚改过：把显示名同步过来，否则会话头还挂着旧名字
+            m_active_name = m_conversations.at(index).toMap()
+                                           .value(QStringLiteral("displayName"))
+                                           .toString();
+            m_active_is_demo = m_conversations.at(index).toMap()
+                                              .value(QStringLiteral("demo"))
+                                              .toBool();
+        }
+    }
+
+    emit conversationsChanged();
+
+    if (had_active && !active_alive)
+        closeConversation();
+    else if (active_alive)
+        emit activeConversationChanged(); // 名字 / demo 标记可能变了
+
+    MCLOG_INFO() << "[chat] 会话列表已按好友列表同步, 好友" << friends.size()
+        << "位, 会话" << m_conversations.size() << "条";
 }
 
 void ChatController::closeConversation()
@@ -135,6 +243,7 @@ void ChatController::closeConversation()
 
     m_active_uid.clear();
     m_active_name.clear();
+    m_active_is_demo = false;
     emit activeConversationChanged();
     emit messagesChanged();
 }
@@ -206,9 +315,15 @@ void ChatController::appendIncoming(const QString& peerUid, const QString& text,
         QVariantMap item;
         item.insert(QStringLiteral("uid"), peerUid);
         item.insert(QStringLiteral("name"), peerUid);
+        item.insert(QStringLiteral("nick"), QString());
+        item.insert(QStringLiteral("displayName"), peerUid);
+        item.insert(QStringLiteral("icon"), QString());
+        item.insert(QStringLiteral("desc"), QString());
+        item.insert(QStringLiteral("sex"), 2);
         item.insert(QStringLiteral("lastText"), QString());
         item.insert(QStringLiteral("lastTime"), QString());
         item.insert(QStringLiteral("unread"), 0);
+        item.insert(QStringLiteral("demo"), false);
         m_conversations.prepend(item);
     }
 

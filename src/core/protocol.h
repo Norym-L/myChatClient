@@ -57,6 +57,8 @@ namespace mychat::protocol
         HeartBeatRsp,         // 1017
         CheckIsUserOnlineReq, // 1018
         CheckIsUserOnlineRsp, // 1019
+        SyncFriendListReq,    // 1020
+        SyncFriendListRsp,    // 1021
     };
 
     /**
@@ -204,6 +206,27 @@ namespace mychat::protocol
         [[nodiscard]] bool valid() const { return id != 0; }
     };
 
+    /**
+     * 好友列表里的一项（MESSAGE_SYNC_FRIEND_LIST_RSP 的 friends[]，1020/1021）。
+     *
+     * 字段与服务端 `LogicSystem::syncUserFriendList` 的实际序列化一致
+     * （`uid` / `name` / `desc` / `nick` / `sex` / `icon`）。
+     */
+    struct FriendInfo
+    {
+        std::uint64_t uid = 0;
+        QString name;
+        /// 好友签名
+        QString desc;
+        /// **我给这个好友设置的备注**（服务端 `user_friend.remark`），没设置时为空串
+        QString nick;
+        /// 0 男 / 1 女 / 其余（服务端 DAO 把 NULL 写成 3）按未知处理
+        int sex = 2;
+        QString icon;
+
+        [[nodiscard]] bool valid() const { return uid != 0; }
+    };
+
     /// 搜索用户回包 -> UserInfo 列表；未找到或失败时返回空列表。
     /// 服务端命中时返回 {"error":0, "infos":[{uid,user_name,desc,sex,icon}, ...]}
     /// （可能多条），没找到时只回 {"error":1014}。
@@ -211,6 +234,16 @@ namespace mychat::protocol
 
     /// 好友申请列表回包 -> FriendRequest 数组
     [[nodiscard]] QList<FriendRequest> parseFriendRequestList(const QJsonObject& object);
+
+    /**
+     * 好友列表回包 -> FriendInfo 数组（1021）。
+     *
+     * ⚠ 服务端有三个"看着像 bug、其实是现状"的写法，这里全部兜住：
+     *   · `count` 是**字符串**（`std::to_string`），不能当数字读；
+     *   · 没有好友时 `friends` 是 **null**（不是"字段缺席"，也不是空数组）；
+     *   · 好友资料查不到的那条服务端会跳过，所以 count 可能大于实际条数。
+     */
+    [[nodiscard]] QList<FriendInfo> parseFriendList(const QJsonObject& object);
 
     /**
      * 「查询用户是否在线」回包。

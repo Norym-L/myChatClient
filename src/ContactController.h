@@ -18,19 +18,21 @@
  *   被申请方推送         NotifyAddFriendReq（服务端主动推，收到后自动回拉列表）
  *   接受 / 拒绝申请      AuthFriendReq/Rsp（回包只带 error，编号从请求侧带回）
  *   申请结果推送         NotifyAuthFriendReq（对方处理了我发出的申请）
+ *   好友列表             SyncFriendListReq/Rsp（1020/1021，2026-10-17 服务端补齐）
  *
- * ⚠ 服务端目前**没有实现**好友列表（`getUserApplyListAndFriendList` 是空函数），
- *   也没有文本聊天消息。所以「会话列表 / 消息气泡」现在拿不到任何真实数据，
- *   这部分留给服务端补齐后再接。
+ * ⚠ 服务端仍然**没有**文本聊天消息（TextChatMsg* 只有编号没有处理器），
+ *   所以「消息气泡」还是拿不到真实数据 —— 但会话列表现在可以由好友列表驱动了。
  *
  * QML 侧：
  *   ContactController.searchUser(keyword)
  *   ContactController.sendFriendRequest(toUid, verifyInfo, remark, peerName)
  *   ContactController.refreshApplyList()
- *   读 searchResults / searchResultCount / applyList
+ *   ContactController.refreshFriendList()
+ *   读 searchResults / searchResultCount / applyList / friendList / friendCount
  *     （searchResults 每项为 QVariantMap：uid / name / desc / sex / icon）
  *     （applyList 每项为 QVariantMap：id / fromUid / toUid / peerUid / received /
  *       name / verifyInfo / sex / state / stateText）
+ *     （friendList 每项为 QVariantMap：uid / name / desc / nick / displayName / sex / icon）
  *
  *   ⚠ applyList 里**我发出的和我收到的混在一起**（服务端查询是
  *     `applicant_uid = ? OR receiver_uid = ?`），而 name/icon/sex 取的是对方的。
@@ -53,6 +55,16 @@ class ContactController : public QObject
     /// 好友申请列表，每项是一个 QVariantMap，供 Repeater / ListView 直接用
     Q_PROPERTY(QVariantList applyList READ applyList NOTIFY applyListChanged)
 
+    /**
+     * 好友列表（1020/1021），每项 QVariantMap：
+     * uid / name / desc / nick / displayName / sex / icon
+     *
+     * `nick` 是**我给对方设置的备注**，`displayName` = nick 非空 ? nick : name
+     * （显示名这个判断放在 C++，免得 QML 里每处都写一遍三元）。
+     */
+    Q_PROPERTY(QVariantList friendList READ friendList NOTIFY friendListChanged)
+    Q_PROPERTY(int friendCount READ friendCount NOTIFY friendListChanged)
+
 public:
     explicit ContactController(QObject* parent = nullptr);
 
@@ -64,6 +76,9 @@ public:
     [[nodiscard]] int searchResultCount() const { return static_cast<int>(m_search_results.size()); }
 
     [[nodiscard]] QVariantList applyList() const { return m_apply_list; }
+
+    [[nodiscard]] QVariantList friendList() const { return m_friend_list; }
+    [[nodiscard]] int friendCount() const { return static_cast<int>(m_friend_list.size()); }
 
     /// 搜索用户：keyword 可以是 uid，也可以是用户名（服务端两种都认）
     Q_INVOKABLE void searchUser(const QString& keyword);
@@ -85,6 +100,15 @@ public:
     Q_INVOKABLE void refreshApplyList();
 
     /**
+     * 刷新好友列表（1020）。
+     *
+     * 与 refreshApplyList() 共用同一个 busy 门：同一时刻只让一条链路占着控制器，
+     * 否则两条回包的 busyChanged 会互相踩。忙的时候这次调用被**静默丢弃**，
+     * 需要补刷的场合（比如刚接受完申请）请走 \l m_friend_refresh_pending 那套排队。
+     */
+    Q_INVOKABLE void refreshFriendList();
+
+    /**
      * 接受 / 拒绝一条收到的好友申请。
      *
      * @param requestId 申请编号（applyList 里的 id）
@@ -104,6 +128,10 @@ signals:
     void busyChanged();
     void searchResultsChanged();
     void applyListChanged();
+    void friendListChanged();
+
+    /// 好友列表刷新结束（ok=false 时 error 是服务端 / 本地错误码）
+    void friendListRefreshed(bool ok, int error);
 
     /// 搜索结束；found=false 时 error 是服务端错误码（未找到通常是 1014）
     void searchFinished(bool found, int error);
@@ -136,6 +164,7 @@ private:
     void onSearchResult(bool found, const QList<mychat::protocol::UserInfo>& infos, int error);
     void onFriendRequestResult(bool ok, int error, std::uint64_t requestId);
     void onFriendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
+    void onFriendList(const QList<mychat::protocol::FriendInfo>& friends, int error);
     void onAuthFriendResult(bool ok, int error, std::uint64_t requestId, int state);
     void onFriendRequestHandled(std::uint64_t requestId, int state);
 
@@ -162,6 +191,12 @@ private:
     /// refreshApplyList() 的实现体；silent 由 m_silent_refresh 决定提示要不要覆盖
     void startApplyListRefresh();
 
+    /// refreshFriendList() 的实现体
+    void startFriendListRefresh();
+
+    /// 把挂起的「好友列表刷新」意图落地（忙的时候什么都不做，由 setBusy 再喊一次）
+    void flushPendingFriendRefresh();
+
     QString m_tip;
     bool m_tip_is_error = false;
     bool m_busy = false;
@@ -170,8 +205,14 @@ private:
     /// 这次刷新是推送触发的：不要用"共 N 条"盖掉真正要说的那句话
     bool m_silent_refresh = false;
 
+    /// 有「好友列表该刷新」的意图在等控制器空闲（接受到好友申请后就是这种）
+    bool m_friend_refresh_pending = false;
+    /// 这次好友列表刷新是自动触发的：不覆盖提示
+    bool m_silent_friend_refresh = false;
+
     QVariantList m_search_results;
     QVariantList m_apply_list;
+    QVariantList m_friend_list;
 
     // 本次「发送好友申请」的目标信息，成功后用来补那条本地记录
     std::uint64_t m_pending_peer_uid = 0;

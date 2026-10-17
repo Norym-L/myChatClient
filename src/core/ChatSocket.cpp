@@ -59,6 +59,10 @@ namespace mychat
                 return "CheckIsUserOnlineReq";
             case protocol::MessageId::CheckIsUserOnlineRsp:
                 return "CheckIsUserOnlineRsp";
+            case protocol::MessageId::SyncFriendListReq:
+                return "SyncFriendListReq";
+            case protocol::MessageId::SyncFriendListRsp:
+                return "SyncFriendListRsp";
             }
             return "Unknown";
         }
@@ -279,6 +283,28 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
                     [this]()
                         {
                             emit friendRequestList(
+                                {}, static_cast<int>(protocol::ErrorCode::RequestTimeout));
+                        });
+        return true;
+    }
+
+    bool ChatSocket::syncFriendList()
+    {
+        /*
+         * 1020 的请求体服务端**完全不看**（syncUserFriendList 只读 session->getUserId()），
+         * 所以发空对象。仍然要发 "{}" 而不是 0 长度 body —— 理由同心跳：
+         * body_len == 0 会让服务端走那条没被验证过的零长读取分支。
+         */
+        const QJsonObject body;
+
+        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListReq), body))
+            return false;
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListRsp),
+                    [this]()
+                        {
+                            emit friendListResult(
                                 {}, static_cast<int>(protocol::ErrorCode::RequestTimeout));
                         });
         return true;
@@ -550,6 +576,9 @@ void ChatSocket::reset()
         case protocol::MessageId::CheckIsUserOnlineRsp:
             handleUserOnlineResponse(body);
             break;
+        case protocol::MessageId::SyncFriendListRsp:
+            handleFriendList(body);
+            break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
             //
@@ -696,6 +725,35 @@ void ChatSocket::reset()
         qInfo() << "[chat] 收到好友申请列表, 共" << requests.size() << "条";
 
         emit friendRequestList(requests, error);
+    }
+
+    void ChatSocket::handleFriendList(const QByteArray& body)
+    {
+        /*
+         * 1021：{"error":0, "count":"2", "friends":[{uid,name,desc,nick,sex,icon}, ...]}
+         *
+         * 三个实测到的事实（都已经在 protocol::parseFriendList 里兜住）：
+         *   · count 是**字符串**（std::to_string），文档 §8.2 表格写成 number 是错的；
+         *   · 没有好友时 friends 是 **null**，不是"字段缺席"；
+         *   · 好友资料查不到的，服务端跳过不发。
+         */
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 好友列表回包解析失败:" << parse_error.errorString();
+            emit friendListResult({}, static_cast<int>(protocol::ErrorCode::JsonError));
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        const QList<protocol::FriendInfo> friends = protocol::parseFriendList(object);
+        qInfo() << "[chat] 收到好友列表, 共" << friends.size() << "位, error =" << error;
+
+        emit friendListResult(friends, error);
     }
 
     void ChatSocket::handleNotifyAddFriendRequest(const QByteArray& body)
