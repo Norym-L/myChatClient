@@ -32,6 +32,7 @@
         <file alias="ZmdUI/qmldir">../third_party/ZmdUI/qmldir</file>
         <file alias="ZmdUI/Theme.qml">../third_party/ZmdUI/Theme.qml</file>
         <file alias="ZmdUI/ZButton.qml">../third_party/ZmdUI/ZButton.qml</file>
+        <file alias="ZmdUI/ZChatInput.qml">../third_party/ZmdUI/ZChatInput.qml</file>
         <file alias="ZmdUI/ZCheckBox.qml">../third_party/ZmdUI/ZCheckBox.qml</file>
         <file alias="ZmdUI/ZCutRect.qml">../third_party/ZmdUI/ZCutRect.qml</file>
         <file alias="ZmdUI/ZDialog.qml">../third_party/ZmdUI/ZDialog.qml</file>
@@ -44,6 +45,7 @@
         <file alias="ZmdUI/ZPanel.qml">../third_party/ZmdUI/ZPanel.qml</file>
         <file alias="ZmdUI/ZProgressBar.qml">../third_party/ZmdUI/ZProgressBar.qml</file>
         <file alias="ZmdUI/ZRadioButton.qml">../third_party/ZmdUI/ZRadioButton.qml</file>
+        <file alias="ZmdUI/ZRichTextEditor.qml">../third_party/ZmdUI/ZRichTextEditor.qml</file>
         <file alias="ZmdUI/ZScrollBar.qml">../third_party/ZmdUI/ZScrollBar.qml</file>
         <file alias="ZmdUI/ZSectionTitle.qml">../third_party/ZmdUI/ZSectionTitle.qml</file>
         <file alias="ZmdUI/ZSideBar.qml">../third_party/ZmdUI/ZSideBar.qml</file>

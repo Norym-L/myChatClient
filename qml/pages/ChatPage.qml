@@ -80,6 +80,14 @@ Item {
     /// MYCHAT_AUTHAPPLY=accept|refuse 时挂起的「接受 / 拒绝」动作（"1" / "2"）
     property string pendingAuthAction: ""
 
+    /*!
+        输入区的临时提示（附件被退回、超长被拦下……）。
+
+        和 ChatController.tip 分开：那是控制器的业务提示，这里是页面自己发现的
+        本地问题；一旦用户继续打字（ZChatInput.textEdited）就清掉。
+    */
+    property string composerNotice: ""
+
     function tryAutoSearch() {
         if (pendingSearch === "")
             return
@@ -541,14 +549,84 @@ Item {
                                     boundsBehavior: Flickable.StopAtBounds
 
                                     /*
-                                     * 始终贴底（聊天软件的习惯）。
+                                     * 贴底跟随（聊天软件的习惯）：有新消息时滚到底，
+                                     * 人自己往上翻历史时**不能**把人拽回来。
                                      *
-                                     * 不能在 messagesChanged 里直接滚：那一拍新 delegate 还没
-                                     * 完成布局，contentHeight 仍是旧值，滚过去会差一条消息的高度
-                                     * —— 表现为"最后一句被输入区切掉一半"。
-                                     * 挂在 contentHeight 上就是等真正布局完再滚。
+                                     * ⚠ 别退回成"contentHeight 一变就 positionViewAtEnd"。
+                                     * ListView 的 contentHeight 在**滚动过程中**也会变：
+                                     * 滚出视口的 delegate 被回收、新进视口的先按平均高度估一个，
+                                     * 估算值一变信号就响 → 人刚往上滚就被拽回底部。
+                                     * 视口越小（窗口最小 760×560 时消息区只剩 ~265px）同时
+                                     * 实例化的 delegate 越少、估算抖动越大，症状就是
+                                     * "消息区滚不动，死锁在最底部"。
+                                     *
+                                     * 判定用"离底还有多远"而不是 atYEnd：内容变高时 atYEnd
+                                     * 也会变 false，那和我们想抓的"用户往上滚"是两回事。
+                                     * 这样滚轮 / 拖拽 / 滚回底部三种情况一套逻辑就够。
                                      */
-                                    onContentHeightChanged: Qt.callLater(messageView.positionViewAtEnd)
+                                    property bool followTail: true
+
+                                    /*
+                                     * "接下来这串位置变化是我们自己造成的"标志。
+                                     *
+                                     * ListView 在初次布局、delegate 回收 / 重建、模型变化时都会
+                                     * 自己改 contentY（首次布局甚至是 header 高度的负值），
+                                     * 这些都不是用户上滚。遮一小段时间（pinGuard），
+                                     * 期间只认贴底操作，不认"用户意图"。
+                                     */
+                                    property bool _autoScrolling: true
+
+                                    function distanceToBottom() {
+                                        // 顶部 header（"今天"分隔条）把 contentY 的基准整体挪了
+                                        // 一个 header 高度，不减掉它算出来的距离恒偏大
+                                        const headerH = headerItem ? headerItem.height : 0
+                                        return contentHeight - height - contentY - headerH
+                                    }
+
+                                    /// 声明"下面这段位置变化不是用户滚的"
+                                    function holdUserIntent() {
+                                        _autoScrolling = true
+                                        pinGuard.restart()
+                                    }
+
+                                    function scrollToTail() {
+                                        holdUserIntent()
+                                        positionViewAtEnd()
+                                    }
+
+                                    Timer {
+                                        id: pinGuard
+                                        interval: 150
+                                        onTriggered: messageView._autoScrolling = false
+                                    }
+
+                                    // 启动阶段先屏蔽，等第一次布局 + 贴底跑完
+                                    Component.onCompleted: holdUserIntent()
+
+                                    onContentHeightChanged: {
+                                        /*
+                                         * 延一拍再决定要不要贴底 —— 顺序很关键：
+                                         * 用户往上一跳时，ListView 会先报 contentHeight 变了
+                                         * （新进视口的 delegate 先按平均高度估），紧接着才报
+                                         * contentY 变了。当场就滚的话，这一拍 followTail 还是
+                                         * true，等于把刚落上去的位置又拽回底部。
+                                         * 等这一拍跑完，contentYChanged 已经把 followTail
+                                         * 改成 false，这里自然就不滚了。
+                                         */
+                                        Qt.callLater(function () {
+                                            if (messageView.followTail)
+                                                messageView.scrollToTail()
+                                        })
+                                    }
+
+                                    onContentYChanged: {
+                                        // 屏蔽窗口之外的位置变化才是"用户滚的"：
+                                        // 滚到底就恢复跟随，往上滚就停止跟随。
+                                        // （以前这里无脑 positionViewAtEnd，正是这个 bug 的根源）
+                                        if (_autoScrolling)
+                                            return
+                                        followTail = distanceToBottom() <= 8
+                                    }
 
                                     // 日期分隔条。真接了历史消息以后按天插，现在只有一段
                                     header: Item {
@@ -597,62 +675,91 @@ Item {
                                     }
                                 }
 
-                                // ── 输入区 ──
-                                Rectangle {
+                                // ── 输入区：ZChatInput ──
+                                // 面板高度由组件自己算，而且是**固定**的
+                                // （标题条 30 + 输入区 minTextHeight 74 + 工具栏 42）：
+                                // 写多行不会把消息区顶上去，超出的内容在框内滚动。
+                                Column {
                                     id: composer
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
-                                    height: 86
-                                    color: Theme.surface
+                                    anchors.margins: Theme.spacingMd
+                                    spacing: Theme.spacingXs
 
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        height: 2
-                                        color: Theme.line
+                                    ZChatInput {
+                                        id: chatInput
+                                        width: parent.width
+
+                                        placeholderText: "输入消息，Enter 发送，Shift+Enter 换行…"
+
+                                        // 与服务端对齐：ChatController 里 kMaxTextLength = 500
+                                        // （服务端帧 body 只有 2KB）。超限时组件自己拦下不发送。
+                                        maxLength: 500
+
+                                        /*
+                                         * 定高输入区：高度恒为 minTextHeight（组件默认 74，
+                                         * ≈ 3 行），写长了在框内滚、右侧出滚动条，光标始终可见
+                                         * —— 这是 ZChatInput 的默认行为，这里显式写出来，
+                                         * 免得以后被当成"忘了设"又改成跟着内容长高。
+                                         *
+                                         * 为什么定高：输入区变高会把消息区顶上去，最小窗口
+                                         * （760×560）下消息区本来就只剩 ~265px，写两行长句
+                                         * 就把刚发出去的气泡挤出视野了。
+                                         */
+                                        allowResize: false
+
+                                        /*
+                                         * 只发文本：服务端 TextChatMsg* 只有编号没有处理器，
+                                         * 图片 / 文件更是没有上传通道 —— 所以「图片」「文件」两个
+                                         * 芯片先关掉，别做出"能选能发"的假象。
+                                         * 将来有了上传接口，把这两行删掉即可，组件自带系统文件选择框。
+                                         */
+                                        allowImage: false
+                                        allowFile: false
+                                        // 同理：既然加不了附件，就别常驻写着"可拖入文件"
+                                        attachHintText: ""
+
+                                        // 不在发出信号时就清空：ChatController.sendText() 返回 false
+                                        // （空串 / 超长）时用户改两个字还能接着发，清掉等于让他重打一遍
+                                        clearOnSend: false
+
+                                        onSendRequested: (text, attachments) => page.doSendMessage()
+
+                                        // 拖 / 粘进来的文件仍然会变成附件（组件的 DropArea 不看上面两个开关）
+                                        // → 立刻退回并说明，免得"附件看着加上了，发送时悄悄丢掉"
+                                        onAttachmentAdded: {
+                                            clearAttachments()
+                                            page.composerNotice = "服务端尚未实现图片 / 文件消息，附件已退回"
+                                        }
+                                        onPasteRequested: {
+                                            page.composerNotice = "剪贴板里是图片：服务端尚未实现图片消息"
+                                        }
+                                        onLimitReached: (kind) => {
+                                            if (kind === "length")
+                                                page.composerNotice = "单条消息最多 "
+                                                    + chatInput.maxLength + " 字"
+                                        }
+                                        onTextEdited: {
+                                            // ⚠ 组件是先发 limitReached 再发 textEdited 的，
+                                            // 这里无条件清空会把刚弹出来的"超长"提示立刻抹掉 ——
+                                            // 所以只在回到上限以内时清。
+                                            if (!chatInput.overLimit)
+                                                page.composerNotice = ""
+                                        }
                                     }
 
-                                    Row {
-                                        id: composerRow
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.leftMargin: Theme.spacingLg
-                                        anchors.rightMargin: Theme.spacingLg
-                                        anchors.topMargin: Theme.spacingMd
-                                        spacing: Theme.spacingSm
-
-                                        ZTextField {
-                                            id: composerEdit
-                                            width: parent.width - sendBtn.width - parent.spacing
-                                            placeholderText: "输入消息，Enter 发送"
-                                            onAccepted: page.doSendMessage()
-                                        }
-
-                                        ZButton {
-                                            id: sendBtn
-                                            anchors.bottom: composerEdit.bottom
-                                            text: "发送"
-                                            mono: "ENTER"
-                                            variant: Theme.Variant.Primary
-                                            onClicked: page.doSendMessage()
-                                        }
-                                    }
-
-                                    // 提示行：控制器有话说就显示控制器那句，否则常驻"仅本地"说明
+                                    // 提示行：页面临时提示 > 控制器提示 > 常驻"仅本地"说明
                                     Text {
-                                        anchors.left: composerRow.left
-                                        anchors.right: composerRow.right
-                                        anchors.top: composerRow.bottom
-                                        anchors.topMargin: 3
-                                        text: ChatController.tip.length > 0
-                                            ? ChatController.tip
-                                            : "服务端尚未实现文本消息（TextChatMsg*）：发送只在本机回显"
+                                        width: parent.width
+                                        text: page.composerNotice.length > 0 ? page.composerNotice
+                                            : (ChatController.tip.length > 0 ? ChatController.tip
+                                                : "服务端尚未实现文本消息（TextChatMsg*）：发送只在本机回显")
                                         font: Theme.fontMonoSm
-                                        color: ChatController.tipIsError ? Theme.danger : Theme.muted
-                                        opacity: ChatController.tipIsError ? 1 : 0.75
+                                        color: page.composerNotice.length > 0 || ChatController.tipIsError
+                                            ? Theme.danger : Theme.muted
+                                        opacity: page.composerNotice.length > 0 || ChatController.tipIsError
+                                            ? 1 : 0.75
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -1155,18 +1262,23 @@ Item {
     }
 
     /*!
-        发一条消息。
+        发一条消息（ZChatInput 的 sendRequested 与自动化都走这里）。
 
-        控制器返回 false 表示没必要发（空串 / 超长），这时候**不清输入框** ——
-        用户改两个字还能接着发，清掉等于让他重打一遍。
+        控制器返回 false 表示没必要发（空串 / 超长）或没选中会话，这时候
+        **不清输入框** —— 用户改两个字还能接着发，清掉等于让他重打一遍。
+        成功才用 ZChatInput.clear()（正文 + 残留附件一起清）。
     */
     function doSendMessage() {
         if (!ChatController.hasActiveConversation)
             return
 
-        if (ChatController.sendText(composerEdit.text)) {
-            composerEdit.text = ""
-            composerEdit.forceActiveFocus()
+        // 自己发的东西一定要看得见：先把贴底跟随打开，再交给控制器
+        // （控制器会同步 emit messagesChanged，顺序反了这口气就白屏）
+        messageView.followTail = true
+
+        if (ChatController.sendText(chatInput.text)) {
+            chatInput.clear()
+            chatInput.focusInput()
         }
     }
 
@@ -1191,12 +1303,18 @@ Item {
         return state ? "在线" : "离线"
     }
 
-    /// 自动化用（MYCHAT_SENDMSG）：把话填进输入框，然后走正常的发送流程
+    /*!
+        自动化用（MYCHAT_SENDMSG）：把话填进输入框，然后走组件自己的发送链路。
+
+        故意调 chatInput.submit() 而不是 page.doSendMessage()：submit() 正是按
+        Enter / 点「发送」时组件内部走的那一步（判空、判超长 → 发 sendRequested），
+        这样自检才连"信号接上了没有"一起验掉。
+    */
     function sendAutoMessage() {
         if (app.autoMessage.length === 0 || !ChatController.hasActiveConversation)
             return
-        composerEdit.text = app.autoMessage
-        page.doSendMessage()
+        chatInput.text = app.autoMessage
+        chatInput.submit()
     }
 
     /*!
@@ -1307,14 +1425,28 @@ Item {
         }
 
         function onMessagesChanged() {
-            // 同一拍里 contentHeight 还是旧的，滚到底必须延到下一拍
-            Qt.callLater(messageView.positionViewAtEnd)
+            /*
+             * 新消息一律滚到底（是"一律"而不是"贴底才滚"）。
+             *
+             * 原因：ChatController.messages 是整包 QVariantList，追加一条会让
+             * QML 侧当作模型重置 —— ListView 会把内容位置甩回顶部，所以这时
+             * 判断"用户是不是本来就在底部"已经晚了。
+             *
+             * ⚠ 等以后真接了收消息（服务端文本消息还是空的），这里要改成
+             *   "人在底部才跟、不在就攒未读"，配一个「有新消息」悬浮按钮，
+             *   否则用户翻历史时会被新消息拽走。
+             */
+            messageView.followTail = true
+            messageView.holdUserIntent()
+            Qt.callLater(messageView.scrollToTail)
         }
 
         function onActiveConversationChanged() {
             if (ChatController.hasActiveConversation)
                 PresenceController.refresh(ChatController.activePeerUid)
-            Qt.callLater(messageView.positionViewAtEnd)
+            // 换会话一律从最新的看起
+            messageView.followTail = true
+            Qt.callLater(messageView.scrollToTail)
         }
     }
 
