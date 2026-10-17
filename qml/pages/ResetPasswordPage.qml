@@ -2,6 +2,7 @@ import QtQuick
 import ZmdUI 1.0
 
 import MyChat.Core 1.0
+import "../components"
 
 /*!
     重置密码页 —— 用 ZmdUI 组件重构旧前端的 resetdialog.ui。
@@ -181,4 +182,12 @@ Item {
             backTimer.restart()
         }
     }
+
+    // ── 左下角：主题切换（和登录页同一个组件，位置也一致）──────
+    ThemeToggle {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: Theme.spacingLg
+    }
+
 }

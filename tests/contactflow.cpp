@@ -94,6 +94,16 @@ int main(int argc, char* argv[])
     int exit_code = 3;
     Step step = Step::LoginA;
 
+    /*
+     * 只有「B 主动回拉之后」的那份列表才配当判据。
+     *
+     * 因为 A 发申请成功后，控制器会**立刻在本地补一条**「已发出」记录（防重复发送的闸门），
+     * 那条也会触发 applyListChanged —— 它的 fromUid 就是 A，正好能骗过下面的判据。
+     * 也就是说：没有这个开关，即使服务端一条都没存，本用例也会打 [OK]。
+     * 之前就是这样"通过"的（2026-10-17 发现）。
+     */
+    bool awaiting_server_list = false;
+
     writeLine(stdout, QStringLiteral("A = %1    B = %2").arg(uid_a, uid_b));
 
     // ── 状态推进 ──────────────────────────────────────────────
@@ -167,6 +177,8 @@ int main(int argc, char* argv[])
                 case Step::SyncList:
                     writeLine(stdout, QStringLiteral("\n── 阶段 6：B 拉取好友申请 ──"));
                     step = Step::Done;
+                    // 从这里往后的列表才是服务端给的
+                    awaiting_server_list = true;
                     contact.refreshApplyList();
                     break;
 
@@ -246,8 +258,18 @@ int main(int argc, char* argv[])
     // ── 申请列表：最终判据 ────────────────────────────────────
     QObject::connect(&contact, &ContactController::applyListChanged, &app, [&]()
                          {
+                             if (!awaiting_server_list)
+                             {
+                                 // A 发完申请后本地补的那条，不是服务端数据 —— 不能当判据
+                                 writeLine(stdout, QStringLiteral(
+                                               "[apply] 本地补记的回声（%1 条），忽略")
+                                          .arg(contact.applyList().size()));
+                                 return;
+                             }
+
                              const QVariantList list = contact.applyList();
-                             writeLine(stdout, QStringLiteral("[apply] 共 %1 条").arg(list.size()));
+                             writeLine(stdout, QStringLiteral("[apply] 共 %1 条（来自服务端回包）")
+                                      .arg(list.size()));
 
                              bool found_from_a = false;
                              for (const QVariant& item: list)

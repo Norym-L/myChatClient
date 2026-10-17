@@ -58,6 +58,20 @@ Window {
      */
     property string autoDialog: ""
 
+    /**
+     * 自动发一条消息（自动化验证用）。进聊天页后替用户把这句话打进输入框并发送，
+     * 走的是「输入框 → ChatController.sendText → 本地回显」这条真实链路。
+     * 由 main.cpp 从环境变量 MYCHAT_SENDMSG 注入，正常启动时为空。
+     */
+    property string autoMessage: ""
+
+    /**
+     * 自动处理一条收到的好友申请（自动化验证用）：`accept` / `refuse`。
+     * 进聊天页后切到「好友申请」分区，挑第一条「收到 + 等待处理」的申请，
+     * 打开资料卡并替用户点「接受 / 拒绝」。由 main.cpp 从 MYCHAT_AUTHAPPLY 注入。
+     */
+    property string autoAuth: ""
+
     Loader {
         id: pageLoader
         anchors.fill: parent

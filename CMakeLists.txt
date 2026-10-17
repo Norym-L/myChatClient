@@ -110,6 +110,8 @@ add_library(qtclient_core STATIC
 
         src/AccountValidator.h
         src/AccountValidator.cpp
+        src/ChatController.h
+        src/ChatController.cpp
         src/ContactController.h
         src/ContactController.cpp
         src/LoginController.h
@@ -174,12 +176,21 @@ qt_add_executable(qtClientContactTest
 
 target_link_libraries(qtClientContactTest PRIVATE qtclient_core)
 
+# ── 回包超时自检（自带"只收不发"的哑服务器，不需要真实服务端）──────────
+# 验证的是"服务端某分支不回包时客户端会不会卡死"，这种场景没法靠真实服务端稳定复现。
+qt_add_executable(qtClientSocketTimeoutTest
+        tests/sockettimeout.cpp
+)
+
+target_link_libraries(qtClientSocketTimeoutTest PRIVATE qtclient_core)
+
 # 这四个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientRegisterTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientResetTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientContactTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientSocketTimeoutTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

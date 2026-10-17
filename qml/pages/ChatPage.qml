@@ -10,16 +10,23 @@ import "../dialog"
     聊天主页 —— 左侧导航（会话 / 联系人 / 好友申请）+ 右侧内容区。
 
     ⚠ 能力边界（取决于服务端，不是客户端偷懒）：
+      · **会话 / 消息气泡**：版式已就绪，但服务端**没有文本消息**
+        （`TextChatMsg*` 只有编号没有处理器）也**没有好友列表**
+        （`getUserApplyListAndFriendList` 是空函数）→ 现在是本地演示数据，
+        页面上标着 DEMO；接法见 ChatController 头部的"与服务器的接口"。
       · **联系人**（搜索用户 / 发好友申请）服务端已实现 → 可用
       · **好友申请列表** 服务端已实现 → 可用
-      · **会话列表 / 消息气泡** 服务端**没有实现**（好友列表是空函数，
-        文本聊天消息完全没有相关代码）→ 本页只放说明，等服务端补齐后再接
 
-    网络与协议全部交给 ContactController，本页不含任何协议细节。
+    网络与协议全部交给 ContactController / ChatController，本页不含任何协议细节。
 
-    用户资料卡（UserInfoDialog）的两个入口：
+    用户资料卡（UserInfoDialog）的三个入口：
       · 顶部自己的头像 → openSelfInfo() → 可编辑本人资料
       · 搜索结果 / 申请列表点整行 → openUserInfo() → 可发好友申请
+      · 会话头部点头像 → openChatPeerInfo()
+
+    预留的服务器接口：
+      · ChatController.sendText() 只在本机回显，同时 emit textMessageOutgoing()
+      · ChatController.serverSupportsText 恒为 false，界面据此显示"仅本地"提示
 */
 Item {
     id: page
@@ -28,10 +35,23 @@ Item {
     signal logoutRequested()
 
     /// 当前分区：0 会话 / 1 联系人 / 2 好友申请
-    property int section: 1
+    property int section: 0
 
     Component.onCompleted: {
         ContactController.refreshApplyList()
+        page.initChat()
+
+        // 自动化验证：MYCHAT_SENDMSG 注入的一句话 —— 延到下一拍，
+        // 等 initChat() 选好会话、输入框建出来再发
+        if (app.autoMessage.length > 0)
+            Qt.callLater(page.sendAutoMessage)
+
+        // 自动化验证：MYCHAT_AUTHAPPLY=accept|refuse —— 替用户处理一条收到的好友申请
+        if (app.autoAuth.length > 0) {
+            page.section = 2
+            page.pendingAuthAction = app.autoAuth === "refuse" ? "2" : "1"
+            page.tryPendingAuth()
+        }
 
         // 自动化验证：MYCHAT_OPENDLG 打开资料弹窗（弹窗无头抓图抓不到，得自己弹出来）
         if (app.autoDialog !== "")
@@ -56,6 +76,9 @@ Item {
 
     /// MYCHAT_OPENDLG=applyreceived / applysent 时挂起的"打开申请列表里的某一条"
     property string pendingApplyOpen: ""
+
+    /// MYCHAT_AUTHAPPLY=accept|refuse 时挂起的「接受 / 拒绝」动作（"1" / "2"）
+    property string pendingAuthAction: ""
 
     function tryAutoSearch() {
         if (pendingSearch === "")
@@ -128,7 +151,10 @@ Item {
             version: "BUILD 0.1"
 
             model: [
-                {label: "会 话", badge: "!"},
+                {
+                    label: "会 话", badge: sectionChat.unreadTotal > 0
+                        ? String(sectionChat.unreadTotal) : ""
+                },
                 {label: "联系人", badge: ""},
                 {
                     label: "好友申请", badge: ContactController.applyList.length > 0
@@ -139,6 +165,15 @@ Item {
             currentIndex: page.section
             onActivated: (index) => {
                 page.section = index
+            }
+
+            // ── 左下角：主题切换 ────────────────────────────────
+            // ZSideBar 的 default property 就是底部页脚，作为子项直接写进来即可，
+            // 不用自己算坐标（自己锚的话一改侧栏高度就会压到版本号上）。
+            // x 对齐侧栏里其它文字（品牌区、导航行都用 spacingLg 缩进）。
+            ThemeToggle {
+                x: Theme.spacingLg
+                width: parent.width - Theme.spacingLg - Theme.spacingMd
             }
         }
 
@@ -189,27 +224,440 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                // ── 0. 会话（服务端未支持）────────────────────
-                ZPanel {
-                    anchors.centerIn: parent
-                    width: Math.min(520, parent.width - 40)
+                // ── 0. 会话：会话列表 + 消息区 ──────────────────
+                Item {
+                    id: sectionChat
+                    anchors.fill: parent
                     visible: page.section === 0
 
-                    title: "会话"
-                    eyebrow: "SESSION LIST"
-                    subtitle: "等待服务端支持"
-                    tag: "TODO"
-                    footerText: "服务端 getUserApplyListAndFriendList 为空实现"
+                    /*!
+                        搜索框过滤后的会话（数据源是 ChatController.conversations）。
 
-                    Text {
-                        width: parent.width
-                        text: "会话列表需要「好友列表」接口，"
-                            + "服务端 ChatServer 的 getUserApplyListAndFriendList 目前是空函数（//TODO）。"
-                            + "\n文本聊天消息（TextChatMsg*）服务端也没有实现。"
-                            + "\n等服务端补齐后，这里会换成真实的会话列表与消息气泡。"
-                        font: Theme.fontBody
-                        color: Theme.muted
-                        wrapMode: Text.WordWrap
+                        用 property 而不是直接绑 Controller：Repeater 的 model 需要
+                        "一变就重建"，而过滤结果是个 JS 数组，得自己算完再赋值。
+                    */
+                    property var visibleConversations: []
+
+                    /// 全部会话的未读之和（侧边栏角标用；读 conversations 即建立绑定）
+                    readonly property int unreadTotal: {
+                        let sum = 0
+                        const list = ChatController.conversations
+                        for (let i = 0; i < list.length; ++i)
+                            sum += Number(list[i].unread) || 0
+                        return sum
+                    }
+
+                    function reloadConversations() {
+                        const all = ChatController.conversations
+                        const kw = convSearch.text.trim().toLowerCase()
+                        if (kw.length === 0) {
+                            visibleConversations = all
+                            return
+                        }
+
+                        const out = []
+                        for (let i = 0; i < all.length; ++i) {
+                            const c = all[i]
+                            if (String(c.name).toLowerCase().indexOf(kw) >= 0
+                                || String(c.uid).indexOf(kw) >= 0
+                                || String(c.lastText).toLowerCase().indexOf(kw) >= 0)
+                                out.push(c)
+                        }
+                        visibleConversations = out
+                    }
+
+                    Row {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        // ══════ 左：会话列表 ══════
+                        Rectangle {
+                            width: 244
+                            height: parent.height
+                            color: Theme.surface
+
+                            // 右侧分隔线（列表是白卡片，靠这条线和消息区隔开）
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 1
+                                color: Theme.line
+                            }
+
+                            Item {
+                                anchors.fill: parent
+                                anchors.margins: Theme.spacingMd
+
+                                // 头：SESSIONS + 会话数
+                                Item {
+                                    id: listHeader
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    height: 20
+
+                                    Text {
+                                        id: listTitle
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "SESSIONS"
+                                        font: Theme.fontLabel
+                                        color: Theme.muted
+                                    }
+
+                                    Text {
+                                        anchors.left: listTitle.right
+                                        anchors.leftMargin: Theme.spacingSm
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "· " + ChatController.conversationCount
+                                        font: Theme.fontMonoSm
+                                        color: Theme.muted
+                                        opacity: 0.7
+                                    }
+                                }
+
+                                ZTextField {
+                                    id: convSearch
+                                    anchors.top: listHeader.bottom
+                                    anchors.topMargin: Theme.spacingSm
+                                    width: parent.width
+                                    placeholderText: "搜索会话"
+                                    onTextChanged: sectionChat.reloadConversations()
+                                }
+
+                                Item {
+                                    id: listArea
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: convSearch.bottom
+                                    anchors.topMargin: Theme.spacingSm
+                                    anchors.bottom: listNote.top
+                                    anchors.bottomMargin: Theme.spacingSm
+
+                                    Flickable {
+                                        id: convFlick
+                                        anchors.fill: parent
+                                        clip: true
+                                        contentHeight: convColumn.height
+                                        boundsBehavior: Flickable.StopAtBounds
+
+                                        Column {
+                                            id: convColumn
+                                            width: convFlick.width
+                                            spacing: 0
+
+                                            Repeater {
+                                                model: sectionChat.visibleConversations
+
+                                                ConversationRow {
+                                                    required property var modelData
+
+                                                    width: convColumn.width
+                                                    uid: String(modelData.uid)
+                                                    name: modelData.name
+                                                    lastText: modelData.lastText
+                                                    lastTime: modelData.lastTime
+                                                    unread: Number(modelData.unread) || 0
+                                                    selected: ChatController.activePeerUid === String(modelData.uid)
+                                                    // 未知 ≠ 离线：没查到状态就不点亮
+                                                    online: PresenceController.online[String(modelData.uid)] === true
+                                                    onClicked: ChatController.openConversation(String(modelData.uid),
+                                                        modelData.name)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: sectionChat.visibleConversations.length === 0
+                                        text: convSearch.text.length > 0 ? "没有匹配的会话" : "暂无会话"
+                                        font: Theme.fontBody
+                                        color: Theme.muted
+                                    }
+                                }
+
+                                // 数据来源如实标注：这些不是服务端给的
+                                Text {
+                                    id: listNote
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    text: "DEMO · 本地演示数据"
+                                    font: Theme.fontMonoSm
+                                    color: Theme.muted
+                                    opacity: 0.6
+                                }
+                            }
+                        }
+
+                        // ══════ 右：对话区 ══════
+                        Item {
+                            id: chatPane
+                            width: parent.width - 244
+                            height: parent.height
+
+                            // 没选会话：空态（不要留一块空白让人以为渲染坏了）
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: Theme.spacingSm
+                                visible: !ChatController.hasActiveConversation
+
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "「未选择会话」"
+                                    font: Theme.fontHeading
+                                    color: Theme.ink
+                                    opacity: 0.22
+                                }
+
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "从左侧选择一个联系人开始对话"
+                                    font: Theme.fontBody
+                                    color: Theme.muted
+                                }
+                            }
+
+                            Item {
+                                anchors.fill: parent
+                                visible: ChatController.hasActiveConversation
+
+                                // ── 会话头：对方是谁 + 在线状态 + 资料入口 ──
+                                Rectangle {
+                                    id: chatHeader
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 64
+                                    color: Theme.surface
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: 2
+                                        color: Theme.line
+                                    }
+
+                                    /*
+                                     * 左右两簇分开摆：左簇的右边界让给右簇，文字负责省略。
+                                     * 不能把头像、名字、按钮塞进同一个 Row ——
+                                     * 窗口拉到最小宽度（760）时会话区只剩 280px，
+                                     * 它们会直接压在一起。
+                                     */
+                                    Row {
+                                        id: chatHeaderLeft
+                                        anchors.left: parent.left
+                                        anchors.right: headerActions.left
+                                        anchors.leftMargin: Theme.spacingLg
+                                        anchors.rightMargin: Theme.spacingMd
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: Theme.spacingMd
+
+                                        ZAvatar {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            size: 36
+                                            name: ChatController.activePeerName
+                                            uid: ChatController.activePeerUid
+                                            online: PresenceController.online[ChatController.activePeerUid] === true
+                                            clickable: true
+                                            onClicked: page.openChatPeerInfo()
+                                        }
+
+                                        Column {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 3
+                                            width: chatHeaderLeft.width - 36 - chatHeaderLeft.spacing
+
+                                            Text {
+                                                width: parent.width
+                                                elide: Text.ElideRight
+                                                text: ChatController.activePeerName.length > 0
+                                                    ? ChatController.activePeerName
+                                                    : ChatController.activePeerUid
+                                                font: Theme.fontHeading
+                                                color: Theme.ink
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                elide: Text.ElideRight
+                                                /*
+                                                 * 未知就明说"状态未知" —— 只有真查到在线才写"在线"。
+                                                 * （弹窗和列表里都是这条规矩：未知 ≠ 离线）
+                                                 *
+                                                 * ⚠ 第二个参数不是为了用，是为了**建立依赖**：
+                                                 *   PresenceController.hasState(uid) 这种函数调用在 QML 眼里
+                                                 *   是个黑盒，查到了新状态也不会重算绑定 —— 表现就是
+                                                 *   日志里明明回了 offline，界面一直停在"状态未知"。
+                                                 *   把 online 这个属性当参数传进去，依赖才挂得上。
+                                                 */
+                                                text: "UID " + ChatController.activePeerUid + "  ·  "
+                                                    + page.peerStateText(ChatController.activePeerUid,
+                                                        PresenceController.online)
+                                                font: Theme.fontMonoSm
+                                                color: Theme.muted
+                                            }
+                                        }
+                                    }
+
+                                    Row {
+                                        id: headerActions
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: Theme.spacingLg
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: Theme.spacingSm
+
+                                        ZTag {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "DEMO"
+                                            tone: Theme.Tone.Muted
+                                            uppercase: false
+                                        }
+
+                                        ZIconButton {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            glyph: "◎"
+                                            tooltip: "查看资料"
+                                            onClicked: page.openChatPeerInfo()
+                                        }
+                                    }
+                                }
+
+                                // ── 消息区 ──
+                                ListView {
+                                    id: messageView
+                                    anchors.top: chatHeader.bottom
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: composer.top
+                                    anchors.leftMargin: Theme.spacingLg
+                                    anchors.rightMargin: Theme.spacingLg
+                                    clip: true
+                                    spacing: Theme.spacingMd
+                                    model: ChatController.messages
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    /*
+                                     * 始终贴底（聊天软件的习惯）。
+                                     *
+                                     * 不能在 messagesChanged 里直接滚：那一拍新 delegate 还没
+                                     * 完成布局，contentHeight 仍是旧值，滚过去会差一条消息的高度
+                                     * —— 表现为"最后一句被输入区切掉一半"。
+                                     * 挂在 contentHeight 上就是等真正布局完再滚。
+                                     */
+                                    onContentHeightChanged: Qt.callLater(messageView.positionViewAtEnd)
+
+                                    // 日期分隔条。真接了历史消息以后按天插，现在只有一段
+                                    header: Item {
+                                        width: messageView.width
+                                        height: 42
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: Theme.spacingSm
+
+                                            Rectangle {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 30
+                                                height: 1
+                                                color: Theme.lineSoft
+                                            }
+
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: "今天"
+                                                font: Theme.fontMonoSm
+                                                color: Theme.muted
+                                            }
+
+                                            Rectangle {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 30
+                                                height: 1
+                                                color: Theme.lineSoft
+                                            }
+                                        }
+                                    }
+
+                                    delegate: ChatBubble {
+                                        required property var modelData
+
+                                        width: messageView.width
+                                        fromSelf: modelData.fromSelf === true
+                                        text: modelData.text
+                                        time: modelData.time
+                                        state: modelData.state
+                                        peerName: ChatController.activePeerName
+                                        peerUid: ChatController.activePeerUid
+                                        selfName: LoginController.name
+                                        selfUid: LoginController.uid
+                                    }
+                                }
+
+                                // ── 输入区 ──
+                                Rectangle {
+                                    id: composer
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    height: 86
+                                    color: Theme.surface
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        height: 2
+                                        color: Theme.line
+                                    }
+
+                                    Row {
+                                        id: composerRow
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.leftMargin: Theme.spacingLg
+                                        anchors.rightMargin: Theme.spacingLg
+                                        anchors.topMargin: Theme.spacingMd
+                                        spacing: Theme.spacingSm
+
+                                        ZTextField {
+                                            id: composerEdit
+                                            width: parent.width - sendBtn.width - parent.spacing
+                                            placeholderText: "输入消息，Enter 发送"
+                                            onAccepted: page.doSendMessage()
+                                        }
+
+                                        ZButton {
+                                            id: sendBtn
+                                            anchors.bottom: composerEdit.bottom
+                                            text: "发送"
+                                            mono: "ENTER"
+                                            variant: Theme.Variant.Primary
+                                            onClicked: page.doSendMessage()
+                                        }
+                                    }
+
+                                    // 提示行：控制器有话说就显示控制器那句，否则常驻"仅本地"说明
+                                    Text {
+                                        anchors.left: composerRow.left
+                                        anchors.right: composerRow.right
+                                        anchors.top: composerRow.bottom
+                                        anchors.topMargin: 3
+                                        text: ChatController.tip.length > 0
+                                            ? ChatController.tip
+                                            : "服务端尚未实现文本消息（TextChatMsg*）：发送只在本机回显"
+                                        font: Theme.fontMonoSm
+                                        color: ChatController.tipIsError ? Theme.danger : Theme.muted
+                                        opacity: ChatController.tipIsError ? 1 : 0.75
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -533,6 +981,11 @@ Item {
             ContactController.sendFriendRequest(uid, verifyInfo, remark, userInfoDialog.userName)
         }
 
+        // 接受 / 拒绝收到的好友申请。结果由 onFriendRequestAuthFinished 回填到弹窗底栏
+        onFriendAuthRequested: (requestId, state) => {
+            ContactController.handleFriendRequest(requestId, state)
+        }
+
         // 保存本人资料：服务端没有这个接口，先如实说明（接口就绪后换成控制器调用）
         onProfileSaveRequested: (name, sex, desc) => {
             console.log("[chat] 待接入的资料保存请求:", name, sex, desc)
@@ -604,9 +1057,15 @@ Item {
             ? request : page.findRequestFor(uid)
         userInfoDialog.requestInfo = req
 
-        if (req !== null)
-            userInfoDialog.showHint(req.received
-                ? "对方发来的申请；接受 / 拒绝接口服务端还没提供" : "这条申请是我发出的，等待对方处理", false)
+        if (req !== null) {
+            const state = Number(req.state)
+            if (state !== 0)
+                userInfoDialog.showHint("这条申请已经处理过了（" + req.stateText + "）", false)
+            else if (req.received)
+                userInfoDialog.showHint("对方发来的好友申请；接受后即成为好友", false)
+            else
+                userInfoDialog.showHint("这条申请是我发出的，等待对方处理", false)
+        }
         else
             userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
 
@@ -621,6 +1080,30 @@ Item {
                 return list[i]
         }
         return null
+    }
+
+    /// 按申请编号取列表里的那一条（处理结果回来时用来刷新弹窗里的快照）
+    function findRequestById(requestId) {
+        const list = ContactController.applyList
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].id) === String(requestId))
+                return list[i]
+        }
+        return null
+    }
+
+    /*!
+        列表变了就把弹窗里那份申请快照换成最新的。
+
+        弹窗不监听 applyList（展示组件只认 property），所以"状态在别处变了"
+        —— 比如推送/刷新把这条改成已接受 —— 得由页面推给它。
+    */
+    function syncDialogRequest() {
+        if (!userInfoDialog.visible || !userInfoDialog.hasRequest)
+            return
+        const fresh = page.findRequestById(userInfoDialog.requestInfo.id)
+        if (fresh !== null)
+            userInfoDialog.requestInfo = fresh
     }
 
     /// 批量问一批列表项（搜索结果 / 申请列表）的在线状态。
@@ -655,6 +1138,99 @@ Item {
         ContactController.searchUser(keywordEdit.text)
     }
 
+    /*!
+        会话区初始化：没有选中会话时默认打开第一个，并顺手问一遍各自在不在线。
+
+        为什么进来就自动选一个：真实的 IM 都是"进来就看到上次的对话"，
+        停在空态会让人以为功能坏了。
+    */
+    function initChat() {
+        const list = ChatController.conversations
+        if (list.length > 0 && !ChatController.hasActiveConversation)
+            ChatController.openConversation(String(list[0].uid), list[0].name)
+
+        sectionChat.reloadConversations()
+        // 会话条数很少（现在是演示的 4 条）；PresenceController 会串行发，不会把回包搞乱
+        page.refreshPresenceOf(list)
+    }
+
+    /*!
+        发一条消息。
+
+        控制器返回 false 表示没必要发（空串 / 超长），这时候**不清输入框** ——
+        用户改两个字还能接着发，清掉等于让他重打一遍。
+    */
+    function doSendMessage() {
+        if (!ChatController.hasActiveConversation)
+            return
+
+        if (ChatController.sendText(composerEdit.text)) {
+            composerEdit.text = ""
+            composerEdit.forceActiveFocus()
+        }
+    }
+
+    /// 会话头部点头像 / 点 ◎：打开这个人的资料卡
+    function openChatPeerInfo() {
+        page.openUserInfo({
+            uid: ChatController.activePeerUid,
+            name: ChatController.activePeerName
+        })
+    }
+
+    /*!
+        会话头那行状态文案。
+
+        \a states 传 PresenceController.online（QVariantMap）—— 只为让绑定依赖它：
+        直接调 hasState(uid) 的话，QML 不知道这个函数读了什么，查到了也不会重算。
+    */
+    function peerStateText(uid, states) {
+        const state = states[uid]
+        if (state === undefined)
+            return "状态未知"
+        return state ? "在线" : "离线"
+    }
+
+    /// 自动化用（MYCHAT_SENDMSG）：把话填进输入框，然后走正常的发送流程
+    function sendAutoMessage() {
+        if (app.autoMessage.length === 0 || !ChatController.hasActiveConversation)
+            return
+        composerEdit.text = app.autoMessage
+        page.doSendMessage()
+    }
+
+    /*!
+        自动化用（MYCHAT_AUTHAPPLY）：挑第一条「收到 + 待处理」的申请，
+        打开资料卡后替用户点「接受 / 拒绝」。
+
+        走资料卡而不是直接调控制器，是为了把用户真实经过的那条路一起验掉
+        （弹窗底栏按钮 → 页面 → 控制器 → 1010/1011）。
+    */
+    function tryPendingAuth() {
+        if (pendingAuthAction === "" || ContactController.busy)
+            return
+
+        const list = ContactController.applyList
+        if (list.length === 0)
+            return // 等 applyListChanged
+
+        for (let i = 0; i < list.length; ++i) {
+            const item = list[i]
+            if (item.received !== true || Number(item.state) !== 0)
+                continue
+
+            const state = Number(pendingAuthAction)
+            pendingAuthAction = ""
+            page.openUserInfo(item, item)
+            // 弹窗刚拿到 requestInfo，canAuth 要下一拍才算得出来
+            Qt.callLater(() => userInfoDialog.authRequest(state))
+            return
+        }
+
+        pendingAuthAction = ""
+        console.warn("[chat] 申请列表里没有「收到 + 待处理」的条目，MYCHAT_AUTHAPPLY 跳过")
+    }
+
     /*
         自动化验证：MYCHAT_OPENDLG=<other|self|selfedit|sendfriend|applyreceived|applysent>
         时开屏就打开资料弹窗。
@@ -681,6 +1257,13 @@ Item {
             // 回包之后再替用户点一次「加好友」：此刻弹窗应已切成「申请详情」，
             // 这次点击必须是空操作 —— 日志里只应出现一条 AddFriendReq
             doubleSendTimer.restart()
+            return
+        } else if (app.autoDialog.startsWith("session")) {
+            // 自动化验证：切到「会话」分区并可选地打开某个会话（session:<uid>）
+            page.section = 0
+            const parts = app.autoDialog.split(":")
+            if (parts.length > 1 && parts[1].length > 0)
+                ChatController.openConversation(parts[1], parts[1])
             return
         } else if (app.autoDialog === "applylist") {
             // 只看申请列表本身（不弹资料卡）：验证方向标签与对面 uid 的显示
@@ -712,6 +1295,29 @@ Item {
             userInfoDialog.enterEdit()
     }
 
+    /*!
+        会话 / 消息：列表与气泡都直接绑 ChatController 的属性，这里只处理
+        "数据变了之后界面该跟着做什么"（重建过滤结果、滚到底、查在线）。
+    */
+    Connections {
+        target: ChatController
+
+        function onConversationsChanged() {
+            sectionChat.reloadConversations()
+        }
+
+        function onMessagesChanged() {
+            // 同一拍里 contentHeight 还是旧的，滚到底必须延到下一拍
+            Qt.callLater(messageView.positionViewAtEnd)
+        }
+
+        function onActiveConversationChanged() {
+            if (ChatController.hasActiveConversation)
+                PresenceController.refresh(ChatController.activePeerUid)
+            Qt.callLater(messageView.positionViewAtEnd)
+        }
+    }
+
     Connections {
         target: ContactController
 
@@ -719,11 +1325,14 @@ Item {
             page.tryAutoSearch()
             page.tryPendingFriendSend()
             page.tryPendingApplyOpen()
+            page.tryPendingAuth()
         }
 
         function onApplyListChanged() {
             page.tryPendingApplyOpen()
+            page.tryPendingAuth()
             page.refreshPresenceOf(ContactController.applyList)
+            page.syncDialogRequest()
         }
 
         // 搜索结果出来后顺带问一下各自在不在线（人数很少，一问一个）
@@ -752,7 +1361,40 @@ Item {
         function onFriendRequestSent(ok, error) {
             if (!ok || !userInfoDialog.visible)
                 return
-            userInfoDialog.requestInfo = page.findRequestFor(userInfoDialog.userId)
+
+            const req = page.findRequestFor(userInfoDialog.userId)
+            userInfoDialog.requestInfo = req
+            // nick（备注）只有服务端回包/本地回声里有 —— 打开弹窗那一刻还没有，
+            // 不补这一句的话，用户刚填的备注在这一屏里看不到。
+            if (req !== null && req !== undefined)
+                userInfoDialog.nickName = req.nick !== undefined ? req.nick : ""
+        }
+
+        /*
+            处理（接受 / 拒绝）的回包到了 → 刷新弹窗里那条快照。
+
+            requestInfo 是打开弹窗那一刻的**副本**，控制器改的是 applyList 里那条，
+            所以这里必须重新取一份；否则底栏还停在「接受 / 拒绝」上，点第二下就是 1021。
+        */
+        function onFriendRequestAuthFinished(ok, error, requestId, state) {
+            if (!userInfoDialog.visible || !userInfoDialog.hasRequest)
+                return
+            if (String(userInfoDialog.requestInfo.id) !== String(requestId))
+                return
+
+            userInfoDialog.requestInfo = page.findRequestById(requestId)
+            userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
+        }
+
+        /// 对方处理了我发出的申请（1012 推送）→ 弹窗开着这条的话同样刷新
+        function onFriendRequestAnswered(requestId, state) {
+            if (!userInfoDialog.visible || !userInfoDialog.hasRequest)
+                return
+            if (String(userInfoDialog.requestInfo.id) !== String(requestId))
+                return
+
+            userInfoDialog.requestInfo = page.findRequestById(requestId)
+            userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
         }
     }
 }

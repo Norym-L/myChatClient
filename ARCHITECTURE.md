@@ -53,12 +53,20 @@ ZmdUI 组件库（终末地工业机能风）。
 - ✅ **聊天主页**：左侧 ZSideBar 导航（会话 / 联系人 / 好友申请）+ 右侧分区内容
 - ✅ **好友链路**：搜索用户（1003）、发送好友申请（1005）、好友申请列表（1007）
   —— 三条 TCP 消息均已与服务端实测闭环
+- ✅ **好友申请推送**（1009 NotifyAddFriendReq）：被申请方在线时服务端主动推，
+  客户端收到后自动回拉列表（离线不补推）
+- ✅ **好友验证**：接受 / 拒绝收到的申请（1010/1011）、自己发出的申请被处理时的推送
+  （1012 NotifyAuthFriendReq）—— 两条链路均已与服务端实测闭环（`api-friend.md`）
+- ✅ **会话界面**（会话列表 / 消息气泡 / 输入框 / 未读角标）—— 版式与交互已就绪，
+  但数据是 **本地演示**（标 DEMO）：服务端既没有好友列表也没有文本消息。
+  接服务器只需接 `ChatController` 头文件里标注的那三个点（发 / 收 / 拉历史）
 - ✅ 四套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- 会话列表、消息气泡、聊天输入框 —— **依赖服务端补齐**（好友列表接口是空函数，文本聊天消息无实现）
-- 好友列表（服务端未实现）、认证 / 拒绝好友申请（1009）
+- **聊天的数据源**：好友列表（`getUserApplyListAndFriendList` 是空函数）→ 列不出真实会话；
+  文本消息 `TextChatMsg*`（1013~1015）只有编号没有处理器 → 消息发不出去
+- 好友列表本身（接受申请后服务端已经建立了关系，但没有接口能把它列出来）
 - 会话持久化（目前关掉进程就要重新登录）
 
 ---
@@ -78,7 +86,8 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── LoginController.h/.cpp         登录链路
 │   ├── RegisterController.h/.cpp      注册链路（含验证码 60s 冷却）
 │   ├── ResetPasswordController.h/.cpp 重置密码链路
-│   ├── ContactController.h/.cpp       联系人 / 好友链路（搜索 / 发申请 / 申请列表）
+│   ├── ContactController.h/.cpp       联系人 / 好友链路（搜索 / 发申请 / 申请列表 / 推送）
+│   ├── ChatController.h/.cpp          会话 / 消息（版式就绪，数据为本地演示）
 │   │
 │   └── core/                   协议 / 网络 / 会话 / 日志（不依赖外部）
 │       ├── protocol.h/.cpp        帧格式、MessageId、ReqId→路径、ErrorCode、parseUid
@@ -90,7 +99,11 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 ├── qml/                       QML 页面
 │   ├── main.qml                窗口壳 + 路由容器
 │   ├── pages/                  LoginPage / RegisterPage / ResetPasswordPage / ChatPage
-│   └── components/ZAvatar.qml  首字母头像（自建，ZmdUI 目前没有头像组件）
+│   └── components/             自建组件（ZmdUI 缺失、按同一设计语言补的）
+│       ├── ZAvatar.qml            首字母头像 + 真实头像 + 状态点
+│       ├── ConversationRow.qml    会话列表的一行（头像 / 摘要 / 未读 / 选中态）
+│       ├── ChatBubble.qml         消息气泡（自己 / 对方两种朝向 + 投递状态标注）
+│       └── ThemeToggle.qml        亮 / 暗主题切换（四页左下角各一份）
 │
 ├── resources/qml.qrc          资源清单（应用 QML + ZmdUI 全部组件）
 ├── assets/config.ini          GateServer 地址（构建后拷到 exe 旁）
@@ -212,10 +225,21 @@ GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] 
 - `searchUser` / `sendFriendRequest` / `friendApplyList` —— 好友链路三条消息
 - `sendJson(message_id, body)` —— 组帧发送
 - `dispatchBuffer()` —— 循环解帧（粘包 / 半包都在这里处理）
-- `handleFrame()` —— 按编号分发；目前处理 `ChatLoginRsp` / `SearchUserRsp` /
-  `AddFriendRsp` / `SyncFriendRequestRsp` 四个回包，其余打 WARN 但不断开连接
+- `handleFrame()` —— 按编号分发；已知回包全部有处理，服务端推送 1009 / 1012 也在其中，
+  真正未知的编号打 WARN 但不断开连接
 
 连接超时、socket 错误、对端断开分别发出 `connectFailed` / `linkError` 信号。
+
+**回包超时是统一的**：每发一个请求就 `expectReply(请求号, 回包号, 超时回调)` 登记一笔，
+回包到了由 `handleFrame` 最前面的 `finishReply()` 销账，到期没回就按 `RequestTimeout`
+（客户端本地码 5，文案「网络连接超时，请稍后重试」）回调一次。
+
+这么做的原因不是洁癖 —— 服务端 **确实存在不回包的分支**（实测：拿一条不属于自己的
+申请去发 1010，服务端一句都不回）。TCP 层没有任何"一定有回包"的保证，缺了这道闸门
+的表现是界面永远转圈、后续请求全被"上一个还没回包"挡掉，而且完全静默。
+
+因此新增消息时 **必须**在发送处调一次 `expectReply()`；`tests/sockettimeout.cpp`
+用一个只收不发的哑服务器把这件事钉住（不需要真实服务端）。
 
 ### 4.4 SessionManager
 
@@ -304,14 +328,19 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 ### 5.5 ContactController
 
-联系人 / 好友链路的唯一入口，覆盖服务端 **已实现** 的三条 TCP 消息：
+联系人 / 好友链路的唯一入口，覆盖服务端 **已实现** 的五条 TCP 消息：
 
-| 方法                                           | 对应消息                                | 说明                                      |
-|------------------------------------------------|-----------------------------------------|-------------------------------------------|
-| `searchUser(keyword)`                          | `SearchUserReq/Rsp`（1003/1004）        | keyword 可为 uid 或用户名，服务端两种都认 |
-| `sendFriendRequest(toUid, verifyInfo, remark)` | `AddFriendReq/Rsp`（1005/1006）         | toUid 按字符串传                          |
-| `refreshApplyList()`                           | `SyncFriendRequestReq/Rsp`（1007/1008） | 拉取「别人发给我的」申请列表              |
-| `clearSearchResult()`                          | ——（本地）                              | 清空搜索态                                |
+| 方法                                           | 对应消息                                | 说明                                                 |
+|------------------------------------------------|-----------------------------------------|------------------------------------------------------|
+| `searchUser(keyword)`                          | `SearchUserReq/Rsp`（1003/1004）        | keyword 可为 uid 或用户名，服务端两种都认            |
+| `sendFriendRequest(toUid, verifyInfo, remark)` | `AddFriendReq/Rsp`（1005/1006）         | toUid 按字符串传                                     |
+| `refreshApplyList()`                           | `SyncFriendRequestReq/Rsp`（1007/1008） | 拉取「别人发给我的」申请列表                         |
+| `handleFriendRequest(requestId, state)`        | `AuthFriendReq/Rsp`（1010/1011）        | `state` 1 接受 / 2 拒绝；1011 回显编号但不回显 state |
+| `clearSearchResult()`                          | ——（本地）                              | 清空搜索态                                           |
+
+推送（服务端主动，无回包）：`NotifyAddFriendReq`（1009，有人申请加你）、
+`NotifyAuthFriendReq`（1012，你发出的申请被处理）。两者收到后都会自动回拉一次列表， **但补拉是静默的** —— 不会用"共 N
+条"盖掉"对方接受了你的申请"这类真正要看的提示。
 
 属性：`tip` / `tipIsError` / `busy`、搜索结果 `hasSearchResult` / `searchUid` /
 `searchName` / `searchDesc` / `searchSex`、申请列表 `applyList`（`QVariantList`，
@@ -323,7 +352,33 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 ⚠ 服务端的好友列表（`getUserApplyListAndFriendList`）是 **空函数**，
 认证好友（1009）与文本聊天（1012）也没实现 —— 会话列表因此拿不到任何真实数据。
 
-### 5.6 路由
+### 5.6 ChatController
+
+会话 / 消息的唯一入口。 **服务端目前没有这两样东西**（好友列表是空函数、文本消息无实现），
+所以它现在给的是一份明确的本地演示数据，界面标 `DEMO`。
+
+| 方法                            | 用途                                                           |
+|---------------------------------|----------------------------------------------------------------|
+| `openConversation(uid, name)`   | 打开会话（顺带清未读）；没有选中时页面自动开第一条             |
+| `sendText(text)` → bool         | 追加到本地并 `emit textMessageOutgoing()`；空串/超长返回 false |
+| `markRead(uid)`                 | 清未读角标                                                     |
+| `appendIncoming(uid, text, t)`  | **待接**：收到 1015 推送的落点（置顶 + 未读 +1）               |
+| `markMessageState(uid, id, st)` | **待接**：把某条消息从 `local` 改成 `sent` / `failed`          |
+
+属性：`conversations` / `conversationCount` / `messages` / `hasActiveConversation` /
+`activePeerUid` / `activePeerName` / `serverSupportsText`（恒 false）/ `tip` / `tipIsError`。
+
+**与服务器的三个接线点**（服务端补齐后只改这几处）：
+
+1. 发：`sendText()` 末尾的 `emit textMessageOutgoing(peerUid, text)` → `ChatSocket` 发 1013
+2. 收：`ChatSocket` 收到 1015 → 调 `appendIncoming()`
+3. 列表 / 历史：把好友列表灌进 `conversations`、把历史消息灌进 `m_history`
+
+⚠ **QML 绑定的坑**：`PresenceController.hasState(uid)` 这类 **函数调用**在 QML 眼里是黑盒，
+属性变了也不会重算绑定（曾表现为日志里明明回了 offline、界面一直停在"状态未知"）。
+需要依赖时把 `PresenceController.online` 当 **参数**传进函数（见 `ChatPage.peerStateText`）。
+
+### 5.7 路由
 
 `qml/main.qml` 用 `Loader` 切换 `sourceComponent`：
 
@@ -353,18 +408,34 @@ ChatPage  ──logoutRequested──▶ LoginPage
 
 ### 6.2 当前用到的组件
 
-| 页面                | 组件                                                                                               |
-|---------------------|----------------------------------------------------------------------------------------------------|
-| `LoginPage`         | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground`                                               |
-| `RegisterPage`      | 同上                                                                                               |
-| `ResetPasswordPage` | 同上                                                                                               |
-| `ChatPage`          | `ZSideBar`、`ZPanel`、`ZTextField`、`ZButton`、`ZSectionTitle`、`ZGridBackground` + 自建 `ZAvatar` |
+| 页面                | 组件                                                                                                                                                         |
+|---------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `LoginPage`         | `ZPanel`、`ZTextField`、`ZButton`、`ZGridBackground`                                                                                                         |
+| `RegisterPage`      | 同上                                                                                                                                                         |
+| `ResetPasswordPage` | 同上                                                                                                                                                         |
+| `ChatPage`          | `ZSideBar`、`ZPanel`、`ZTextField`、`ZButton`、`ZSectionTitle`、`ZTag`、`ZIconButton`、`ZGridBackground` + 自建 `ZAvatar` / `ConversationRow` / `ChatBubble` |
 
 用到的 Theme 令牌：`bg` `surface` `ink` `inkSoft` `muted` `accent` `danger` `lineSoft`
 `gridLine` `gridLineMajor` `fontBody` `fontStrong` `fontMonoMd` `fontMonoSm` `spacingSm`
 `spacingMd` `spacingLg` `Variant.*`。
 
 **业务 QML 里不写魔法数字和硬编码颜色**，一律取 `Theme`。
+
+### 6.3 主题切换
+
+`Theme` 是 singleton，所有颜色都是 `Theme.isDark ? A : B` 的 **绑定**，所以换肤
+只需要改一个值：`Theme.mode = Theme.Mode.Dark | Theme.Mode.Light`。
+
+`qml/components/ThemeToggle.qml` 做的就是这件事，外加把选择存起来
+（`QtCore` 的 `Settings`，键 `Theme/mode` → Windows 上落到注册表
+`HKCU\Software\MyChat\MyChat`）。四个页面 **各挂一份**，共用一个键，所以任意一处切换
+另外几处跟着变。
+
+⚠ 别用 `Qt.labs.settings` 那个 `Settings`：Qt 6.11 会打印
+"deprecated ... use the one from QtCore"，而且它会多依赖一个 QML 插件（要额外部署）。
+
+自动化：`MYCHAT_THEME=light|dark` 在 **启动前**把存档改掉（写的是同一份存档，
+不是另开状态），所以无头截图验的就是用户点出来的那套。见 `tools/README.md`。
 
 ---
 
@@ -551,6 +622,9 @@ qtClientLoginTest    <uid> <password> [gateUrl]
 qtClientRegisterTest <email> <nickname> <password> [verifyCode]
 qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
 qtClientContactTest  <uidA> <passwordA> <uidB> <passwordB>
+
+# 不需要服务端：回包超时兜底（自带只收不发的哑服务器，0 = 五条请求全都自己超时收尾）
+qtClientSocketTimeoutTest
 
 # 2) 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe

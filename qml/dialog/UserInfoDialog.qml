@@ -19,6 +19,7 @@ import "../components"
         这时弹窗**只展示那条申请**（方向 / 状态 / 验证信息），
         并且**不再提供「加好友」** —— 申请都已经发出去（或收到了）还让人再点一次，
         除了报个重复申请的错误没有任何意义。
+        若这条是「别人发给我、且还在等待处理」，底栏换成「拒绝 / 接受」两个键。
     \endlist
 
     本文件保持「展示组件」定位：数据靠 property 流入、动作靠 signal 流出，
@@ -89,6 +90,16 @@ ZDialog {
     readonly property bool hasRequest: dialog.requestInfo !== null
         && dialog.requestInfo !== undefined
 
+    /*!
+        这条申请现在能不能处理（接受 / 拒绝）。
+
+        三条同时成立才行：是**对方发给我的**、状态还是**待处理 0**、当前没有在提交中。
+        自己发出的申请、已经处理过的申请，都不该再给按钮 —— 服务端会回 1021。
+    */
+    readonly property bool canAuth: dialog.hasRequest
+        && dialog.requestInfo.received === true
+        && Number(dialog.requestInfo.state) === 0
+
     // ══════════════════════════════════════════════════════════════
     //  状态（由页面写入）
     // ══════════════════════════════════════════════════════════════
@@ -127,6 +138,13 @@ ZDialog {
 
     /// 请求发送好友申请（页面 → ContactController.sendFriendRequest）
     signal friendRequestRequested(string uid, string verifyInfo, string remark)
+
+    /*!
+        请求接受 / 拒绝一条收到的好友申请（页面 → ContactController.handleFriendRequest）。
+
+        \a state：1 = 接受，2 = 拒绝（服务端只认这两个值）。
+    */
+    signal friendAuthRequested(string requestId, int state)
 
     /// 请求保存本人资料。服务端暂无该接口，页面先给如实提示
     signal profileSaveRequested(string name, int sex, string desc)
@@ -500,7 +518,30 @@ ZDialog {
                 }
             }
 
+            /*
+             * 待处理的申请：底栏换成「拒绝 / 接受」。
+             *
+             * 点完**不关窗**：结果（已接受 / 对方拒绝过 / 重复处理 1021）得留在这块底栏上，
+             * 关掉用户就只看到列表里一行变了，不知道发生了什么。
+             */
             ZButton {
+                text: "拒绝"
+                variant: Theme.Variant.Secondary
+                visible: dialog.canAuth
+                enabled: !dialog.busy
+                onClicked: dialog.authRequest(2)
+            }
+
+            ZButton {
+                text: dialog.busy ? "提交中…" : "接受"
+                variant: Theme.Variant.Primary
+                visible: dialog.canAuth
+                enabled: !dialog.busy
+                onClicked: dialog.authRequest(1)
+            }
+
+            ZButton {
+                visible: !dialog.canAuth
                 text: dialog.primaryText()
                 variant: Theme.Variant.Primary
                 // 已有申请时禁用：再发一次只会被服务端顶回来（1016 / 1018）
@@ -561,7 +602,14 @@ ZDialog {
             })
         }
 
-        if (!dialog.isSelf)
+        /*
+         * 备注只在**有值**时才占一行。
+         *
+         * 服务端只给"我发出的申请"填这个字段（申请人自己给对面起的名字），
+         * 收到的申请那侧恒为空 —— 空着还占一行"备注 —"，会被误读成
+         * "这里本该有东西但丢了"，而且很容易和上面的「验证信息」看成同一个格子。
+         */
+        if (!dialog.isSelf && dialog.nickName.length > 0)
             rows.push({label: "备注", value: dialog.nickName})
         rows.push({label: "性别", value: dialog.sexText()})
         rows.push({label: "签名", value: dialog.desc})
@@ -571,8 +619,20 @@ ZDialog {
     function primaryText() {
         if (dialog.editing)
             return dialog.busy ? "保存中…" : "保存"
-        if (dialog.hasRequest)
-            return dialog.requestInfo.received ? "待处理" : "申请已发送"
+
+        if (dialog.hasRequest) {
+            // 这条申请已经有结果了 → 主按钮只是个"状态牌"，不能点
+            const received = dialog.requestInfo.received === true
+            switch (Number(dialog.requestInfo.state)) {
+                case 1:
+                    return received ? "已接受" : "对方已接受"
+                case 2:
+                    return received ? "已拒绝" : "对方已拒绝"
+                default:
+                    return received ? "待处理" : "申请已发送"
+            }
+        }
+
         if (dialog.isSelf)
             return "编辑资料"
         return dialog.busy ? "提交中…" : "加好友"
@@ -625,6 +685,18 @@ ZDialog {
         if (dialog.busy || dialog.isSelf)
             return
         dialog.friendRequestRequested(dialog.userId, dialog.verifyInfo, dialog.remark)
+    }
+
+    /*!
+        接受 / 拒绝当前这条申请。
+
+        只抛信号，不做任何网络判断 —— 提交、busy 态、结果提示都在页面与控制器那侧，
+        这样弹窗不需要知道协议（state 的 1 / 2 只是转发）。
+    */
+    function authRequest(state) {
+        if (dialog.busy || !dialog.canAuth)
+            return
+        dialog.friendAuthRequested(String(dialog.requestInfo.id), state)
     }
 
     function submitProfile() {

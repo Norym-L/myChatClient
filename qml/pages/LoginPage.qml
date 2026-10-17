@@ -2,6 +2,7 @@ import QtQuick
 import ZmdUI 1.0
 
 import MyChat.Core 1.0
+import "../components"
 
 /*!
     登录页 —— 用 ZmdUI 组件重构旧前端的 logindialog.ui。
@@ -117,6 +118,15 @@ Item {
                 onClicked: page.resetRequested()
             }
         }
+    }
+
+    // ── 左下角：主题切换（登录页没有侧边栏，直接锚在窗口左下）──────
+    // 放在这里而不是仅在聊天页：登录是每次打开程序的第一屏，
+    // 主题得在进主界面之前就能改，而且要看得见"上一次选的是哪个"。
+    ThemeToggle {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: Theme.spacingLg
     }
 
     // 本地校验失败 → 高亮并聚焦出错的输入框

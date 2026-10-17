@@ -101,6 +101,10 @@ namespace mychat::protocol
         NetworkError = 2,
         HttpStatusError = 3,
         RequestTooLong = 4,
+        /// 发了请求但服务端在客户端的等待窗口内**一句都没回**。
+        /// （服务端有几处分支是直接 return 不回包的，和家庭/服务器网络无关，
+        ///  所以文案不能说成"网络异常"。）
+        RequestTimeout = 5,
 
         // ── 服务端 ──
         ServerJsonError = 1001,
@@ -121,6 +125,10 @@ namespace mychat::protocol
         UserIsYourFriendBefore = 1016,
         CheckYourReceivedFriendRequest = 1018,
         UserOutline = 1019,
+        /// 请求数据非法（处理好友申请时 state 不是 1/2 等）
+        RequestValueInvalid = 1020,
+        /// 重复处理：该条好友申请已经被处理过
+        DoubleHandleRequest = 1021,
     };
 
 /// 错误码 -> 用户可读提示
@@ -179,6 +187,13 @@ namespace mychat::protocol
         std::uint64_t fromUid = 0;
         std::uint64_t toUid = 0;
         QString name;
+        /**
+         * 备注（`nick` 字段，2026-10-17 服务端新增）。
+
+         * **只有发送方视角有值**：申请人自己给接收人起的备注。
+         * 接收人看到的那条永远是空串 —— 别拿它当"对方给我起的名字"。
+         */
+        QString nick;
         /// 对方填写的验证信息
         QString verifyInfo;
         QString icon;

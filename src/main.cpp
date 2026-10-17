@@ -21,6 +21,7 @@
 
 #include <QtQml>
 
+#include "ChatController.h"
 #include "ContactController.h"
 #include "HttpClient.h"
 #include "LoginController.h"
@@ -82,7 +83,27 @@ int main(int argc, char* argv[])
     // ZmdUI 完全自定义绘制的前提：禁用平台原生样式
   QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-  initGateUrl();
+    // 开发 / 自动化用：MYCHAT_THEME=<light|dark>
+    // 等价于用户点一下左下角的主题切换。写的是**存档本身**（Qt.labs.settings 那份
+    // `Theme/mode`），不是另开一处状态 —— 否则自动化界面各走各的，
+    // 截图验证的东西和用户看到的不一致。
+    if (const QString auto_theme = qEnvironmentVariable("MYCHAT_THEME");
+        !auto_theme.isEmpty())
+    {
+        const bool dark = auto_theme.compare(QStringLiteral("dark"), Qt::CaseInsensitive) == 0;
+        if (auto_theme.compare(QStringLiteral("light"), Qt::CaseInsensitive) != 0 && !dark)
+        {
+            qWarning() << "[app] MYCHAT_THEME 只能是 light / dark，实际:" << auto_theme;
+        }
+        else
+        {
+            QSettings theme_store;
+            theme_store.setValue(QStringLiteral("Theme/mode"), dark ? 1 : 0);
+            MCLOG_INFO() << "[app] MYCHAT_THEME 已写入主题存档:" << auto_theme;
+        }
+    }
+
+    initGateUrl();
 
     // 控制器：各条链路分别封在各自内部，QML 只调方法、读属性、接信号。
     // 注意声明顺序 —— 它们必须比 engine 活得久（engine 先析构）。
@@ -90,6 +111,7 @@ int main(int argc, char* argv[])
     RegisterController register_controller;
     ResetPasswordController reset_controller;
     ContactController contact_controller;
+    ChatController chat_controller;
     PresenceController presence_controller;
 
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "LoginController",
@@ -100,7 +122,9 @@ int main(int argc, char* argv[])
                                &reset_controller);
   qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ContactController",
                                &contact_controller);
-  qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "PresenceController",
+  qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ChatController",
+                               &chat_controller);
+    qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "PresenceController",
                                &presence_controller);
 
     QQmlApplicationEngine engine;
@@ -140,14 +164,34 @@ int main(int argc, char* argv[])
     root->setProperty("autoSearch", auto_search);
   }
 
-  // 开发 / 自动化用：MYCHAT_OPENDLG=<other|self|selfedit>
-    // 进入聊天页后自动打开「用户资料」弹窗。弹窗是 Popup，离屏抓图默认抓不到，
+  // 开发 / 自动化用：MYCHAT_OPENDLG=<other|self|selfedit|session...>
+    // 进入聊天页后自动打开某个视图（弹窗 / 会话分区）。弹窗是 Popup，离屏抓图默认抓不到，
     // 没有这个开关就只能靠肉眼开程序看 —— 那不算可复核的证据。
     if (const QString auto_dialog = qEnvironmentVariable("MYCHAT_OPENDLG");
         !auto_dialog.isEmpty())
     {
         MCLOG_INFO() << "[app] MYCHAT_OPENDLG 已设置，自动打开资料弹窗:" << auto_dialog;
         root->setProperty("autoDialog", auto_dialog);
+    }
+
+    // 开发 / 自动化用：MYCHAT_SENDMSG=<文本>
+    // 进聊天页后替用户发一条消息（走的是真实的输入框 → 控制器 → 本地回显链路）。
+    // 用来无头验证"发出去的消息出现在气泡里、并带「仅本地」标记"这件事。
+    if (const QString auto_message = qEnvironmentVariable("MYCHAT_SENDMSG");
+        !auto_message.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_SENDMSG 已设置，自动发送一条消息";
+        root->setProperty("autoMessage", auto_message);
+    }
+
+    // 开发 / 自动化用：MYCHAT_AUTHAPPLY=<accept|refuse>
+    // 进聊天页后自动挑一条「收到 + 待处理」的好友申请，打开资料卡并点接受 / 拒绝。
+    // 用来无头验证 1010 → 1011 这条链路（以及列表里的状态就地变化）。
+    if (const QString auto_auth = qEnvironmentVariable("MYCHAT_AUTHAPPLY");
+        !auto_auth.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_AUTHAPPLY 已设置，自动处理好友申请:" << auto_auth;
+        root->setProperty("autoAuth", auto_auth);
     }
 
     // 开发 / 自动化用：设了 MYCHAT_AUTOLOGIN="uid:password" 时自动发起一次登录。

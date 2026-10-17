@@ -85,6 +85,12 @@ namespace mychat::protocol
             return QObject::tr("你们已经是好友了");
         case ErrorCode::CheckYourReceivedFriendRequest:
             return QObject::tr("对方已经给你发过好友申请，去「好友申请」里处理吧");
+        case ErrorCode::UserOutline:
+            return QObject::tr("对方当前不在线");
+        case ErrorCode::RequestValueInvalid:
+            return QObject::tr("请求参数不合法");
+        case ErrorCode::DoubleHandleRequest:
+            return QObject::tr("这条好友申请已经处理过了");
         case ErrorCode::JsonError:
             return QObject::tr("服务器返回数据解析失败");
         case ErrorCode::NetworkError:
@@ -93,6 +99,8 @@ namespace mychat::protocol
             return QObject::tr("服务器接口异常，请稍后重试");
         case ErrorCode::RequestTooLong:
             return QObject::tr("提交的数据过大，请缩短后重试");
+        case ErrorCode::RequestTimeout:
+            return QObject::tr("网络连接超时，请稍后重试");
         case ErrorCode::Success:
             return {};
         default:
@@ -225,6 +233,8 @@ namespace mychat::protocol
             request.toUid = to.value_or(0);
 
             request.name = entry.value(QStringLiteral("name")).toString();
+            // nick = 备注，服务端只给"我发出的那条"填值（申请人自己起的名字）
+            request.nick = entry.value(QStringLiteral("nick")).toString();
             request.verifyInfo = entry.value(QStringLiteral("verify_info")).toString();
             request.icon = entry.value(QStringLiteral("icon")).toString();
             request.sex = entry.value(QStringLiteral("sex")).toInt(2);

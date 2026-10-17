@@ -1,6 +1,7 @@
 #include "ContactController.h"
 
 #include <QJsonObject>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -50,6 +51,12 @@ ContactController::ContactController(QObject* parent)
             this, &ContactController::onFriendRequestResult);
     connect(&socket, &mychat::ChatSocket::friendRequestList,
             this, &ContactController::onFriendRequestList);
+    connect(&socket, &mychat::ChatSocket::friendRequestNotified,
+            this, &ContactController::onFriendRequestNotified);
+    connect(&socket, &mychat::ChatSocket::authFriendRequestResult,
+            this, &ContactController::onAuthFriendResult);
+    connect(&socket, &mychat::ChatSocket::friendRequestHandled,
+            this, &ContactController::onFriendRequestHandled);
 }
 
 std::uint64_t ContactController::selfUid() const
@@ -127,12 +134,14 @@ void ContactController::sendFriendRequest(const QString& toUid, const QString& v
     m_pending_peer_uid = target;
     m_pending_peer_name = peerName;
     m_pending_verify = verifyInfo;
+    m_pending_remark = remark;
 
     if (!mychat::ChatSocket::instance().sendFriendRequest(selfUid(), target, verifyInfo, remark))
     {
         m_pending_peer_uid = 0;
         m_pending_peer_name.clear();
         m_pending_verify.clear();
+        m_pending_remark.clear();
         setBusy(false);
         setTip(QStringLiteral("好友申请发送失败"), true);
     }
@@ -140,12 +149,63 @@ void ContactController::sendFriendRequest(const QString& toUid, const QString& v
 
 void ContactController::refreshApplyList()
 {
+    // 用户 / 页面主动刷新：完事要报"共 N 条"
+    m_silent_refresh = false;
+    startApplyListRefresh();
+}
+
+void ContactController::startApplyListRefresh()
+{
     if (m_busy)
+    {
+        m_silent_refresh = false;
         return;
+    }
 
     if (const std::uint64_t self = selfUid(); self == 0)
     {
+        m_silent_refresh = false;
         setTip(QStringLiteral("未登录，无法获取好友申请"), true);
+        return;
+    }
+
+    if (!mychat::ChatSocket::instance().isLoggedIn())
+    {
+        m_silent_refresh = false;
+        setTip(QStringLiteral("未连接到聊天服务器，请先登录"), true);
+        return;
+    }
+
+    setBusy(true);
+    // 自动刷新（收到推送后补拉）不报"正在刷新" —— 用户这会儿关心的不是这个
+    if (!m_silent_refresh)
+        setTip(QStringLiteral("正在刷新好友申请…"));
+
+    if (!mychat::ChatSocket::instance().syncFriendRequests(selfUid()))
+    {
+        m_silent_refresh = false;
+        setBusy(false);
+        setTip(QStringLiteral("刷新请求发送失败"), true);
+    }
+}
+
+void ContactController::handleFriendRequest(const QString& requestId, const int state)
+{
+    if (m_busy)
+        return;
+
+    if (state != 1 && state != 2)
+    {
+        setTip(QStringLiteral("处理状态只能是「接受」或「拒绝」"), true);
+        return;
+    }
+
+    bool be_valid = false;
+    const std::uint64_t id = requestId.toULongLong(&be_valid);
+    if (!be_valid || id == 0)
+    {
+        setTip(QStringLiteral("好友申请编号无效"), true);
+        emit validationFailed(QStringLiteral("requestId"));
         return;
     }
 
@@ -156,12 +216,12 @@ void ContactController::refreshApplyList()
     }
 
     setBusy(true);
-    setTip(QStringLiteral("正在刷新好友申请…"));
+    setTip(state == 1 ? QStringLiteral("正在接受申请…") : QStringLiteral("正在拒绝申请…"));
 
-    if (!mychat::ChatSocket::instance().syncFriendRequests(selfUid()))
+    if (!mychat::ChatSocket::instance().authFriendRequest(id, state))
     {
         setBusy(false);
-        setTip(QStringLiteral("刷新请求发送失败"), true);
+        setTip(QStringLiteral("处理请求发送失败（可能上一条还没回包）"), true);
     }
 }
 
@@ -243,6 +303,8 @@ void ContactController::appendLocalSentRequest(const std::uint64_t requestId)
     item.insert(QStringLiteral("peerUid"), peer_uid);
     item.insert(QStringLiteral("received"), false);
     item.insert(QStringLiteral("name"), m_pending_peer_name);
+    // 我发出的这条，备注就是我刚给对面起的那个名字（服务端刷新回来也是同值）
+    item.insert(QStringLiteral("nick"), m_pending_remark);
     item.insert(QStringLiteral("verifyInfo"), m_pending_verify);
     // 本地补的记录没有对方的性别，按"未知"走
     item.insert(QStringLiteral("sex"), 2);
@@ -257,6 +319,7 @@ void ContactController::appendLocalSentRequest(const std::uint64_t requestId)
     m_pending_peer_uid = 0;
     m_pending_peer_name.clear();
     m_pending_verify.clear();
+    m_pending_remark.clear();
 
     MCLOG_INFO() << "[contact] 已在本地补一条「已发出」申请, to_uid =" << peer_uid;
 }
@@ -271,6 +334,7 @@ void ContactController::onFriendRequestResult(const bool ok, const int error,
         m_pending_peer_uid = 0;
         m_pending_peer_name.clear();
         m_pending_verify.clear();
+        m_pending_remark.clear();
 
         setTip(mychat::protocol::errorToTip(error), true);
         emit friendRequestSent(false, error);
@@ -300,6 +364,7 @@ void ContactController::onFriendRequestList(const QList<mychat::protocol::Friend
 
     if (error != kSuccess)
     {
+        m_silent_refresh = false;
         setTip(mychat::protocol::errorToTip(error), true);
         return;
     }
@@ -331,6 +396,9 @@ void ContactController::onFriendRequestList(const QList<mychat::protocol::Friend
         item.insert(QStringLiteral("peerUid"), QString::number(peer));
         item.insert(QStringLiteral("received"), received);
         item.insert(QStringLiteral("name"), r.name);
+        // 备注：服务端只给"我发出的那条"填（申请人自己给对面起的名字），
+        // 收到的申请这一栏恒为空 —— UI 别把它当"对方给我起的名字"
+        item.insert(QStringLiteral("nick"), r.nick);
         item.insert(QStringLiteral("verifyInfo"), r.verifyInfo);
         item.insert(QStringLiteral("sex"), r.sex);
         item.insert(QStringLiteral("state"), r.state);
@@ -342,9 +410,113 @@ void ContactController::onFriendRequestList(const QList<mychat::protocol::Friend
     m_apply_list = list;
     emit applyListChanged();
 
-    setTip(list.isEmpty()
-               ? QStringLiteral("暂无好友申请")
-               : QStringLiteral("共 %1 条好友申请").arg(list.size()));
+    // 自动刷新（推送触发的补拉）不覆盖提示，见 startApplyListRefresh 里的说明
+    const bool silent = m_silent_refresh;
+    m_silent_refresh = false;
+
+    if (!silent)
+        setTip(list.isEmpty()
+                   ? QStringLiteral("暂无好友申请")
+                   : QStringLiteral("共 %1 条好友申请").arg(list.size()));
+}
+
+void ContactController::onFriendRequestNotified(const std::uint64_t requestId)
+{
+    MCLOG_INFO() << "[contact] 收到好友申请推送, request id =" << requestId;
+
+    /*
+     * 推送只带申请记录 id —— 没有对方 uid / 昵称 / 验证信息，界面要显示详情
+     * 只能回拉一次 SyncFriendRequestReq。
+     *
+     * 但这里**不立刻发**：refreshApplyList() 一遇到 busy 就整条丢弃，而"用户正在
+     * 搜索 / 正在发申请"恰恰是常见情形，那样这条推送就白收了。所以挂一个意图，
+     * 延到下一拍（也避开在 socket 读回调的调用栈里再发请求），空闲时自动落地。
+     */
+    m_refresh_pending = true;
+    setTip(QStringLiteral("收到新的好友申请"));
+    QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
+}
+
+void ContactController::flushPendingApplyRefresh()
+{
+    if (!m_refresh_pending || m_busy)
+        return; // 忙就先不动：setBusy(false) 会再喊一次
+
+    m_refresh_pending = false;
+    // 静默刷新：提示留给"收到新的好友申请 / 对方接受了你的申请"这类真正要说的事，
+    // 否则用户刚看到结果，一秒后被"共 N 条好友申请"盖掉。
+    m_silent_refresh = true;
+    startApplyListRefresh();
+}
+
+void ContactController::onAuthFriendResult(const bool ok, const int error,
+                                           const std::uint64_t requestId, const int state)
+{
+    const QString id = QString::number(requestId);
+    // state 只有 1 / 2 才是确定的；0 = 回包没给、我们也不知道（见 ChatSocket 的说明）
+    const bool state_known = (state == 1 || state == 2);
+
+    if (ok && state_known)
+        applyRequestState(id, state);
+
+    if (ok)
+        setTip(state == 1
+                   ? QStringLiteral("已接受好友申请")
+                   : state == 2
+                   ? QStringLiteral("已拒绝好友申请")
+                   : QStringLiteral("好友申请已处理"));
+    else
+        setTip(mychat::protocol::errorToTip(error), true);
+
+    MCLOG_INFO() << "[contact] 处理好友申请, ok =" << ok << "request id =" << id
+        << "state =" << state << "error =" << error;
+
+    emit friendRequestAuthFinished(ok, error, id, state);
+
+    // 结果里没有 state（老服务端 / 认领不到）→ 回拉一次，让列表说出真实状态
+    if (ok && !state_known)
+    {
+        m_refresh_pending = true;
+        QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
+    }
+
+    // 按约定放最后：busyChanged 会让订阅方立刻进入下一步
+    setBusy(false);
+}
+
+void ContactController::onFriendRequestHandled(const std::uint64_t requestId, const int state)
+{
+    const QString id = QString::number(requestId);
+    applyRequestState(id, state);
+
+    setTip(state == 1
+               ? QStringLiteral("对方接受了你的好友申请")
+               : QStringLiteral("对方拒绝了你发的好友申请"));
+
+    emit friendRequestAnswered(id, state);
+
+    /*
+     * 推送只说"这一条被处理了"，服务端的列表可能还有别的变化（比如对方顺手又发了一条）
+     * → 挂一次刷新；控制器正忙时由 setBusy 兜底补发。
+     */
+    m_refresh_pending = true;
+    QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
+}
+
+void ContactController::applyRequestState(const QString& requestId, const int state)
+{
+    for (int i = 0; i < m_apply_list.size(); ++i)
+    {
+        QVariantMap item = m_apply_list.at(i).toMap();
+        if (item.value(QStringLiteral("id")).toString() != requestId)
+            continue;
+
+        item.insert(QStringLiteral("state"), state);
+        item.insert(QStringLiteral("stateText"), applyStateText(state));
+        m_apply_list[i] = item;
+        emit applyListChanged();
+        return;
+    }
 }
 
 void ContactController::setTip(const QString& text, const bool is_error)
@@ -364,4 +536,13 @@ void ContactController::setBusy(const bool busy)
         return;
     m_busy = busy;
     emit busyChanged();
+
+    /*
+     * 有挂起的「收到推送 → 回拉申请列表」时，控制器一落地就补发。
+     * 延到下一拍是必须的：本文件里好几个 handler 是"先 setBusy(false)、后写数据"
+     * （onFriendRequestList / onSearchResult 都这样），此刻同步发请求会和它们
+     * 后面还没执行的赋值抢顺序。
+     */
+    if (!busy && m_refresh_pending)
+        QTimer::singleShot(0, this, &ContactController::flushPendingApplyRefresh);
 }

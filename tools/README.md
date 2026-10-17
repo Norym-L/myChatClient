@@ -2,16 +2,19 @@
 
 所有开关都是环境变量，对 **已构建好的 qtClient.exe** 生效（在 `build/<preset>/` 里）。
 
-| 环境变量                            | 作用                                                                                                                                         | 退出码                                  |
-|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
-| `MYCHAT_SMOKE=<输出 png 路径>`      | 渲染一帧后抓图落盘并退出                                                                                                                     | 0 成功；3 根对象不是 Window；4 保存失败 |
-| `MYCHAT_SMOKE_DELAY=<ms>`           | 覆盖抓图前的等待时长（默认 1.5s，带 `AUTOLOGIN` 时 4s）。验心跳这类"要等一会儿才发生"的行为时，要跑到 25s+                                   | —                                       |
-| `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                                                                                                       | 登录成功则切到聊天页                    |
-| `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset` / `Chat`，大小写不敏感                                                                     | —                                       |
-| `MYCHAT_SEARCH=<关键字>`            | 进聊天页后自动发起一次用户搜索（切到「联系人」分区）                                                                                         | —                                       |
-| `MYCHAT_OPENDLG=<模式>`             | 进聊天页后自动打开「用户资料」弹窗（`other` / `self` / `selfedit` / `sendfriend[:uid]` / `applylist` / `applyreceived` / `applysent`），见下 | —                                       |
-| `QT_ASSUME_STDERR_HAS_CONSOLE=1`    | 让 Qt 日志进 stderr（**必设**，否则重定向到文件什么也看不到）                                                                                | —                                       |
-| `QT_QPA_PLATFORM=offscreen`         | 无显示环境 / 无人值守时用（需要 `platforms/qoffscreen.dll`）                                                                                 | —                                       |
+| 环境变量                            | 作用                                                                                                                                                                     | 退出码                                  |
+|-------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
+| `MYCHAT_SMOKE=<输出 png 路径>`      | 渲染一帧后抓图落盘并退出                                                                                                                                                 | 0 成功；3 根对象不是 Window；4 保存失败 |
+| `MYCHAT_SMOKE_DELAY=<ms>`           | 覆盖抓图前的等待时长（默认 1.5s，带 `AUTOLOGIN` 时 4s）。验心跳这类"要等一会儿才发生"的行为时，要跑到 25s+                                                               | —                                       |
+| `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                                                                                                                                   | 登录成功则切到聊天页                    |
+| `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset` / `Chat`，大小写不敏感                                                                                                 | —                                       |
+| `MYCHAT_SEARCH=<关键字>`            | 进聊天页后自动发起一次用户搜索（切到「联系人」分区）                                                                                                                     | —                                       |
+| `MYCHAT_OPENDLG=<模式>`             | 进聊天页后自动打开「用户资料」弹窗或某个视图（`other` / `self` / `selfedit` / `sendfriend[:uid]` / `applylist` / `applyreceived` / `applysent` / `session[:uid]`），见下 | —                                       |
+| `MYCHAT_SENDMSG=<文本>`             | 进聊天页后替用户发一条消息（走真实的 输入框 → ChatController → 本地回显 链路），见下                                                                                     | —                                       |
+| `MYCHAT_AUTHAPPLY=<accept\|refuse>` | 进聊天页后切到「好友申请」，挑一条「收到 + 待处理」的申请，打开资料卡并替用户点「接受 / 拒绝」，见下                                                                     | —                                       |
+| `MYCHAT_THEME=<light\|dark>`        | 启动前把主题存档改掉，等价于用户点左下角的「浅色 / 暗色」，见下                                                                                                          | —                                       |
+| `QT_ASSUME_STDERR_HAS_CONSOLE=1`    | 让 Qt 日志进 stderr（**必设**，否则重定向到文件什么也看不到）                                                                                                            | —                                       |
+| `QT_QPA_PLATFORM=offscreen`         | 无显示环境 / 无人值守时用（需要 `platforms/qoffscreen.dll`）                                                                                                             | —                                       |
 
 ## 抓一张登录页的图
 
@@ -45,7 +48,7 @@ MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat.png ./qtClient.exe
 ## 协议探针（不依赖客户端）
 
 服务端是"会动的那一端"时，先用裸帧把「服务端到底怎么回」钉死，再回头改客户端 ——
-比在客户端里加日志猜要快得多。两个脚本只用 Python 标准库。
+比在客户端里加日志猜要快得多。四个脚本只用 Python 标准库。
 
 ```bash
 PY=C:/Users/Norym/.workbuddy/binaries/python/versions/3.13.12/python.exe
@@ -65,6 +68,142 @@ PY=C:/Users/Norym/.workbuddy/binaries/python/versions/3.13.12/python.exe
   而客户端在等 1019 —— 这种错帧只看客户端日志很难定位。
 - `probe-redis.py` 的推理：客户端只跑 15 秒、退出后立刻读 TTL， **≈25 才说明 t=10s 的心跳续上了**（登录那次写的此刻只该剩
   ≈15）。
+
+## 抓「会话界面」并验证发消息
+
+会话分区是 **默认分区**（登录后第一眼就是它），所以 `MYCHAT_PAGE=Chat` 就能直接拍到：
+
+```bash
+# 纯版式（不带登录：右上角自己的头像会退化成"我"）
+MYCHAT_PAGE=Chat MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat-ui.png ./qtClient.exe
+
+# 带登录 + 自动发一条消息：验证「输入框 → 控制器 → 本地回显」和「仅本地」标记
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_SENDMSG="这条是刚发的" \
+MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat-final.png MYCHAT_SMOKE_DELAY=4500 ./qtClient.exe
+
+# 只切到会话分区 / 打开指定会话
+MYCHAT_PAGE=Chat MYCHAT_OPENDLG=session:666674 MYCHAT_SMOKE=... ./qtClient.exe
+```
+
+判读要点：
+
+- 发出去的那条气泡上应该有「仅本地」小字 —— 服务端 **没有**文本消息实现，
+  把它画成"已发送"就是骗人；`serverSupportsText` 接上后这段提示会自然消失。
+- 会话列表左下角常驻 `DEMO · 本地演示数据`，同样是在如实标注数据来源。
+- 消息多到放不下时应该自动滚到底（消息列表挂在 `contentHeight` 上滚，
+  不是在 `messagesChanged` 里滚 —— 那一拍新 delegate 还没布局完，会差一条的高度）。
+
+## 验证好友申请的接受 / 拒绝（1010/1011）与结果推送（1012）
+
+两条方向都要验，而且都需要"另一个在线的人"：
+
+**① 我是接收方，处理别人发来的申请**
+
+```bash
+# 客户端登录成 B，收到申请后自动点「接受」（走 资料卡 → 页面 → 控制器 → 1010）
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_AUTHAPPLY=accept \
+MYCHAT_SMOKE=.../friend-accepted.png MYCHAT_SMOKE_DELAY=13000 ./qtClient.exe &
+
+# 另一头用裸连接扮演 A 发申请，并挂着等结果推送
+"$PY" tools/probe-push.py 666674 "NewPass@1" 666672 "验证接受" --listen 9
+```
+
+B 的日志应有：`收到 NotifyAddFriendReq` → `收到好友申请列表` → `发送 AuthFriendReq`
+→ `收到 AuthFriendRsp {"error":0}` → `处理好友申请, ok = true`；弹窗底栏从
+「接受 / 拒绝」收成禁用的「已接受」。
+
+**② 我是申请人，别人处理了我发的申请**
+
+```bash
+# 客户端登录成 A，自动发一条申请并保持在线
+MYCHAT_AUTOLOGIN="666674:NewPass@1" MYCHAT_OPENDLG=sendfriend:666672 \
+MYCHAT_SMOKE=.../friend-refused.png MYCHAT_SMOKE_DELAY=15000 ./qtClient.exe &
+
+# 以 B 的身份接受 / 拒绝（会先拉列表找出那条申请）
+"$PY" tools/probe-auth.py 666672 Test@12345 refuse --applicant 666674
+```
+
+A 的日志应有 `收到 NotifyAuthFriendReq {"add_friend_request_id":"20",...,"state":2}`
+→ `对方已处理我的好友申请`，弹窗底栏从「申请已发送」变成「对方已拒绝」。
+
+判读要点：
+
+- **1011 会回显申请编号**（2026-10-17 起，成功失败都带），所以结果按回包自己认领；
+  但 **`state` 不回显** —— 接受还是拒绝仍取自请求侧，认领不到时按"未知"处理并回拉列表。
+- **1012 的编号字段实际是字符串**（`"add_friend_request_id" : "20"`），
+  与 `api-friend.md` §6 写的"数字"不符；客户端用 `parseUid` 两种都吃，不受影响。
+- 处理成功后客户端 **不关弹窗**：结果提示要留在底栏，关掉就只看到列表变了一行。
+- 自动刷新（推送触发的补拉） **不会覆盖提示** —— 否则"对方接受了你的申请"一秒后
+  被"共 N 条好友申请"盖掉。
+- `probe-auth.py --dump` 会原样打印 1008 的每一条。核对 **备注**（`nick`）时用它：
+  这个字段 **只有发送方视角有值**，接收方那边恒为空，光看界面分不清是"没传"还是"没显示"。
+
+## 抓两套主题（亮 / 暗）
+
+```bash
+cd build/mingw-debug
+for mode in light dark; do for pg in Login Register Reset Chat; do
+  MYCHAT_PAGE=$pg MYCHAT_THEME=$mode MYCHAT_SMOKE=.../theme-$mode-$pg.png \
+  MYCHAT_SMOKE_DELAY=1500 QT_QPA_PLATFORM=offscreen ./qtClient.exe
+done; done
+```
+
+判读要点：
+
+- `MYCHAT_THEME` 写的是 **存档本身**（`Theme/mode`），不是另开一处状态 —— 所以
+  "自动化改的" 和 "用户点出来的" 是同一份。验持久化时连续跑两次，第二次 **不给这个变量**，
+  界面应该保持上次的选择（实测：跑完 dark 再跑不带变量的登录页，背景仍是 `#181818`）。
+- 核验不必靠肉眼：采样两个点就能下结论 —— 底色（浅 `#F2F2F2` / 暗 `#181818`），
+  以及左下角高亮块落在哪个按钮上（浅色主题高亮 `x≈20–83`，暗色主题 `x≈92–155`）。
+  4 页 × 2 套 = 8 张，全对才算过。
+
+## 验证「回包超时」兜底（不需要服务端）
+
+服务端存在"某个分支直接 return、一句都不回"的实现（实测：拿一条不属于自己的申请
+去发 1010，服务端连一句都不回）。这种场景没法靠真实服务端稳定复现，所以自检程序
+自己在进程里起一个 **只接受连接、永不发数据**的哑服务器：
+
+```bash
+./qtClientSocketTimeoutTest      # 退出码 0 = 五条请求全都自己超时收尾
+```
+
+它挨个发 登录 / 搜索 / 发申请 / 拉列表 / 处理申请，每条都必须报 `error=5`
+（客户端本地码 `RequestTimeout`，文案「网络连接超时，请稍后重试」）而不是卡死。
+覆盖的是 `ChatSocket` 里那张统一的在飞请求表 —— 以后加新消息，只要发送时调一次
+`expectReply()`，回包那边由 `handleFrame` 统一销账，不会再出现"某条链路忘了配超时"。
+
+## 验证「好友申请推送」（NotifyAddFriendReq / 1009）
+
+推送只发给 **在线**的接收方，而且和会话绑定 —— 所以不能用 `qtClientContactTest` 当发送方
+（它发完就退出；第二段还会登录成接收方，把真客户端的会话顶掉）。正确姿势是 **真客户端当接收方 + 裸连接当发送方**：
+
+```bash
+# 终端 1：接收方（666672）保持运行，只把日志落到文件
+cd build/mingw-debug
+MYCHAT_AUTOLOGIN="666672:Test@12345" QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+  ./qtClient.exe > ../recv.log 2>&1 &
+
+# 终端 2：裸连接扮演发送方（HTTP 登录拿 token → 连 ChatServer → 发 AddFriendReq）
+"$PY" tools/probe-push.py 666674 "NewPass@1" 666672 "来自裸探针的申请"
+```
+
+接收方日志里应该按顺序出现：
+
+```
+[chat] 收到 NotifyAddFriendReq {"error":0, "add_friend_request_id":16}
+[chat] 收到好友申请推送, request id = 16
+[contact] 收到好友申请推送, request id = 16
+[chat] 发送 SyncFriendRequestReq {"uid":"666672"}      ← 自动回拉，不用用户点
+[chat] 收到好友申请列表, 共 1 条
+```
+
+想同时证明 **界面**也动了，就把它做成抓图：接收方带
+`MYCHAT_SMOKE=.../push-badge.png MYCHAT_SMOKE_DELAY=9000` 起， **在第 4 秒左右**
+跑 `probe-push.py`，抓图时左侧「好友申请」角标应从空变成条数。
+
+> 注意：`probe-push.py` 会在 `friend_request` 表里留一条真实记录（同一对用户重复发
+> 是 `UPDATE` 同一行、id 不变）。要重跑干净的用例先删：
+> `delete from friend_request where applicant_uid=666674 and receiver_uid=666672;`
 
 ## 抓「用户资料」弹窗
 

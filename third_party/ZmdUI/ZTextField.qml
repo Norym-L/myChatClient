@@ -59,7 +59,6 @@ TextField {
         // 光标位置一动就重新亮起并重置计时：打字时不该正好撞上"熄灭"那一拍
         Connections {
             target: control
-
             function onCursorPositionChanged() {
                 caret.opacity = 1
                 caretBlink.restart()
