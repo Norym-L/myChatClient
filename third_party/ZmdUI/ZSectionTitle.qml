@@ -50,12 +50,8 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 10
                 height: 10
-                Rectangle {
-                    anchors.centerIn: parent; width: 10; height: 1.5; color: Theme.ink
-                }
-                Rectangle {
-                    anchors.centerIn: parent; width: 1.5; height: 10; color: Theme.ink
-                }
+                Rectangle { anchors.centerIn: parent; width: 10; height: 1.5; color: Theme.ink }
+                Rectangle { anchors.centerIn: parent; width: 1.5; height: 10; color: Theme.ink }
             }
 
             Text {
@@ -95,7 +91,7 @@ Item {
                 spacing: Theme.spacingSm
 
                 property real textWidth: indexText.implicitWidth + titleText.implicitWidth
-                    + Theme.spacingLg
+                                            + Theme.spacingLg
 
                 // 编号：黑底白字小方块
                 ZCutRect {
@@ -143,12 +139,8 @@ Item {
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 3
-                    Rectangle {
-                        width: 5; height: 5; color: Theme.cyanSoft
-                    }
-                    Rectangle {
-                        width: 5; height: 5; color: Theme.cyanSoft
-                    }
+                    Rectangle { width: 5; height: 5; color: Theme.cyanSoft }
+                    Rectangle { width: 5; height: 5; color: Theme.cyanSoft }
                 }
 
                 Text {

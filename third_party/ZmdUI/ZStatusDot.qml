@@ -29,18 +29,12 @@ Item {
         anchors.fill: parent
         color: {
             switch (root.tone) {
-                case Theme.Tone.Cyan:
-                    return Theme.cyan
-                case Theme.Tone.Magenta:
-                    return Theme.magenta
-                case Theme.Tone.Ink:
-                    return Theme.ink
-                case Theme.Tone.Danger:
-                    return Theme.danger
-                case Theme.Tone.Muted:
-                    return Theme.lineSoft
-                default:
-                    return Theme.accent
+            case Theme.Tone.Cyan:    return Theme.cyan
+            case Theme.Tone.Magenta: return Theme.magenta
+            case Theme.Tone.Ink:     return Theme.ink
+            case Theme.Tone.Danger:  return Theme.danger
+            case Theme.Tone.Muted:   return Theme.lineSoft
+            default:                 return Theme.accent
             }
         }
         strokeColor: Theme.ink
@@ -52,11 +46,7 @@ Item {
     SequentialAnimation on opacity {
         running: root.blink
         loops: Animation.Infinite
-        NumberAnimation {
-            to: 0.25; duration: 520; easing.type: Easing.InOutQuad
-        }
-        NumberAnimation {
-            to: 1.0; duration: 520; easing.type: Easing.InOutQuad
-        }
+        NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 1.0;  duration: 520; easing.type: Easing.InOutQuad }
     }
 }

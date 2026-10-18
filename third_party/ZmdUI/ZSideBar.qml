@@ -63,8 +63,8 @@ Item {
     // 侧边栏在两个主题里都是"深色带"，但暗色下必须比页面底色（#181818）更深，
     // 否则它会和背景糊成一片（之前 #161616 几乎等于底色，悬停块看起来像污渍）。
     readonly property color panelColor: Theme.isDark ? "#0C0C0C" : "#101010"
-    readonly property color textColor: "#FFFFFF"
-    readonly property color textMuted: "#8C8C8C"
+    readonly property color textColor:  "#FFFFFF"
+    readonly property color textMuted:  "#8C8C8C"
 
     // ── 底板 ──
     Rectangle {
@@ -124,10 +124,8 @@ Item {
             Text {
                 text: root.brand
                 // 品牌用超粗无衬线，叠同色描边做加粗
-                font: Qt.font({
-                    family: Theme.family, pixelSize: 34,
-                    weight: Font.Black, letterSpacing: 1
-                })
+                font: Qt.font({ family: Theme.family, pixelSize: 34,
+                                weight: Font.Black, letterSpacing: 1 })
                 color: root.textColor
             }
 
@@ -155,7 +153,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: Math.max(footerCol.implicitHeight + versionText.implicitHeight
-            + Theme.spacingSm * 2 + Theme.spacingMd * 2, 96)
+                         + Theme.spacingSm * 2 + Theme.spacingMd * 2, 96)
 
         Text {
             id: versionText
@@ -209,11 +207,11 @@ Item {
                     readonly property var entry: modelData
                     readonly property bool isMap: (typeof entry === "object" && entry !== null)
                     readonly property string entryLabel: isMap
-                        ? (entry.label !== undefined ? entry.label : "") : String(entry)
+                            ? (entry.label !== undefined ? entry.label : "") : String(entry)
                     readonly property string entryBadge: (isMap && entry.badge !== undefined)
-                        ? String(entry.badge) : ""
+                            ? String(entry.badge) : ""
                     readonly property string entryHeader: (isMap && entry.header !== undefined)
-                        ? String(entry.header) : ""
+                            ? String(entry.header) : ""
 
                     // ── 分组标题 ──
                     Item {
@@ -252,9 +250,7 @@ Item {
                         readonly property bool current: index === root.currentIndex
                         readonly property bool isHovered: rowHover.hovered
 
-                        HoverHandler {
-                            id: rowHover
-                        }
+                        HoverHandler { id: rowHover }
 
                         // 选中：亮黄底
                         ZCutRect {
@@ -285,7 +281,7 @@ Item {
                             anchors.bottomMargin: 6
                             width: 5
                             color: rowItem.current ? "#111111"
-                                : (rowItem.isHovered ? Theme.accent : "transparent")
+                                 : (rowItem.isHovered ? Theme.accent : "transparent")
                             cutTopRight: 4
                             cutBottomLeft: 4
                         }
@@ -306,7 +302,7 @@ Item {
                                 color: rowItem.current ? Theme.textOnAccent : root.textColor
                                 elide: Text.ElideRight
                                 width: Math.max(0, rowContent.width - badgeText.width
-                                    - (badgeText.text.length > 0 ? 18 : 0))
+                                                   - (badgeText.text.length > 0 ? 18 : 0))
                             }
 
                             Rectangle {

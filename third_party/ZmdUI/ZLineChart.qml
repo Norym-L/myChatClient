@@ -76,26 +76,14 @@ Item {
         onHeightChanged: requestPaint()
         Connections {
             target: root
-
-            function onValuesChanged() {
-                chart.requestPaint()
-            }
-
-            function onLabelsChanged() {
-                chart.requestPaint()
-            }
-
-            function onLineColorChanged() {
-                chart.requestPaint()
-            }
+            function onValuesChanged() { chart.requestPaint() }
+            function onLabelsChanged() { chart.requestPaint() }
+            function onLineColorChanged() { chart.requestPaint() }
         }
         // 亮暗主题切换后网格/坐标文字颜色要跟着重画
         Connections {
             target: Theme
-
-            function onIsDarkChanged() {
-                chart.requestPaint()
-            }
+            function onIsDarkChanged() { chart.requestPaint() }
         }
 
         onPaint: {

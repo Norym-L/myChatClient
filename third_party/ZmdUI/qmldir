@@ -3,6 +3,7 @@ module ZmdUI
 # 主题单例必须排在首位：组件的默认值绑定依赖它。
 singleton Theme 1.0 Theme.qml
 ZButton 1.0 ZButton.qml
+ZChatInput 1.0 ZChatInput.qml
 ZCheckBox 1.0 ZCheckBox.qml
 ZCutRect 1.0 ZCutRect.qml
 ZDialog 1.0 ZDialog.qml
@@ -15,6 +16,7 @@ ZListView 1.0 ZListView.qml
 ZPanel 1.0 ZPanel.qml
 ZProgressBar 1.0 ZProgressBar.qml
 ZRadioButton 1.0 ZRadioButton.qml
+ZRichTextEditor 1.0 ZRichTextEditor.qml
 ZScrollBar 1.0 ZScrollBar.qml
 ZSectionTitle 1.0 ZSectionTitle.qml
 ZSideBar 1.0 ZSideBar.qml

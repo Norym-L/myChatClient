@@ -54,7 +54,7 @@ Item {
 
     implicitWidth: 320
     implicitHeight: body.implicitHeight + Theme.spacingLg
-        + (accentBar.visible ? accentBar.height + Theme.spacingSm : 0)
+                    + (accentBar.visible ? accentBar.height + Theme.spacingSm : 0)
 
     // ── 底板 ──
     ZCutRect {
@@ -224,7 +224,7 @@ Item {
                     var ctx = getContext("2d")
                     ctx.reset()
                     ctx.fillStyle = root.footerTone === Theme.Tone.Ink
-                        ? Theme.accent : Theme.ink
+                                    ? Theme.accent : Theme.ink
                     ctx.beginPath()
                     ctx.moveTo(0, 0)
                     ctx.lineTo(8, 4)

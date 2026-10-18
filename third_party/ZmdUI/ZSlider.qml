@@ -61,10 +61,7 @@ Slider {
             onVisibleChanged: requestPaint()
             Connections {
                 target: control
-
-                function onValueChanged() {
-                    ticks.requestPaint()
-                }
+                function onValueChanged() { ticks.requestPaint() }
             }
             onPaint: {
                 var ctx = getContext("2d")

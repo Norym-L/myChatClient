@@ -102,12 +102,12 @@ Item {
             width: view.width
             idx: (index + 1 < 10 ? "0" : "") + (index + 1)
             label: (typeof modelData === "object" && modelData !== null)
-                ? (modelData.label !== undefined ? modelData.label : "")
-                : String(modelData === undefined ? "" : modelData)
+                   ? (modelData.label !== undefined ? modelData.label : "")
+                   : String(modelData === undefined ? "" : modelData)
             description: (typeof modelData === "object" && modelData !== null
-                && modelData.description !== undefined) ? modelData.description : ""
+                          && modelData.description !== undefined) ? modelData.description : ""
             trailing: (typeof modelData === "object" && modelData !== null
-                && modelData.value !== undefined) ? String(modelData.value) : ""
+                       && modelData.value !== undefined) ? String(modelData.value) : ""
             selected: ListView.isCurrentItem
             onClicked: {
                 view.currentIndex = index

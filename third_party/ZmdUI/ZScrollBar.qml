@@ -50,7 +50,7 @@ ScrollBar {
 
     contentItem: ZCutRect {
         color: control.pressed ? Theme.ink
-            : (control.hovered || control.active ? Theme.accent : Theme.lineSoft)
+             : (control.hovered || control.active ? Theme.accent : Theme.lineSoft)
         cutTopRight: 4
         cutBottomLeft: 4
     }

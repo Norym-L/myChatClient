@@ -54,12 +54,12 @@ QtObject {
     // ════════════════════════════════════════════════════════════════
 
     /*! 页面主背景：亮白 / 浅灰 */
-    readonly property color bg: isDark ? "#181818" : "#F2F2F2"
+    readonly property color bg:            isDark ? "#181818" : "#F2F2F2"
     /*! 抬升面：卡片 / 面板 / 输入框 */
-    readonly property color surface: isDark ? "#232323" : "#FFFFFF"
+    readonly property color surface:       isDark ? "#232323" : "#FFFFFF"
     /*! 中间层：交替行、悬停底、次级卡片（旧名 surfaceAlt 保留兼容） */
-    readonly property color surfaceMuted: isDark ? "#1F1F1F" : "#E6E6E6"
-    readonly property color surfaceAlt: surfaceMuted
+    readonly property color surfaceMuted:  isDark ? "#1F1F1F" : "#E6E6E6"
+    readonly property color surfaceAlt:   surfaceMuted
     /*! 凹陷面：轨道、凹槽、代码块 —— 比页面更暗，暗色下才有"凹进去"的层次 */
     readonly property color surfaceSunken: isDark ? "#101010" : "#E4E4E4"
     /*!
@@ -67,9 +67,9 @@ QtObject {
         亮色卡是白的，悬停要变暗一档；暗色卡是 #232323，悬停必须变亮一档。
         写死 direction 的悬停色在暗色下会"越悬停越黑"，等于没有反馈。
     */
-    readonly property color surfaceHover: isDark ? "#2C2C2C" : "#E9E9E9"
+    readonly property color surfaceHover:  isDark ? "#2C2C2C" : "#E9E9E9"
     /*! 网格线（细） */
-    readonly property color gridLine: isDark ? "#242424" : "#E4E4E4"
+    readonly property color gridLine:      isDark ? "#242424" : "#E4E4E4"
     /*! 网格线（主刻度，略深） */
     readonly property color gridLineMajor: isDark ? "#303030" : "#CFCFCF"
 
@@ -80,27 +80,27 @@ QtObject {
         会非常刺眼，而且亮黄自带"发光"错觉，压暗后反而更像工业屏上的涂层。
         参考站的令牌同样是 #f2cc00 → #d8bf00 这个关系。
     */
-    readonly property color accent: isDark ? "#D8BF00" : "#E8FA00"
+    readonly property color accent:        isDark ? "#D8BF00" : "#E8FA00"
     /*! 强调色的浅一档（亮色下用） */
-    readonly property color accentSoft: isDark ? "#272302" : "#DFFF00"
+    readonly property color accentSoft:    isDark ? "#272302" : "#DFFF00"
     /*! 强调色的提亮档：暗色下画细线 / 小字用，保证对比度 */
-    readonly property color accentGlow: isDark ? "#ECD548" : "#E8FA00"
+    readonly property color accentGlow:    isDark ? "#ECD548" : "#E8FA00"
     /*! 落在强调色上的文字（深色）。注意不要命名成 onXxx，那是信号处理器语法。 */
-    readonly property color textOnAccent: isDark ? "#161616" : "#000000"
+    readonly property color textOnAccent:  isDark ? "#161616" : "#000000"
 
     /*! 主文字：亮色纯黑，暗色浅灰（近白会发飘，用 #EEE 更稳） */
-    readonly property color ink: isDark ? "#EEEEEE" : "#000000"
+    readonly property color ink:           isDark ? "#EEEEEE" : "#000000"
     /*! 深炭色，比 ink 软一点，用于正文 */
-    readonly property color inkSoft: isDark ? "#D2D6DA" : "#1A1A1A"
+    readonly property color inkSoft:       isDark ? "#D2D6DA" : "#1A1A1A"
     /*! 辅助文字 / 等宽说明文字。暗色下用冷灰，纯中性灰在暗底上会显脏 */
-    readonly property color muted: isDark ? "#A8B0B7" : "#5C5C5C"
+    readonly property color muted:         isDark ? "#A8B0B7" : "#5C5C5C"
 
     /*! 副标题底色：深灰（亮暗两套主题都保持"深色块 + 白字"这个身份） */
-    readonly property color subBg: isDark ? "#2E2E2E" : "#333333"
+    readonly property color subBg:         isDark ? "#2E2E2E" : "#333333"
     /*! 副标题底色（更浅一档，用作分层） */
-    readonly property color subBgAlt: isDark ? "#3C3C3C" : "#4D4D4D"
+    readonly property color subBgAlt:      isDark ? "#3C3C3C" : "#4D4D4D"
     /*! 深灰底上的文字：纯白 */
-    readonly property color textOnSub: "#FFFFFF"
+    readonly property color textOnSub:     "#FFFFFF"
     /*!
         反相块（黑底白字那种条/徽标：表头、编号块、对话框标题带）。
 
@@ -108,7 +108,7 @@ QtObject {
         文字直接消失。反相块在两个主题里都必须是**深色**：亮色近黑，暗色比卡片更黑
         （#0F0F0F 压在 #232323 卡片上依然是明显的深色带）。
     */
-    readonly property color inkBlock: isDark ? "#0F0F0F" : "#111111"
+    readonly property color inkBlock:      isDark ? "#0F0F0F" : "#111111"
 
     /*!
         结构线（边框、分隔线）。
@@ -116,23 +116,23 @@ QtObject {
         每个卡片都镶一圈白边，夜里看非常刺眼，而且失去了"层级"的表达。
         正确做法是冷灰 #4A5158：既能描出轮廓，又不抢视线。
     */
-    readonly property color line: isDark ? "#4A5158" : "#000000"
+    readonly property color line:          isDark ? "#4A5158" : "#000000"
     /*! 弱结构线 */
-    readonly property color lineSoft: isDark ? "#2E343A" : "#ADADAD"
+    readonly property color lineSoft:      isDark ? "#2E343A" : "#ADADAD"
     /*! 斜线纹理颜色 */
-    readonly property color hatch: isDark ? "#2E2E2E" : "#D6D6D6"
+    readonly property color hatch:         isDark ? "#2E2E2E" : "#D6D6D6"
     /*! 斜线纹理颜色（加重档，用于对话框中央） */
-    readonly property color hatchStrong: isDark ? "#3C3C3C" : "#C0C0C0"
+    readonly property color hatchStrong:   isDark ? "#3C3C3C" : "#C0C0C0"
 
     /*! 点缀色 1：高饱和青（仅用于极小的数据状态块） */
-    readonly property color cyan: "#00E5FF"
+    readonly property color cyan:         "#00E5FF"
     /*! 淡青色：黑底副标题块、深色带上的小装饰点。
         纯白点在这种 5px 级别的小方块上对比过强、边界发虚，淡青更清楚也更贴合设计语言。 */
-    readonly property color cyanSoft: "#6FE4F5"
+    readonly property color cyanSoft:     "#6FE4F5"
     /*! 点缀色 2：品红（仅用于极小的数据状态块） */
-    readonly property color magenta: "#FF00FF"
+    readonly property color magenta:      "#FF00FF"
     /*! 危险 / 异常状态（用深灰底 + 品红细边表达，不引入大面积红） */
-    readonly property color danger: isDark ? "#FF3D71" : "#C2003B"
+    readonly property color danger:       isDark ? "#FF3D71" : "#C2003B"
 
     /*! 颜色加透明度的小工具：Theme.alpha(Theme.ink, 0.4) */
     function alpha(c, a) {
@@ -146,58 +146,42 @@ QtObject {
     /*! 正文字族。Windows 上「微软雅黑」只有 Regular/Bold 两档，
         Font.Black(900) 会落到 Bold；标题想要更粗的观感请看 displayHeavy。 */
     readonly property string family: Qt.platform.os === "windows"
-        ? "Microsoft YaHei UI" : "Noto Sans CJK SC"
+                                     ? "Microsoft YaHei UI" : "Noto Sans CJK SC"
     /*! 拉丁标题字族：Arial Black，用于英文全大写大字 */
     readonly property string familyDisplay: Qt.platform.os === "windows"
-        ? "Arial Black" : "DejaVu Sans"
+                                            ? "Arial Black" : "DejaVu Sans"
     /*! 等宽字族：SYSTEM INTERFACE / 坐标 / 编号一律用它 */
     readonly property string familyMono: Qt.platform.os === "windows"
-        ? "Consolas" : "DejaVu Sans Mono"
+                                         ? "Consolas" : "DejaVu Sans Mono"
 
     /*! 超大标题（中文带「」），配 displayHeavy 假粗体描边使用 */
-    readonly property font fontTitle: Qt.font({
-        family: family, pixelSize: 42,
-        weight: Font.Black, letterSpacing: 1
-    })
+    readonly property font fontTitle:    Qt.font({ family: family, pixelSize: 42,
+                                                   weight: Font.Black, letterSpacing: 1 })
     /*! 英文全大写大标题 */
-    readonly property font fontTitleEn: Qt.font({
-        family: familyDisplay, pixelSize: 40,
-        weight: Font.Black, letterSpacing: 1
-    })
+    readonly property font fontTitleEn:  Qt.font({ family: familyDisplay, pixelSize: 40,
+                                                   weight: Font.Black, letterSpacing: 1 })
     /*! 区块标题 / 卡片标题 */
-    readonly property font fontHeading: Qt.font({
-        family: family, pixelSize: 22,
-        weight: Font.Black, letterSpacing: 1
-    })
+    readonly property font fontHeading:  Qt.font({ family: family, pixelSize: 22,
+                                                   weight: Font.Black, letterSpacing: 1 })
     /*! 副标题（黑底白字那一块） */
-    readonly property font fontSubtitle: Qt.font({
-        family: family, pixelSize: 19,
-        weight: Font.Black, letterSpacing: 2
-    })
+    readonly property font fontSubtitle: Qt.font({ family: family, pixelSize: 19,
+                                                   weight: Font.Black, letterSpacing: 2 })
     /*! 正文 */
-    readonly property font fontBody: Qt.font({
-        family: family, pixelSize: 14,
-        weight: Font.Normal
-    })
+    readonly property font fontBody:     Qt.font({ family: family, pixelSize: 14,
+                                                   weight: Font.Normal })
     /*! 加重正文：按钮、列表项标签 */
-    readonly property font fontStrong: Qt.font({
-        family: family, pixelSize: 14,
-        weight: Font.DemiBold
-    })
+    readonly property font fontStrong:   Qt.font({ family: family, pixelSize: 14,
+                                                   weight: Font.DemiBold })
     /*! 数值大字（统计卡里的 US$9.7665） */
-    readonly property font fontNumber: Qt.font({
-        family: family, pixelSize: 30,
-        weight: Font.Black, letterSpacing: 1
-    })
+    readonly property font fontNumber:   Qt.font({ family: family, pixelSize: 30,
+                                                   weight: Font.Black, letterSpacing: 1 })
     /*! 小标签，全大写加字距 */
-    readonly property font fontLabel: Qt.font({
-        family: family, pixelSize: 11,
-        weight: Font.DemiBold, letterSpacing: 1.5
-    })
+    readonly property font fontLabel:    Qt.font({ family: family, pixelSize: 11,
+                                                   weight: Font.DemiBold, letterSpacing: 1.5 })
     /*! 等宽小字（默认） */
-    readonly property font fontMonoSm: Qt.font({family: familyMono, pixelSize: 11})
+    readonly property font fontMonoSm:   Qt.font({ family: familyMono, pixelSize: 11 })
     /*! 等宽中字 */
-    readonly property font fontMonoMd: Qt.font({family: familyMono, pixelSize: 13})
+    readonly property font fontMonoMd:   Qt.font({ family: familyMono, pixelSize: 13 })
 
     /*!
         \note 关于"超粗"：曾经用 Text.Outline + 同色 styleColor 给中文标题加粗，

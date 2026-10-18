@@ -78,7 +78,7 @@ ProgressBar {
                 for (var i = 1; i < n; i++) {
                     var x = Math.round(width * i / n) + 0.5
                     ctx.strokeStyle = (i / n) <= control.visualPosition
-                        ? Qt.rgba(0, 0, 0, 0.55) : Theme.lineSoft
+                                     ? Qt.rgba(0, 0, 0, 0.55) : Theme.lineSoft
                     ctx.beginPath()
                     ctx.moveTo(x, height * 0.25)
                     ctx.lineTo(x, height * 0.75)
@@ -87,10 +87,7 @@ ProgressBar {
             }
             Connections {
                 target: control
-
-                function onVisualPositionChanged() {
-                    ticks.requestPaint()
-                }
+                function onVisualPositionChanged() { ticks.requestPaint() }
             }
         }
 

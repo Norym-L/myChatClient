@@ -53,24 +53,12 @@ Dialog {
     padding: 0
 
     enter: Transition {
-        NumberAnimation {
-            property: "opacity";
-            from: 0;
-            to: 1; duration: Theme.durSlow
-        }
-        NumberAnimation {
-            property: "scale";
-            from: 0.94;
-            to: 1; duration: Theme.durSlow
-            easing.type: Theme.easingEnter
-        }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durSlow }
+        NumberAnimation { property: "scale"; from: 0.94; to: 1; duration: Theme.durSlow
+                          easing.type: Theme.easingEnter }
     }
     exit: Transition {
-        NumberAnimation {
-            property: "opacity";
-            from: 1;
-            to: 0; duration: Theme.durBase
-        }
+        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durBase }
     }
 
     // ── 遮罩：平涂，不加渐变 ──
@@ -150,10 +138,8 @@ Dialog {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: control.title.toUpperCase()
-                font: Qt.font({
-                    family: Theme.family, pixelSize: 16,
-                    weight: Font.DemiBold, letterSpacing: 2
-                })
+                font: Qt.font({ family: Theme.family, pixelSize: 16,
+                                weight: Font.DemiBold, letterSpacing: 2 })
                 color: Theme.accent
             }
         }

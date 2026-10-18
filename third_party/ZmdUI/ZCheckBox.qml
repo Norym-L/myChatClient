@@ -34,8 +34,8 @@ CheckBox {
         height: 20
         color: control.checked || control.indeterminate ? Theme.accent : Theme.surface
         strokeColor: control.enabled
-            ? (control.visualFocus || control.hovered ? Theme.ink : Theme.inkSoft)
-            : Theme.lineSoft
+                     ? (control.visualFocus || control.hovered ? Theme.ink : Theme.inkSoft)
+                     : Theme.lineSoft
         strokeWidth: Theme.border
         cutTopRight: 7
         cutBottomLeft: 3

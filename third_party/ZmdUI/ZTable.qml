@@ -54,7 +54,7 @@ Item {
     readonly property int headerHeight: caption.length > 0 ? 50 : 32
     implicitWidth: 560
     implicitHeight: headerHeight + rows.length * rowHeight
-        + (footerText.length > 0 ? Theme.accentBarHeight : 0) + Theme.border * 2
+                    + (footerText.length > 0 ? Theme.accentBarHeight : 0) + Theme.border * 2
 
     // ── 列宽缓存：width / columns 变化时自动重算 ──
     readonly property var _widths: {
@@ -125,12 +125,8 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 9
                 height: 9
-                Rectangle {
-                    anchors.centerIn: parent; width: 9; height: 1.5; color: Theme.ink
-                }
-                Rectangle {
-                    anchors.centerIn: parent; width: 1.5; height: 9; color: Theme.ink
-                }
+                Rectangle { anchors.centerIn: parent; width: 9; height: 1.5; color: Theme.ink }
+                Rectangle { anchors.centerIn: parent; width: 1.5; height: 9; color: Theme.ink }
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
@@ -168,8 +164,8 @@ Item {
                             color: Theme.textOnSub
                             elide: Text.ElideRight
                             horizontalAlignment: modelData.align === "right" ? Text.AlignRight
-                                : modelData.align === "center" ? Text.AlignHCenter
-                                    : Text.AlignLeft
+                                             : modelData.align === "center" ? Text.AlignHCenter
+                                             : Text.AlignLeft
                         }
 
                         // 列分隔刻度
@@ -204,9 +200,7 @@ Item {
             readonly property bool isCurrent: index === root.currentIndex
             readonly property bool isHovered: rowHover2.hovered
 
-            HoverHandler {
-                id: rowHover2
-            }
+            HoverHandler { id: rowHover2 }
 
             // 交替底色
             Rectangle {
@@ -276,8 +270,8 @@ Item {
                             color: rowDelegate.isCurrent ? Theme.textOnAccent : Theme.inkSoft
                             elide: Text.ElideRight
                             horizontalAlignment: modelData.align === "right" ? Text.AlignRight
-                                : modelData.align === "center" ? Text.AlignHCenter
-                                    : Text.AlignLeft
+                                             : modelData.align === "center" ? Text.AlignHCenter
+                                             : Text.AlignLeft
                         }
                     }
                 }

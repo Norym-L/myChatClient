@@ -108,7 +108,7 @@ ItemDelegate {
         Column {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - 22 - arrowItem.width - slash.width
-                - trailingText.width - Theme.spacingMd * 4
+                   - trailingText.width - Theme.spacingMd * 4
             spacing: 1
 
             Text {

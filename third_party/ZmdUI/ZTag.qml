@@ -40,7 +40,7 @@ Item {
     readonly property string _text: uppercase ? text.toUpperCase() : text
 
     implicitWidth: tm.advanceWidth + Theme.spacingMd * 2 + (skew ? skewAmount : 0)
-        + (dotColor.a > 0 ? 12 : 0)
+                                + (dotColor.a > 0 ? 12 : 0)
     implicitHeight: 22
 
     TextMetrics {
@@ -71,20 +71,13 @@ Item {
 
     readonly property color _bg: {
         switch (tone) {
-            case Theme.Tone.Ink:
-                return Theme.subBg
-            case Theme.Tone.Accent:
-                return Theme.accent
-            case Theme.Tone.Muted:
-                return Theme.surfaceAlt
-            case Theme.Tone.Cyan:
-                return Theme.cyan
-            case Theme.Tone.Magenta:
-                return Theme.magenta
-            case Theme.Tone.Danger:
-                return Theme.danger
-            default:
-                return "transparent"
+        case Theme.Tone.Ink:     return Theme.subBg
+        case Theme.Tone.Accent:  return Theme.accent
+        case Theme.Tone.Muted:   return Theme.surfaceAlt
+        case Theme.Tone.Cyan:    return Theme.cyan
+        case Theme.Tone.Magenta: return Theme.magenta
+        case Theme.Tone.Danger:  return Theme.danger
+        default:                 return "transparent"
         }
     }
 
@@ -92,20 +85,13 @@ Item {
 
     readonly property color _fg: {
         switch (tone) {
-            case Theme.Tone.Ink:
-                return Theme.textOnSub
-            case Theme.Tone.Accent:
-                return Theme.textOnAccent
-            case Theme.Tone.Muted:
-                return Theme.muted
-            case Theme.Tone.Cyan:
-                return "#00313A"
-            case Theme.Tone.Magenta:
-                return "#3A003A"
-            case Theme.Tone.Danger:
-                return Theme.textOnSub
-            default:
-                return Theme.ink
+        case Theme.Tone.Ink:     return Theme.textOnSub
+        case Theme.Tone.Accent:  return Theme.textOnAccent
+        case Theme.Tone.Muted:   return Theme.muted
+        case Theme.Tone.Cyan:    return "#00313A"
+        case Theme.Tone.Magenta: return "#3A003A"
+        case Theme.Tone.Danger:  return Theme.textOnSub
+        default:                 return Theme.ink
         }
     }
 

@@ -79,33 +79,17 @@ Shape {
         startY: root._y0
 
         // 上边 → 右上切角
-        PathLine {
-            x: root._x1 - root._tr; y: root._y0
-        }
-        PathLine {
-            x: root._x1; y: root._y0 + root._tr
-        }
+        PathLine { x: root._x1 - root._tr; y: root._y0 }
+        PathLine { x: root._x1;            y: root._y0 + root._tr }
         // 右边
-        PathLine {
-            x: root._x1; y: root._y1 - root._br
-        }
+        PathLine { x: root._x1;            y: root._y1 - root._br }
         // 右下切角 → 下边
-        PathLine {
-            x: root._x1 - root._br; y: root._y1
-        }
-        PathLine {
-            x: root._x0 + root._bl; y: root._y1
-        }
+        PathLine { x: root._x1 - root._br; y: root._y1 }
+        PathLine { x: root._x0 + root._bl; y: root._y1 }
         // 左下切角 → 左边
-        PathLine {
-            x: root._x0; y: root._y1 - root._bl
-        }
-        PathLine {
-            x: root._x0; y: root._y0 + root._tl
-        }
+        PathLine { x: root._x0;            y: root._y1 - root._bl }
+        PathLine { x: root._x0;            y: root._y0 + root._tl }
         // 回到起点，闭合
-        PathLine {
-            x: root._x0 + root._tl; y: root._y0
-        }
+        PathLine { x: root._x0 + root._tl; y: root._y0 }
     }
 }

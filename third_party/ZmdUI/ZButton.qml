@@ -75,7 +75,7 @@ Button {
         // 底色是亮黄时竖条转"强调色上的文字色"（亮色=黑 / 暗色=深炭），
         // 不能用 Theme.ink —— 暗色下 ink 是浅灰，压在压暗后的黄上一样看不见
         return (variantValue === Theme.Variant.Secondary && active)
-            ? Theme.textOnAccent : Theme.accent
+                ? Theme.textOnAccent : Theme.accent
     }
 
     readonly property bool showEdge: edgeVisibleFor(variant, skew, _isOn, enabled)
@@ -101,15 +101,15 @@ Button {
         if (!enabled)
             return Theme.surfaceAlt
         switch (variant) {
-            case Theme.Variant.Primary:
-                return _isOn ? Theme.ink : Theme.accent
-            case Theme.Variant.Secondary:
-                return _isOn ? Theme.accent : Theme.surface
-            case Theme.Variant.Danger:
-                return Theme.subBg
-            default:
-                // Ghost：底板恒为透明，"有没有底"交给下面那块独立叠加层
-                return "transparent"
+        case Theme.Variant.Primary:
+            return _isOn ? Theme.ink : Theme.accent
+        case Theme.Variant.Secondary:
+            return _isOn ? Theme.accent : Theme.surface
+        case Theme.Variant.Danger:
+            return Theme.subBg
+        default:
+            // Ghost：底板恒为透明，"有没有底"交给下面那块独立叠加层
+            return "transparent"
         }
     }
 
@@ -149,9 +149,7 @@ Button {
 
             // 悬停/聚焦时底色平滑过渡（黄底黑字 ↔ 黑底黄字这类反色不再是硬切）
             Behavior on color {
-                ColorAnimation {
-                    duration: control.stateDuration; easing.type: Theme.easingStd
-                }
+                ColorAnimation { duration: control.stateDuration; easing.type: Theme.easingStd }
             }
         }
 
@@ -164,9 +162,7 @@ Button {
             strokeWidth: control._stroke.a > 0 ? Theme.border : 0
 
             Behavior on color {
-                ColorAnimation {
-                    duration: control.stateDuration; easing.type: Theme.easingStd
-                }
+                ColorAnimation { duration: control.stateDuration; easing.type: Theme.easingStd }
             }
         }
 
@@ -193,9 +189,7 @@ Button {
             cutBottomLeft: control.cutBottomLeftSize
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: control.stateDuration; easing.type: Theme.easingStd
-                }
+                NumberAnimation { duration: control.stateDuration; easing.type: Theme.easingStd }
             }
         }
 
@@ -214,15 +208,11 @@ Button {
             cutBottomLeft: 3
 
             Behavior on width {
-                NumberAnimation {
-                    duration: control.stateDuration; easing.type: Theme.easingStd
-                }
+                NumberAnimation { duration: control.stateDuration; easing.type: Theme.easingStd }
             }
             // 竖条颜色跟着底色一起过渡：Secondary 白→黄的同时，竖条黄→黑
             Behavior on color {
-                ColorAnimation {
-                    duration: control.stateDuration; easing.type: Theme.easingStd
-                }
+                ColorAnimation { duration: control.stateDuration; easing.type: Theme.easingStd }
             }
         }
 

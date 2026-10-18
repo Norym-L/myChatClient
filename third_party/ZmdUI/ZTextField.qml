@@ -54,7 +54,7 @@ TextField {
         // 只在"真的在编辑"时出现：有焦点、非只读、且没有选区
         // （有选区时该显示选区高亮，不该显示插入符）
         visible: control.activeFocus && !control.readOnly
-            && control.selectionStart === control.selectionEnd
+                 && control.selectionStart === control.selectionEnd
 
         // 光标位置一动就重新亮起并重置计时：打字时不该正好撞上"熄灭"那一拍
         Connections {
@@ -95,13 +95,11 @@ TextField {
             width: parent.width - Theme.cutMd - Theme.border
             height: control.activeFocus ? 4 : (control.hovered ? 3 : 2)
             color: control.invalid ? Theme.magenta
-                : control.activeFocus ? Theme.accent
-                    : Theme.lineSoft
+                 : control.activeFocus ? Theme.accent
+                 : Theme.lineSoft
 
             Behavior on height {
-                NumberAnimation {
-                    duration: Theme.durFast; easing.type: Theme.easingStd
-                }
+                NumberAnimation { duration: Theme.durFast; easing.type: Theme.easingStd }
             }
         }
 

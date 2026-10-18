@@ -53,8 +53,8 @@ Switch {
         ZCutRect {
             anchors.fill: parent
             color: control.checked
-                ? (control.enabled ? Theme.accent : Theme.surfaceMuted)
-                : Theme.surfaceSunken
+                   ? (control.enabled ? Theme.accent : Theme.surfaceMuted)
+                   : Theme.surfaceSunken
             strokeColor: control.enabled ? Theme.ink : Theme.lineSoft
             strokeWidth: Theme.border
             cutTopRight: control.trackCutTopRight
@@ -91,16 +91,14 @@ Switch {
             // 选中时轨道是强调黄 → 滑块要用"强调色上的文字色"（亮色=黑 / 暗色=深炭），
             // 用 Theme.ink 的话暗色下会变成浅灰滑块压在黄轨道上，糊成一团
             color: control.enabled
-                ? (control.checked ? Theme.textOnAccent : Theme.subBgAlt)
-                : Theme.lineSoft
+                   ? (control.checked ? Theme.textOnAccent : Theme.subBgAlt)
+                   : Theme.lineSoft
             cutTopRight: control.knobCutTopRight
             cutBottomLeft: control.knobCutBottomLeft
 
 
             Behavior on x {
-                NumberAnimation {
-                    duration: Theme.durBase; easing.type: Theme.easingEnter
-                }
+                NumberAnimation { duration: Theme.durBase; easing.type: Theme.easingEnter }
             }
 
             // 滑块上的两道刻痕

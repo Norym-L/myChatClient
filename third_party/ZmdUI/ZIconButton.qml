@@ -42,12 +42,12 @@ Button {
                 return Theme.surfaceAlt
             if (control._on) {
                 return control.tone === Theme.Tone.Outline ? Theme.accent
-                    : control.tone === Theme.Tone.Danger ? Theme.danger
-                        : Theme.ink
+                     : control.tone === Theme.Tone.Danger ? Theme.danger
+                     : Theme.ink
             }
             return control.tone === Theme.Tone.Accent ? Theme.accent
-                : control.tone === Theme.Tone.Danger ? Theme.subBg
-                    : Theme.surface
+                 : control.tone === Theme.Tone.Danger ? Theme.subBg
+                 : Theme.surface
         }
         // 用结构线而不是 ink：暗色下 ink 是浅灰，一圈白边在暗色界面里过于抢眼
         strokeColor: control.enabled ? Theme.line : Theme.lineSoft
@@ -74,8 +74,8 @@ Button {
                 if (control._on)
                     return control.tone === Theme.Tone.Outline ? Theme.ink : Theme.textOnSub
                 return control.tone === Theme.Tone.Accent ? Theme.textOnAccent
-                    : control.tone === Theme.Tone.Danger ? Theme.textOnSub
-                        : Theme.ink
+                     : control.tone === Theme.Tone.Danger ? Theme.textOnSub
+                     : Theme.ink
             }
         }
 

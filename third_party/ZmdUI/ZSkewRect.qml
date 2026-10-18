@@ -40,17 +40,9 @@ Shape {
 
         startX: root._p + root.skew
         startY: root._p
-        PathLine {
-            x: root._p + root._w; y: root._p
-        }
-        PathLine {
-            x: root._p + root._w - root.skew; y: root._p + root._h
-        }
-        PathLine {
-            x: root._p; y: root._p + root._h
-        }
-        PathLine {
-            x: root._p + root.skew; y: root._p
-        }
+        PathLine { x: root._p + root._w;               y: root._p }
+        PathLine { x: root._p + root._w - root.skew;   y: root._p + root._h }
+        PathLine { x: root._p;                         y: root._p + root._h }
+        PathLine { x: root._p + root.skew;             y: root._p }
     }
 }
