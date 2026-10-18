@@ -63,6 +63,8 @@ namespace mychat
                 return "SyncFriendListReq";
             case protocol::MessageId::SyncFriendListRsp:
                 return "SyncFriendListRsp";
+            case protocol::MessageId::NotifyReceiveMessage:
+                return "NotifyReceiveMessage";
             }
             return "Unknown";
         }
@@ -310,6 +312,104 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         return true;
     }
 
+    bool ChatSocket::sendTextMessage(const QString& msgId, const QString& toUid, const QString& body,
+                                     const protocol::ChatMessageType type)
+    {
+        const QString target = toUid.trimmed();
+        const QString id = msgId.trimmed();
+
+        /*
+         * msgId 是回执唯一的配对依据（服务端只回显、不生成）：
+         * 传空的话回包就认不回来了，宁可在这里拒发。
+         */
+        if (id.isEmpty())
+        {
+            qWarning() << "[chat] msg_id 为空，消息被丢弃（回执将无法认领）";
+            return false;
+        }
+
+        // 服务端的 to_uid 解析失败 / type 越界都会回 1020，本地先挡一层，省一次往返。
+        // 这类错是客户端自己写错，不值得让服务端来告诉用户。
+        if (target.isEmpty() || body.isEmpty())
+        {
+            qWarning() << "[chat] 消息参数不合法，请求被丢弃: to_uid =" << toUid
+                << "body 长度 =" << body.size();
+            return false;
+        }
+
+        const auto type_value = static_cast<int>(type);
+        if (type_value < 1 || type_value > 4)
+        {
+            qWarning() << "[chat] 非法的消息类型:" << type_value;
+            return false;
+        }
+
+        /*
+         * 未登录就别发了：服务端 `sendTextMessageHandler` **不校验登录态**，
+         * 照样会以 from_uid = 0 写进对方的离线流（api-chat.md §8.2 第 2 条）。
+         * 那不是"能发"，那是往别人的消息列表里塞一条无主消息。
+         */
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，消息无法发送:" << target;
+            return false;
+        }
+
+        m_text_queue.append(OutgoingText{id, target, body, type_value});
+        pumpTextQueue();
+        return true;
+    }
+
+    void ChatSocket::pumpTextQueue()
+    {
+        /*
+         * 串行一发的循环：发出去的立刻 return 等回包，发不出去的继续看下一条。
+         *
+         * 这里用 while 而不是递归 —— 一旦连接刚断，队列里积压的每一条都会走
+         * "发不出去"分支，递归会变成"队列长度 = 栈深度"。
+         */
+        while (!m_text_in_flight.has_value() && !m_text_queue.isEmpty())
+        {
+            const OutgoingText message = m_text_queue.takeFirst();
+
+            // 四个字段服务端都按**字符串**读（api-chat.md §8.1）；type 给数字虽然也能被
+            // asString() 兼容，但没必要赌它哪天换成严格校验。
+            QJsonObject body;
+            body.insert(QStringLiteral("msg_id"), message.msg_id);
+            body.insert(QStringLiteral("to_uid"), message.to_uid);
+            body.insert(QStringLiteral("type"), QString::number(message.type));
+            body.insert(QStringLiteral("body"), message.body);
+
+            if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgReq), body))
+            {
+                // 连接断了 / body 超过 2048：立刻按失败上报，别让队列装作还在发
+                emit textMessageResult(false,
+                                       static_cast<int>(protocol::ErrorCode::NetworkError),
+                                       message.msg_id, message.to_uid, message.body);
+                continue;
+            }
+
+            m_text_in_flight = message;
+
+            expectReply(static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgReq),
+                        static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgRsp),
+                        [this]()
+                            {
+                                // 服务端一句都没回：这条到底写没写进去，谁都说不清。
+                                // 按失败报（界面标红），并把队列放行 —— 否则后面全卡死。
+                                const OutgoingText pending = *m_text_in_flight;
+                                m_text_in_flight.reset();
+
+                                emit textMessageResult(
+                                    false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                    pending.msg_id, pending.to_uid, pending.body);
+
+                                pumpTextQueue();
+                            });
+            return;
+        }
+    }
+
     bool ChatSocket::authFriendRequest(const std::uint64_t requestId, const int state)
     {
         // 服务端只认 1（接受）/ 2（拒绝），其它值会被顶回 1020。本地先挡一层，
@@ -449,6 +549,14 @@ void ChatSocket::reset()
         m_auth_in_flight = 0;
         m_auth_state_in_flight = 0;
 
+        /*
+         * 消息队列同理：连接都没了，排队中的消息不可能再发出去。
+         * 这里**不逐条 emit 失败**（断开瞬间刷一串"发送失败"只会盖掉真正的断线提示），
+         * 由 ChatController 监听 linkError 统一把"发送中"的气泡标红。
+         */
+        m_text_queue.clear();
+        m_text_in_flight.reset();
+
         if (m_socket->state() != QAbstractSocket::UnconnectedState)
             m_socket->abort();
     }
@@ -472,6 +580,9 @@ void ChatSocket::reset()
         m_buffer.clear();
         m_online_in_flight.clear();
         m_online_queue.clear();
+        // 排队中的消息跟着连接一起作废（重连后不该把上一轮的旧消息偷偷补发出去）
+        m_text_queue.clear();
+        m_text_in_flight.reset();
 
         const bool was_logged_in = m_logged_in;
         m_logged_in = false;
@@ -514,16 +625,25 @@ void ChatSocket::reset()
             const auto message_id = static_cast<std::uint16_t>((head[0] << 8) | head[1]);
             const auto body_len = static_cast<std::uint16_t>((head[2] << 8) | head[3]);
 
-            // 与服务端一致：body 超上限按非法报文处理，断开会话（服务端会直接 close）。
-            // 注意只对 body_len 校验 —— message_id 是枚举不是长度，拿它和 MAX_BODY_LEN
-            // 比毫无意义，且会把 >2047 的新消息号误杀成非法帧。
+            /*
+             * ⚠ 入站**故意不做** body_len 上限校验（这里原来是 `> MAX_BODY_LEN` 就断连）。
+             *
+             * 理由：body_len 只有 2 字节，物理最大值就是 65535；而服务端
+             * `CSession::SendNode` 写帧头时**不校验长度** —— 好友列表(1021) 这种
+             * 随数据量增长的回包超过 2048 是完全可能的（一个好友项约 130 字节，
+             * 十来个好友就到顶）。用出站的 2048 去卡入站，结果是一条**合法但长**的
+             * 回包被判成非法帧 → reset() 断连，界面只说"连接已断开"，
+             * 好友越多越像"网络问题"。（用 2049 字节的合法帧复现过。）
+             *
+             * 现在：服务端发多少收多少（上限由帧头字段本身决定）。出站方向仍必须守
+             * `MAX_BODY_LEN` —— 那是服务端的接收限制，不是同一件事。
+             */
             if (body_len > protocol::MAX_BODY_LEN)
             {
-                qWarning() << "[chat] 非法帧头: message_id =" << message_id
-                    << "body_len =" << body_len;
-                reset();
-                emit linkError(tr("收到的报文不合法，连接已关闭"));
-                return;
+                // 不是错误，只是"服务端发得比它自己声明的上限还大"：留一条 INFO 便于定位
+                qInfo() << "[chat] 收到超过服务端 2048 约定的长帧: message_id ="
+                    << messageIdName(message_id) << "body_len =" << body_len
+                    << "（按帧头正常解析，不断连）";
             }
 
             const int frame_len = protocol::HEAD_TOTAL_LEN + body_len;
@@ -579,11 +699,17 @@ void ChatSocket::reset()
         case protocol::MessageId::SyncFriendListRsp:
             handleFriendList(body);
             break;
+        case protocol::MessageId::TextChatMsgRsp:
+            handleTextMessageResponse(body);
+            break;
+        case protocol::MessageId::NotifyReceiveMessage:
+            handleNotifyReceiveMessage(body);
+            break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
             //
-            // 已知的、服务端**尚未实现**的编号（别误判成客户端问题）：
-            //   TextChatMsg*      (1013~1015)   服务端完全没有相关实现
+            // 注意 `NotifyTextChatMsgReq`(1015) 是**已定义但服务端从不发送**的编号
+            // （实际推送走 1022），别把它当成"收到消息"的入口。
             qWarning() << "[chat] 暂未处理的 message_id:" << message_id
                 << messageIdName(message_id);
             break;
@@ -967,6 +1093,111 @@ void ChatSocket::reset()
         emit userOnlineResult(target, online, error);
 
         pumpOnlineQueue();
+    }
+
+    void ChatSocket::handleTextMessageResponse(const QByteArray& body)
+    {
+        /*
+         * 1014：{"error":0,"msg_id":"c-1"}
+         *
+         * msg_id 是服务端**原样回显**的客户端标识（成功、失败都带）。
+         * 发送是串行的，所以"在飞的那一条"本来就是唯一候选；回显值再核对一遍，
+         * 是为了万一服务端改了回显逻辑（或回了别人的 id）时能留下证据，
+         * 而不是安静地把状态标到错误的气泡上。
+         */
+        if (!m_text_in_flight.has_value())
+        {
+            // 超时已经把这发作废了、或者根本没有在飞的请求 → 无人认领，丢掉。
+            // 宁可少一条状态，也不能把它安到别的消息头上。
+            qWarning() << "[chat] 收到没有对应请求的消息发送回包，已忽略:"
+                << QString::fromUtf8(body);
+            return;
+        }
+
+        const OutgoingText sent = *m_text_in_flight;
+        m_text_in_flight.reset();
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 消息发送回包解析失败:" << parse_error.errorString();
+            emit textMessageResult(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                   sent.msg_id, sent.to_uid, sent.body);
+            pumpTextQueue();
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                  .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        const QString echoed = object.value(QStringLiteral("msg_id")).toString();
+        if (echoed.isEmpty())
+        {
+            // 文档：请求里缺失 msg_id 时服务端回显空串。我们用的一直是必填的 id，
+            // 所以这里更像是"服务端还是老版本"——按在飞请求认领，但留一条警告。
+            qWarning() << "[chat] 1014 没带 msg_id（服务端版本较旧？），按在飞请求认领:"
+                << sent.msg_id;
+        }
+        else if (echoed != sent.msg_id)
+        {
+            // 串行发送下这是不可能的（只有一条在飞），说明服务端回显有问题。
+            // 仍按**发出时**的 id 上报：界面要的是"我刚发的那条气泡"，
+            // 回一个我们不认识的 id 只会让它永远停在「发送中」。
+            qWarning() << "[chat] 1014 回显的 msg_id 与在飞请求不一致: echoed ="
+                << echoed << "in-flight =" << sent.msg_id;
+        }
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 能走到这里的服务端错误只有 1020（to_uid / type 非法）；
+            // 其余 1001/1013 之类属于服务端内部异常，提示里照原样透出 code。
+            qWarning() << "[chat] 消息发送失败, to_uid =" << sent.to_uid
+                << "msg_id =" << sent.msg_id << "error =" << error;
+            emit textMessageResult(false, error, sent.msg_id, sent.to_uid, sent.body);
+            pumpTextQueue();
+            return;
+        }
+
+        /*
+         * error == 0 的语义是"已写入对方离线消息流"（api-chat.md §3.3），
+         * **不代表对端收到** —— 界面上别拿它当"已读"。
+         */
+        qInfo() << "[chat] 消息已写入离线消息流, to_uid =" << sent.to_uid
+            << "msg_id =" << sent.msg_id << "body 长度 =" << sent.body.size();
+        emit textMessageResult(true, error, sent.msg_id, sent.to_uid, sent.body);
+        pumpTextQueue();
+    }
+
+    void ChatSocket::handleNotifyReceiveMessage(const QByteArray& body)
+    {
+        /*
+         * 1022：{"error":0}
+         *
+         * 这是"你有新消息"的信号，**不含**发送者 / 类型 / 内容；服务端也没有
+         * 消息拉取接口（api-chat.md §6），所以这里拿不到消息本身。
+         * 推送没有回包可发，解析失败只能丢弃 —— 一次脏帧不该毁掉后面的消息。
+         */
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 新消息推送解析失败:" << parse_error.errorString()
+                << QString::fromUtf8(body);
+            return;
+        }
+
+        const int error = document.object().value(QStringLiteral("error"))
+                                  .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 新消息推送带错误码, error =" << error;
+            return;
+        }
+
+        qInfo() << "[chat] 收到新消息通知（推送不含内容，服务端暂无拉取接口）";
+        emit messageReceived();
     }
 
     bool ChatSocket::sendJson(const std::uint16_t message_id, const QJsonObject& body)

@@ -9,10 +9,11 @@ import ZmdUI 1.0
       · 自己（fromSelf = true） ：头像在右，亮黄底黑边气泡（和主按钮同一套配色）
 
     \l state 只影响"这条到底发出去没有"的标注，不改变版式：
-      demo   演示数据，不标注
-      local  只在本机（服务端还没实现文本消息）
-      sent   服务端已接收（等接口通了这个状态才有意义）
-      failed 发送失败
+      demo     演示数据，不标注
+      sending  已发给服务端、等回执（1014）
+      sent     服务端已接收（只代表写进了对方离线消息流，不是"已读"）
+      failed   发送失败（含超时 / 连接断开）
+      local    演示会话里的本机回显（没发往服务器）
 
     \note 自己的头像由页面通过 selfName / selfUid 传进来，组件不直接读控制器 ——
           保持"展示组件只认 property"这条边界。
@@ -57,11 +58,13 @@ Item {
 
     /*!
         投递状态的等宽小字。demo / sent 不显示 —— 前者是假数据，
-        后者在服务端有回执之前根本没机会出现，显示了反而是噪声。
+        后者是"正常成功"，每条都挂个「已发送」纯属噪声（失败才值得占位置）。
     */
     component StateMark: Text {
         visible: root.state !== "demo" && root.state !== "sent" && root.state.length > 0
-        text: root.state === "local" ? "仅本地" : (root.state === "failed" ? "发送失败" : root.state)
+        text: root.state === "sending" ? "发送中…"
+            : (root.state === "failed" ? "发送失败"
+            : (root.state === "local" ? "仅本地" : root.state))
         font: Theme.fontMonoSm
         color: root.state === "failed" ? Theme.danger : Theme.muted
     }

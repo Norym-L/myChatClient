@@ -4,13 +4,32 @@
 #include <QVariantMap>
 #include <QtGlobal>
 
+#include <utility>
+
+#include "ChatSocket.h"
 #include "logger.h"
+#include "protocol.h"
 
 namespace
 {
-/// 单条消息的长度上限。服务端帧的 body 只有 2KB（MAX_BODY_LEN），
-/// 一条 JSON 消息塞不下太多字 —— 这里先按 500 字挡住，等协议定了再对齐。
+using mychat::protocol::ErrorCode;
+constexpr int kSuccess = static_cast<int>(ErrorCode::Success);
+
+/// 单条消息的长度上限（字符数）。
+///
+/// 服务端单帧 body 硬上限 2048 字节（`MAX_LENGTH`，超了直接关会话），
+/// 而 `maxLength` 也是 QML 输入框的可见上限 —— 两个数要保持一致，别再各写一个。
 constexpr int kMaxTextLength = 500;
+
+/**
+ * 单条消息的**字节**上限。
+ *
+ * 光卡 500 字符不够：一个字 3 字节、一个 emoji 4 字节，500 个就是 2000 字节，
+ * 再加上 `{"to_uid":"...","type":"1","body":"..."}` 的壳就贴到 2048 了。
+ * 留 128 字节余量给 JSON 壳和更长的 uid，超了在这里就说清楚，
+ * 别让 ChatSocket 的 sendFrame 静默拒发（那会表现成"消息没发出去还没提示"）。
+ */
+constexpr int kMaxBodyBytes = mychat::protocol::MAX_BODY_LEN - 128;
 
 QString nowText()
 {
@@ -40,6 +59,37 @@ ChatController::ChatController(QObject* parent)
      */
     if (qEnvironmentVariable("MYCHAT_DEMO") == QLatin1String("1"))
         seedDemoData();
+
+    auto& socket = mychat::ChatSocket::instance();
+
+    // 1013 的结果：按 FIFO 认领（1014 不回消息编号，这是唯一的配对方式）
+    connect(&socket, &mychat::ChatSocket::textMessageResult,
+            this, &ChatController::onTextMessageResult);
+
+    /*
+     * 1022 推送：只知道"有新消息"，**拿不到内容**（服务端没有拉取接口）。
+     * 这里只给一句如实的提示 —— 不要凭空造一个气泡，那是在编数据。
+     */
+    connect(&socket, &mychat::ChatSocket::messageReceived, this, [this]()
+                {
+                    setTip(QStringLiteral("对方发来新消息；服务端暂未提供消息拉取接口，看不到内容"));
+                });
+
+    /*
+     * 断线：在飞的消息不会再有回执（ChatSocket 断线时直接清空队列，不补报超时），
+     * 所以必须在这里把它们标红并销账，否则界面上会永远停在「发送中」。
+     */
+    connect(&socket, &mychat::ChatSocket::linkError, this, [this](const QString&)
+                {
+                    if (m_sending.isEmpty())
+                        return;
+
+                    for (const PendingSend& entry: std::as_const(m_sending))
+                        markMessageState(entry.peer_uid, entry.message_id, QStringLiteral("failed"));
+
+                    m_sending.clear();
+                    setTip(QStringLiteral("连接已断开，发送中的消息未送达"), true);
+                });
 }
 
 int ChatController::indexOf(const QString& peerUid) const
@@ -281,25 +331,108 @@ bool ChatController::sendText(const QString& text)
         return false;
     }
 
+    if (trimmed.toUtf8().size() > kMaxBodyBytes)
+    {
+        // 中文 / emoji 一个字占 3~4 字节：500 字也可能顶到服务端 2KB 的单帧上限
+        setTip(QStringLiteral("这条消息太长（服务端单帧上限 2KB），请缩短后再发"), true);
+        return false;
+    }
+
     const QString time = nowText();
 
     /*
-     * 本地先落一份，state = "local"：
-     *   气泡上会带一个「仅本地」的小标 —— 服务端还没实现文本消息，
-     *   现在把它画成"已发送"就是在骗人。
-     *   接上 1013 之后：回包成功改成 "sent"、失败改成 "failed"（markMessageState 已留好）。
+     * 演示会话（只有 MYCHAT_DEMO=1 才有）里的 uid 是编的。
+     *
+     * 服务端**不校验好友关系**，真发出去就会写进那个 uid 的离线消息流 ——
+     * 等于往一个陌生人（或根本不存在的 uid）那里塞消息。所以演示会话只做本地回显，
+     * 状态标 local（界面上显示「仅本地」）。
      */
-    appendMessage(m_active_uid, true, trimmed, time, QStringLiteral("local"));
-    touchConversation(m_active_uid, trimmed, time);
+    if (m_active_is_demo)
+    {
+        appendMessage(m_active_uid, true, trimmed, time, QStringLiteral("local"));
+        touchConversation(m_active_uid, trimmed, time);
 
+        emit messagesChanged();
+        emit conversationsChanged();
+        setTip(QStringLiteral("演示会话不会发往服务器"));
+        return true;
+    }
+
+    /*
+     * 先落一条 "sending" 的气泡，再把消息交给 ChatSocket。
+     * 顺序不能反：sendTextMessage() 在"连接已断 / body 超长"时会**同步**报失败，
+     * 那时候必须已经登记过 m_sending，否则那条结果无人认领（气泡永远转圈）。
+     */
+    const int message_id = appendMessage(m_active_uid, true, trimmed, time,
+                                         QStringLiteral("sending"));
+
+    /*
+     * msg_id = 本地气泡 id（`c-12` 这种形式）。
+     *
+     * 服务端不解析它、只原样回显在 1014 里 —— 于是"哪条回执对应哪个气泡"
+     * 变成精确匹配，不再依赖发送顺序。用本地 id 的好处是断线/重连后一眼能对上日志。
+     */
+    const QString msg_id = QStringLiteral("c-%1").arg(message_id);
+    m_sending.insert(msg_id, PendingSend{m_active_uid, message_id});
+
+    touchConversation(m_active_uid, trimmed, time);
     emit messagesChanged();
     emit conversationsChanged();
 
-    // ⚠ 与服务器的接线点：ChatSocket 补上 1013 之后，在这里转发 + 起超时
-    emit textMessageOutgoing(m_active_uid, trimmed);
+    if (!mychat::ChatSocket::instance().sendTextMessage(msg_id, m_active_uid, trimmed))
+    {
+        // 没排进队列 = 不会有回执：自己把这条标红销账。
+        // 具体原因（未连接 / 未登录 / 超长）ChatSocket 那边有 WARN 日志。
+        markMessageState(m_active_uid, message_id, QStringLiteral("failed"));
+        m_sending.remove(msg_id);
 
-    setTip(QStringLiteral("服务端尚未实现文本消息：这条只在本机显示"));
+        setTip(QStringLiteral("消息发送失败：未连接到聊天服务器"), true);
+    }
+
     return true;
+}
+
+void ChatController::onTextMessageResult(const bool ok, const int error, const QString& msgId,
+                                         const QString& toUid, const QString& body)
+{
+    Q_UNUSED(body)
+
+    /*
+     * 按 msg_id 认领：1014 回显的就是它。
+     * 找不到只有两种可能 —— 迟到的回执（超时/断线时已经标红了），
+     * 或者这条根本不是本类发的。两种都不该动界面，留一条警告即可。
+     */
+    auto it = m_sending.find(msgId);
+    if (it == m_sending.end())
+    {
+        qWarning() << "[chat] 收到无法认领的消息回执, msg_id =" << msgId
+            << "to_uid =" << toUid << "error =" << error;
+        return;
+    }
+
+    const PendingSend entry = it.value();
+    m_sending.erase(it);
+
+    if (entry.peer_uid != toUid)
+    {
+        // 只有一种可能：服务端把 to_uid 回错 / 我们自己记错了。仍按本地记录标状态。
+        qWarning() << "[chat] 消息回执的 to_uid 与发送记录不一致: 记录"
+            << entry.peer_uid << "回包" << toUid;
+    }
+
+    markMessageState(entry.peer_uid, entry.message_id,
+                     ok ? QStringLiteral("sent") : QStringLiteral("failed"));
+
+    if (ok)
+    {
+        // error == 0 只代表"已写入对方离线消息流"，不代表对端已收到 —— 文案别写成"已读"
+        setTip(QString());
+        return;
+    }
+
+    qWarning() << "[chat] 发送失败, to_uid =" << toUid << "msg_id =" << msgId
+        << "error =" << error;
+    setTip(QStringLiteral("消息发送失败：%1").arg(mychat::protocol::errorToTip(error)), true);
 }
 
 void ChatController::appendIncoming(const QString& peerUid, const QString& text, const QString& time)
@@ -374,11 +507,13 @@ void ChatController::markMessageState(const QString& peerUid, const int messageI
     }
 }
 
-void ChatController::appendMessage(const QString& peerUid, const bool from_self,
-                                   const QString& text, const QString& time,
-                                   const QString& state)
+int ChatController::appendMessage(const QString& peerUid, const bool from_self,
+                                  const QString& text, const QString& time,
+                                  const QString& state)
 {
-    m_history[peerUid].append(makeMessage(m_next_message_id++, from_self, text, time, state));
+    const int id = m_next_message_id++;
+    m_history[peerUid].append(makeMessage(id, from_self, text, time, state));
+    return id;
 }
 
 void ChatController::touchConversation(const QString& peerUid, const QString& last_text,

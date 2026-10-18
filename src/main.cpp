@@ -189,7 +189,7 @@ int main(int argc, char* argv[])
 
     // 开发 / 自动化用：MYCHAT_SENDMSG=<文本>
     // 进聊天页后替用户发一条消息（走的是真实的输入框 → 控制器 → 本地回显链路）。
-    // 用来无头验证"发出去的消息出现在气泡里、并带「仅本地」标记"这件事。
+    // 用来无头验证"发出去的消息出现在气泡里、并且状态走完 sending → sent（不挂失败小字）"。
     if (const QString auto_message = qEnvironmentVariable("MYCHAT_SENDMSG");
         !auto_message.isEmpty())
     {

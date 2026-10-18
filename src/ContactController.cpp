@@ -323,10 +323,13 @@ void ContactController::onSearchResult(const bool found, const QList<mychat::pro
     {
         // 1014 USER_NOT_FOUND 是正常结果，不该显示成红色错误
         const bool is_not_found = error == static_cast<int>(ErrorCode::UserNotFound);
-        setTip(is_not_found
-                   ? QStringLiteral("没有找到该用户")
-                   : mychat::protocol::errorToTip(error),
-               !is_not_found);
+        QString tip = mychat::protocol::errorToTip(error);
+        // 服务端回了空对象/没带 error 时 errorToTip(0) 是空串 —— 红字提示不能是空白，
+        // 否则界面上只出现一个"没有内容的错误"，看起来像渲染坏了
+        if (tip.isEmpty())
+            tip = QStringLiteral("搜索没有结果（服务端未返回数据）");
+
+        setTip(is_not_found ? QStringLiteral("没有找到该用户") : tip, !is_not_found);
         emit searchFinished(false, error);
         return;
     }

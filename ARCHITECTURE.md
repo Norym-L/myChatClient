@@ -60,13 +60,14 @@ ZmdUI 组件库（终末地工业机能风）。
 - ✅ **好友列表**（1020/1021）：`ContactController.refreshFriendList()` → **会话列表由它驱动**
   （`ChatController.syncFriends()`，在 `main.cpp` 里接线）；备注 `nick` 优先作为显示名
 - ✅ **会话界面**（会话列表 / 消息气泡 / 输入框 / 未读角标）—— 版式与交互已就绪，
-  会话列表来自好友列表； **历史消息为空**（服务端没有拉历史接口），发出的消息只在本机回显。
+  会话列表来自好友列表；**发消息已接通服务端**（1013/1014，`msg_id` 回显配对），
+  历史消息仍为空（服务端没有拉历史接口）。
   演示数据只在 `MYCHAT_DEMO=1` 时注入（用于版式自检）
-- ✅ 五套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
+- ✅ 六套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- **文本消息**：`TextChatMsg*`（1013~1015）只有编号没有处理器 → 消息发不出去
+- **收消息内容**：1022 推送只有 `{"error":0}`，服务端没有消息拉取 / 历史接口
 - **历史消息**：服务端没有"拉历史"接口，每个会话的初始消息都是空的
 - 会话持久化（目前关掉进程就要重新登录）
 
@@ -185,8 +186,11 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 +----------------+----------------+----------------------------+
 ```
 
-- `HEAD_ID_LEN = 2`、`HEAD_DATA_LEN = 2`、`MAX_BODY_LEN = 2048`
-- body 超上限按非法帧处理，断开会话
+- `HEAD_ID_LEN = 2`、`HEAD_DATA_LEN = 2`、`MAX_BODY_LEN = 2048`（**出站**上限）
+- **出站**（发请求）body 超过 2048 → 服务端 `clearSession`，所以发送前必须自查
+- **入站不做长度校验**：`body_len` 是 2 字节字段，物理上限 65535；服务端 `SendNode`
+  写帧头时不校验长度，好友列表（1021）随好友数量增长很容易超过 2048。
+  客户端曾拿 2048 卡入站，结果是"好友一多就断线、界面只说连接已断开"（已修）。
 - 只对 `body_len` 做上限校验 —— **`message_id` 是枚举不是长度**，拿它和
   `MAX_BODY_LEN` 比毫无意义，且会把 >2047 的新消息号误杀
 
@@ -364,27 +368,31 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 ### 5.6 ChatController
 
 会话 / 消息的唯一入口。 **会话列表由好友列表驱动**（`syncFriends()`）；
-文本消息服务端仍未实现，所以历史为空、发送只在本机回显（标「仅本地」）。
+发消息已接通服务端（1013/1014：本地落一条 `sending` 气泡 → 回执按 `msg_id` 改状态），
+但历史仍为空、也收不到别人的消息内容（1022 不含内容、没有拉取接口）。
 `MYCHAT_DEMO=1` 时才注入演示会话（`demo: true`，`syncFriends` 不会清掉它们）。
 
-| 方法                            | 用途                                                           |
-|---------------------------------|----------------------------------------------------------------|
-| `openConversation(uid, name)`   | 打开会话（顺带清未读）；没有选中时页面自动开第一条             |
-| `syncFriends(friends)`          | 用好友列表重建会话：资料字段取新的，未读/摘要沿用旧的          |
-| `sendText(text)` → bool         | 追加到本地并 `emit textMessageOutgoing()`；空串/超长返回 false |
-| `markRead(uid)`                 | 清未读角标                                                     |
-| `appendIncoming(uid, text, t)`  | **待接**：收到 1015 推送的落点（置顶 + 未读 +1）               |
-| `markMessageState(uid, id, st)` | **待接**：把某条消息从 `local` 改成 `sent` / `failed`          |
+| 方法                            | 用途                                                             |
+|---------------------------------|------------------------------------------------------------------|
+| `openConversation(uid, name)`   | 打开会话（顺带清未读）；没有选中时页面自动开第一条               |
+| `syncFriends(friends)`          | 用好友列表重建会话：资料字段取新的，未读/摘要沿用旧的            |
+| `sendText(text)` → bool         | 落一条 `sending` 气泡并发 1013；空串/超长返回 false              |
+| `markRead(uid)`                 | 清未读角标                                                       |
+| `appendIncoming(uid, text, t)`  | **待接**：拉取接口落地后，把收到的消息灌进来的落点               |
+| `markMessageState(uid, id, st)` | 改某条气泡的状态（`sending` / `sent` / `failed`）                 |
 
 属性：`conversations` / `conversationCount` / `messages` / `hasActiveConversation` /
-`activePeerUid` / `activePeerName` / `activePeerIsDemo` / `serverSupportsText`（恒 false）/
-`tip` / `tipIsError`。
+`activePeerUid` / `activePeerName` / `activePeerIsDemo` / `tip` / `tipIsError`。
 
-**与服务器的三个接线点**（服务端补齐后只改这几处）：
+**发送链路的关键约定**：
 
-1. 发：`sendText()` 末尾的 `emit textMessageOutgoing(peerUid, text)` → `ChatSocket` 发 1013
-2. 收：`ChatSocket` 收到 1015 → 调 `appendIncoming()`
-3. 历史：服务端有拉历史接口后，灌进 `m_history`
+1. **`msg_id` 由本类生成**（`c-<本地气泡 id>`），服务端原样回显在 1014 里 ——
+   回执靠它精确对回气泡，不依赖发送顺序。别在别处自己拼 msg_id 发 1013。
+2. `ChatSocket` 仍然**串行发送**：它的 `m_pending` 超时表按回包型号 FIFO 认领，
+   并发时先回的那条会销掉别人的账。
+3. `error == 0` 只代表"已写入对方离线消息流"，**不是**"对方已收到"，文案别写"已送达"。
+4. 断线时 `ChatSocket` 直接清空队列（不补报超时），所以 `ChatController` 监听
+   `linkError` 把 `m_sending` 里的气泡统一标成 `failed`。
 
 ⚠ **`syncFriends()` 里的信号重入陷阱**：`emit conversationsChanged()` 之后 QML 会 **同步**
 自动打开第一个会话（`ChatPage` 的 handler），所以"原来有没有活动会话"必须在 emit **之前**
@@ -678,14 +686,14 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **认证 + 好友链路 + 好友列表已完成；聊天业务未做。** 会话列表现在由好友列表驱动，
-   消息气泡 / 输入框版式已就绪，但文本消息（1013~1015）服务端无实现、也没有拉历史接口。
-   后续可参考 `docs/ServerDocs/api-http.md`、`api-tcp.md` 与根目录的 `接口文档.md`。
+1. **认证 + 好友链路 + 好友列表 + 发消息已完成；收消息 / 历史未做。** 会话列表由好友列表驱动，
+   文本消息已接通 1013/1014（`msg_id` 回显配对，气泡状态 发送中 → 已发送 / 失败），
+   但服务端 1022 推送不含内容、也没有拉取 / 历史接口 —— **别人的消息内容拿不到**，
+   每个会话的历史仍为空。后续可参考 `docs/ServerDocs/api-chat.md` 与根目录的 `接口文档.md`。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**
-   目前已处理 4 个回包（登录 / 搜索 / 发申请 / 申请列表），未知编号打 WARN 不断连。
-   后续要接入的编号：`NotifyAddFriendReq`(1009，服务端主动推送，客户端暂未处理)、
-   `AuthFriend*`(1010/1011，服务端也未实现)、`TextChat*`(1013~1015)。
+   目前处理了登录 / 搜索 / 发申请 / 申请列表 / 好友列表 / 心跳 / 查在线 / 发消息 / 新消息推送，
+   未知编号打 WARN 不断连。仍待接入的：消息拉取（提案 1023/1024，服务端未实现）。
 
 2.1 **注册 / 重置密码依赖 VerifyServer。** 该服务未启动时 `/get_Verifycode`
 必然失败，属于环境问题而非客户端 bug —— 报错信息里已区分（见 §4.1）。

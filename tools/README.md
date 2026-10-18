@@ -77,7 +77,9 @@ PY=C:/Users/Norym/.workbuddy/binaries/python/versions/3.13.12/python.exe
 # 纯版式（不带登录：右上角自己的头像会退化成"我"）
 MYCHAT_PAGE=Chat MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat-ui.png ./qtClient.exe
 
-# 带登录 + 自动发一条消息：验证「输入框 → 控制器 → 本地回显」和「仅本地」标记
+# 带登录 + 自动发一条消息：验证「输入框 → 控制器 → 1013 → 1014」
+# 产物里不该出现「发送中」/「发送失败」，日志里应有
+#   [chat] 消息已写入离线消息流, to_uid = ... msg_id = c-N ...
 MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_SENDMSG="这条是刚发的" \
 MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/chat-final.png MYCHAT_SMOKE_DELAY=4500 ./qtClient.exe
 
@@ -87,8 +89,9 @@ MYCHAT_PAGE=Chat MYCHAT_OPENDLG=session:666674 MYCHAT_SMOKE=... ./qtClient.exe
 
 判读要点：
 
-- 发出去的那条气泡上应该有「仅本地」小字 —— 服务端 **没有**文本消息实现，
-  把它画成"已发送"就是骗人；`serverSupportsText` 接上后这段提示会自然消失。
+- 发出去的那条气泡：成功时**不挂状态小字**（只失败/发送中才显示）；
+  挂「发送失败」说明服务端没回包或回了错误码，去日志里找 `error =`。
+- 服务端成功只代表"写进对方离线消息流"，不代表对方收到 —— 别据此判断在线状态。
 - 会话列表左下角常驻 `DEMO · 本地演示数据`，同样是在如实标注数据来源。
 - 消息多到放不下时应该自动滚到底（消息列表挂在 `contentHeight` 上滚，
   不是在 `messagesChanged` 里滚 —— 那一拍新 delegate 还没布局完，会差一条的高度）。
@@ -167,10 +170,23 @@ done; done
 ./qtClientSocketTimeoutTest      # 退出码 0 = 五条请求全都自己超时收尾
 ```
 
-它挨个发 登录 / 搜索 / 发申请 / 拉列表 / 处理申请，每条都必须报 `error=5`
+它挨个发 登录 / 搜索 / 发申请 / 拉列表 / 处理申请 / 好友列表，每条都必须报 `error=5`
 （客户端本地码 `RequestTimeout`，文案「网络连接超时，请稍后重试」）而不是卡死。
 覆盖的是 `ChatSocket` 里那张统一的在飞请求表 —— 以后加新消息，只要发送时调一次
 `expectReply()`，回包那边由 `handleFrame` 统一销账，不会再出现"某条链路忘了配超时"。
+
+## 验证「发消息」（1013 / 1014，自带假 ChatServer）
+
+真实服务端的回包信息量太少（`{"error":0}`），"请求体字段对不对、回执能不能对回某条消息"
+这些只能靠一个会检查帧的假服务器：
+
+```bash
+./qtClientChatMsgTest            # 退出码 0 = 全部通过
+```
+
+它钉住五件事：`msg_id` / `to_uid` / `type` / `body` 都是**字符串**；1014 回显的 `msg_id`
+能精确认领；串行发送（未回包前不发第二条）；`error=1020` 走失败路径；
+服务端只收不答时 5s 后报 `RequestTimeout`。最后顺带验了 1022 推送。
 
 ## 验证「好友申请推送」（NotifyAddFriendReq / 1009）
 

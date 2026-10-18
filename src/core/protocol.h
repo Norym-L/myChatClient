@@ -25,7 +25,17 @@ namespace mychat::protocol
     inline constexpr int HEAD_ID_LEN = 2;
     inline constexpr int HEAD_DATA_LEN = 2;
     inline constexpr int HEAD_TOTAL_LEN = HEAD_ID_LEN + HEAD_DATA_LEN;
-    /// 单帧 body 上限；超出服务端会关闭会话
+    /**
+     * **出站**（客户端 → 服务端）单帧 body 上限。
+     *
+     * 服务端接收侧的 `MAX_LENGTH` 就是 2048，超了它会直接 `clearSession` ——
+     * 所以客户端**发**请求必须守这个数（见 ChatSocket::sendFrame）。
+     *
+     * ⚠ 这个值**不能**拿去卡入站：服务端 `CSession::SendNode` 写帧头时不校验长度，
+     *   好友列表(1021) 这种随数据量增长的回包很容易超过它（约 15 个好友就到）。
+     *   入站的长度上限由帧头字段宽度决定：body_len 是 2 字节，最大 65535。
+     *   两件事不是同一个约束，别再合并成一个常量（合并过一次，症状是"好友一多就断线"）。
+     */
     inline constexpr int MAX_BODY_LEN = 2048;
 
     /**
@@ -59,6 +69,22 @@ namespace mychat::protocol
         CheckIsUserOnlineRsp, // 1019
         SyncFriendListReq,    // 1020
         SyncFriendListRsp,    // 1021
+        NotifyReceiveMessage, // 1022 —— 服务端推送「你有新消息」，**不含内容**
+    };
+
+    /**
+     * 聊天消息类型（服务端 `chat_message::Type`），用于 1013 请求体的 `type` 字段。
+     *
+     * 服务端只接受 1~4，其它值直接回 `1020 REQUEST_VALUE_INVALID`。
+     * 目前只有文本可用：图片 / 文件 / 表情包的编码方式（URL、文件 ID）服务端尚未约定，
+     * 也没有上传通道 —— 枚举先占位，别在界面上放出发得出去的样子。
+     */
+    enum class ChatMessageType : std::uint16_t
+    {
+        Text = 1,
+        Picture = 2,
+        File = 3,
+        Emoji = 4,
     };
 
     /**

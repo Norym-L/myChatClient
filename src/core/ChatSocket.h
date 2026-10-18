@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 
 #include "protocol.h"
 
@@ -28,7 +29,9 @@ namespace mychat
  *
  * 服务端限制（见 docs/ServerDocs/api-tcp.md §3）：
  *   - 无读超时，客户端必须自己做连接超时（这里用 QTimer 保护）
- *   - message_id 或 body_len 超过 MAX_BODY_LEN 视为非法报文，服务端会关闭会话
+ *   - **出站** body 超过 MAX_BODY_LEN(2048) 服务端会关会话（发送前自查）
+ *   - **入站不做长度校验**：服务端发帧时并不校验长度，好友列表这类回包可能超过
+ *     2048；body_len 的物理上限是 65535（2 字节字段）。详见 dispatchBuffer()。
  *
  * ⚠ **每一条"发出去等回包"的请求都登记在线索表 \l m_pending 里**，由同一个
  *   \l m_reply_timer 兜超时（\l kReplyTimeoutMs）。原因不是洁癖：服务端存在
@@ -111,6 +114,29 @@ namespace mychat
          */
         bool checkUserOnline(const QString& uid);
 
+        /**
+         * 发送一条单聊消息（message_id = TextChatMsgReq 1013）。
+         *
+         * 请求体：`{ "msg_id": "...", "to_uid": "...", "type": "1", "body": "..." }`
+         * （四个字段服务端都按**字符串**读；`from_uid` 由服务端从会话里取）。
+         * 回执 1014 会把 `msg_id` **原样回显**（成功、失败都带）——
+         * 这是把回执对回本地气泡的唯一可靠依据。
+         *
+         * @param msgId 客户端生成的消息标识，**必填**。服务端不解析、只回显；
+         *              缺失时回显空串，那条回执就再也认不回来了。
+         *
+         * ⚠ 内部仍然**串行发送**：上一条没回包之前，后续消息先排队。
+         *   原因不在业务层（业务层已经有 msg_id），而在 \l m_pending 超时表 ——
+         *   它按回包型号 FIFO 认领，并发时先回的那条会把别人的账销掉。
+         *   一次一条就永远不会错配，代价只是几条消息各等一个 RTT（本机毫秒级）。
+         *
+         * @return true  = 已进入发送队列（结果看 textMessageResult；成功也只代表
+         *                **已写入服务端离线消息流**，不代表对端收到）
+         *         false = 根本没发（未登录 / 未连接 / 参数非法 / msgId 为空 / body 超长）
+         */
+        bool sendTextMessage(const QString& msgId, const QString& toUid, const QString& body,
+                             protocol::ChatMessageType type = protocol::ChatMessageType::Text);
+
         /// 断开并复位全部状态
         void disconnectFromServer();
 
@@ -178,6 +204,28 @@ namespace mychat
         void heartbeatResult(bool ok, int error);
         /// 某个用户的在线状态；error 非 0 时 online 无意义
         void userOnlineResult(std::uint64_t uid, bool online, int error);
+
+        /**
+         * 一条消息的最终投递结果（1013 → 1014，或者客户端本地超时）。
+         *
+         * 服务端在 1014 里把请求的 `msg_id` **原样回显**，所以这里以它为准，
+         * 调用方按 msgId 精确认领即可 —— **不需要**再依赖发送顺序。
+         * 顺带把请求里的 \a toUid / \a body 带回来，方便日志和兜底。
+         *
+         * @param ok    服务端 error == 0（含义是"已写入对方离线消息流"，不是"对方已读"）
+         * @param error 失败原因（服务端码或本地的 \l ErrorCode::RequestTimeout）
+         */
+        void textMessageResult(bool ok, int error, const QString& msgId,
+                               const QString& toUid, const QString& body);
+
+        /**
+         * 服务端推送「你有新消息」（message_id = 1022 NotifyReceiveMessage）。
+         *
+         * ⚠ 推送体只有 `{"error":0}`：**没有发送者、没有类型、没有内容**，
+         *   服务端也**没有**消息拉取 / 历史接口，所以收到之后拿不到消息本身 ——
+         *   客户端目前只能提示"有新消息"。等拉取接口（提案 1023/1024）落地再补内容。
+         */
+        void messageReceived();
 
     private
         slots :
@@ -249,11 +297,17 @@ namespace mychat
         void handleHeartbeatResponse(const QByteArray& body);
         /// 回包**不带 uid**，所以靠 m_online_in_flight 记住这一发问的是谁
         void handleUserOnlineResponse(const QByteArray& body);
+        /// 消息发送回执（1014，只有 error，靠 m_text_in_flight 认领）
+        void handleTextMessageResponse(const QByteArray& body);
+        /// 服务端主动推送「你有新消息」（1022，不含内容）
+        void handleNotifyReceiveMessage(const QByteArray& body);
         bool sendJson(std::uint16_t message_id, const QJsonObject& body);
         /// 直接发一段已序列化好的 body（心跳要发体长 0 的空帧，走不了 sendJson）
         bool sendFrame(std::uint16_t message_id, const QByteArray& payload);
         /// 一次只发一个「查在线」请求；上一个回包了就接着发下一个
         void pumpOnlineQueue();
+        /// 一次只发一条聊天消息；上一条回包（或超时）了就接着发下一条
+        void pumpTextQueue();
 
         /// 文档：服务端无读超时，客户端自己做连接超时
         static constexpr int kConnectTimeoutMs = 5000;
@@ -303,5 +357,25 @@ namespace mychat
          */
         std::uint64_t m_auth_in_flight = 0;
         int m_auth_state_in_flight = 0;
+
+        /// 一条待发的聊天消息（1013）
+        struct OutgoingText
+        {
+            /// 客户端生成的消息标识，服务端原样回显
+            QString msg_id;
+            QString to_uid;
+            QString body;
+            int type = 1;
+        };
+
+        /*
+         * 消息发送**串行**：`m_pending` 的超时表按"请求型号"FIFO 认领，
+         * 并发发多条时，哪一条先回包就会把最早那笔账销掉 —— 一旦有分支不回包，
+         * 状态就张冠李戴。串行一次只压一条，配合 1014 回显的 msg_id，
+         * 业务层可以精确认领，队列层也永远不会错配。
+         */
+        QList<OutgoingText> m_text_queue;
+        /// 当前在飞的那一条；没有在飞时为空
+        std::optional<OutgoingText> m_text_in_flight;
     };
 } // namespace mychat

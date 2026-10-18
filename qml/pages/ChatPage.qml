@@ -11,8 +11,10 @@ import "../dialog"
 
     ⚠ 能力边界（取决于服务端，不是客户端偷懒）：
       · **会话列表**：由**好友列表**驱动（1020/1021），每个好友一个会话入口。
-      · **消息气泡**：服务端**没有文本消息**（`TextChatMsg*` 只有编号没有处理器），
-        所以历史为空、发出的消息只在本机回显（标「仅本地」）。
+      · **发消息**：已实现（1013 请求 / 1014 回执），气泡状态为「发送中 → 已发送 / 发送失败」。
+        ⚠ 回执成功只代表"已写入对方离线消息流"，不代表对方已收到。
+      · **收消息**：服务端只会推 1022「你有新消息」，**推送体不含内容**，
+        也没有拉取 / 历史接口 → 别人的消息内容拿不到，每个会话的历史仍为空。
         演示数据只剩 `MYCHAT_DEMO=1` 时才注入，平时界面上没有假数据。
       · **联系人**（搜索用户 / 发好友申请）服务端已实现 → 可用
       · **好友申请列表** 服务端已实现 → 可用
@@ -24,9 +26,8 @@ import "../dialog"
       · 搜索结果 / 申请列表点整行 → openUserInfo() → 可发好友申请
       · 会话头部点头像 → openChatPeerInfo()
 
-    预留的服务器接口：
-      · ChatController.sendText() 只在本机回显，同时 emit textMessageOutgoing()
-      · ChatController.serverSupportsText 恒为 false，界面据此显示"仅本地"提示
+    发送链路：ZChatInput.onSendRequested → doSendMessage() → ChatController.sendText()
+      （控制器负责本地落气泡 + 发 1013 + 用回执改状态，页面只管清输入框）
 */
 Item {
     id: page
@@ -82,6 +83,9 @@ Item {
 
     /// MYCHAT_AUTHAPPLY=accept|refuse 时挂起的「接受 / 拒绝」动作（"1" / "2"）
     property string pendingAuthAction: ""
+
+    /// MYCHAT_SENDMSG 挂起的自动发送：会话还没被打开时先记下来，等选好会话再发
+    property bool pendingAutoMessage: false
 
     /// 上一次批量查在线问的是哪几个 uid（拼成字符串）—— 同一批不重复问
     property string presenceKey: ""
@@ -196,6 +200,42 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
+
+            /*!
+                链路异常提示条（断线 / 收到畸形报文）。
+
+                以前这里是空的：ChatSocket 断连后只是静默丢弃后续请求，
+                界面上什么都不会变，用户只会以为"卡住了"；而原因（比如服务端回了
+                超长帧）只写进了日志。现在把 LoginController.linkError 挂出来，
+                正常时高度为 0，不占地方。
+            */
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 26 : 0
+                visible: LoginController.linkError.length > 0
+                color: Theme.surfaceMuted
+
+                // 左侧竖条用危险色，文字也用危险色 —— 比整条红底在深浅两套主题里都稳
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 3
+                    color: Theme.danger
+                }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: LoginController.linkError
+                    font: Theme.fontMonoSm
+                    color: Theme.danger
+                    elide: Text.ElideRight
+                }
+            }
 
             // 顶部：当前登录身份
             Rectangle {
@@ -752,10 +792,10 @@ Item {
                                         allowResize: false
 
                                         /*
-                                         * 只发文本：服务端 TextChatMsg* 只有编号没有处理器，
-                                         * 图片 / 文件更是没有上传通道 —— 所以「图片」「文件」两个
-                                         * 芯片先关掉，别做出"能选能发"的假象。
-                                         * 将来有了上传接口，把这两行删掉即可，组件自带系统文件选择框。
+                                         * 只发文本：图片 / 文件 / 表情包在协议里虽有 type 值
+                                         * （2/3/4），但编码方式（URL、文件 ID）服务端未约定、
+                                         * 也没有上传通道 —— 所以两个芯片先关掉，别做出
+                                         * "能选能发"的假象。将来有了上传接口再打开。
                                          */
                                         allowImage: false
                                         allowFile: false
@@ -791,12 +831,13 @@ Item {
                                         }
                                     }
 
-                                    // 提示行：页面临时提示 > 控制器提示 > 常驻"仅本地"说明
+                                    // 提示行：页面临时提示 > 控制器提示 > 常驻快捷键说明
+                                    // （控制器提示现在承载"发送失败：<原因>"这类结果）
                                     Text {
                                         width: parent.width
                                         text: page.composerNotice.length > 0 ? page.composerNotice
                                             : (ChatController.tip.length > 0 ? ChatController.tip
-                                                : "服务端尚未实现文本消息（TextChatMsg*）：发送只在本机回显")
+                                                : "Enter 发送 · Shift+Enter 换行")
                                         font: Theme.fontMonoSm
                                         color: page.composerNotice.length > 0 || ChatController.tipIsError
                                             ? Theme.danger : Theme.muted
@@ -1365,10 +1406,18 @@ Item {
         故意调 chatInput.submit() 而不是 page.doSendMessage()：submit() 正是按
         Enter / 点「发送」时组件内部走的那一步（判空、判超长 → 发 sendRequested），
         这样自检才连"信号接上了没有"一起验掉。
+
+        ⚠ 好友列表（1020/1021）回包比页面开屏晚，所以第一次调用时很可能还没有
+          活动会话。这种情况下挂起，等会话被自动打开后再补发（见下面的 Connections）。
     */
     function sendAutoMessage() {
-        if (app.autoMessage.length === 0 || !ChatController.hasActiveConversation)
+        if (app.autoMessage.length === 0)
             return
+        if (!ChatController.hasActiveConversation) {
+            page.pendingAutoMessage = true
+            return
+        }
+        page.pendingAutoMessage = false
         chatInput.text = app.autoMessage
         chatInput.submit()
     }
@@ -1500,7 +1549,7 @@ Item {
              * QML 侧当作模型重置 —— ListView 会把内容位置甩回顶部，所以这时
              * 判断"用户是不是本来就在底部"已经晚了。
              *
-             * ⚠ 等以后真接了收消息（服务端文本消息还是空的），这里要改成
+             * ⚠ 等以后真接了收消息（1022 现在只告诉"有新消息"、不带内容），这里要改成
              *   "人在底部才跟、不在就攒未读"，配一个「有新消息」悬浮按钮，
              *   否则用户翻历史时会被新消息拽走。
              */
@@ -1515,6 +1564,10 @@ Item {
             // 换会话一律从最新的看起
             messageView.followTail = true
             Qt.callLater(messageView.scrollToTail)
+
+            // MYCHAT_SENDMSG：开屏时列表还是空的，自动发送只能等会话开出来再补
+            if (page.pendingAutoMessage)
+                Qt.callLater(page.sendAutoMessage)
         }
     }
 

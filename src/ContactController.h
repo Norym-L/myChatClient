@@ -20,8 +20,8 @@
  *   申请结果推送         NotifyAuthFriendReq（对方处理了我发出的申请）
  *   好友列表             SyncFriendListReq/Rsp（1020/1021，2026-10-17 服务端补齐）
  *
- * ⚠ 服务端仍然**没有**文本聊天消息（TextChatMsg* 只有编号没有处理器），
- *   所以「消息气泡」还是拿不到真实数据 —— 但会话列表现在可以由好友列表驱动了。
+ * ⚠ 文本消息（1013/1014）由 ChatController / ChatSocket 负责，与联系人域无关；
+ *   本类只管"有哪些好友"——会话列表就是好友列表的投影。
  *
  * QML 侧：
  *   ContactController.searchUser(keyword)

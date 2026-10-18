@@ -38,6 +38,15 @@ class LoginController : public QObject
     /// 当前登录昵称（未登录时为空串）
     Q_PROPERTY(QString name READ name NOTIFY userLabelChanged)
 
+    /**
+     * 最近一次链路异常的原因（空串 = 链路正常）。
+     *
+     * 聊天页据此显示一条提示条：连接断了以后 `ChatSocket` 只会静默丢弃后续请求，
+     * 界面上原来**什么提示都没有**，用户只会以为"卡住了"。
+     * 登录成功 / 主动退出时清空。
+     */
+    Q_PROPERTY(QString linkError READ linkError NOTIFY linkErrorChanged)
+
 public:
     explicit LoginController(QObject* parent = nullptr);
 
@@ -45,6 +54,7 @@ public:
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
     [[nodiscard]] bool busy() const { return m_busy; }
     [[nodiscard]] QString userLabel() const { return m_user_label; }
+    [[nodiscard]] QString linkError() const { return m_link_error; }
 
     /**
      * 当前 uid / 昵称，直接取自 SessionManager。
@@ -75,6 +85,7 @@ public:
     void tipIsErrorChanged();
     void busyChanged();
     void userLabelChanged();
+    void linkErrorChanged();
     /// 本地校验失败，field 为 "account" 或 "password"
     void validationFailed(const QString& field);
     /// 全链路登录成功（已与 ChatServer 完成握手）
@@ -91,6 +102,8 @@ private:
     /// 设置提示文案；is_error 决定 QML 里的显示颜色
     void setTip(const QString& text, bool is_error = false);
     void setBusy(bool busy);
+    /// 记录 / 清空链路异常原因（空串 = 正常）
+    void setLinkError(const QString& text);
 
     /// 统一的失败出口：设错误提示 + 结束忙碌态 + 发 loginFailed。
     /// 分开写三句很容易漏掉其中一句（漏了 loginFailed 就是调用方干等到超时）。
@@ -108,6 +121,8 @@ private:
     bool m_tip_is_error = false;
     bool m_busy = false;
     QString m_user_label;
+    /// 最近一次链路异常原因；空串表示链路正常
+    QString m_link_error;
 
     // HTTP 登录响应拿到、随后用于 TCP 登录帧的凭据
     std::uint64_t m_uid = 0;

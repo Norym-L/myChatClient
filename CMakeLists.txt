@@ -184,13 +184,23 @@ qt_add_executable(qtClientSocketTimeoutTest
 
 target_link_libraries(qtClientSocketTimeoutTest PRIVATE qtclient_core)
 
-# 这四个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
+# ── 消息发送自检（自带假 ChatServer，不需要真实服务端）────────────────
+# 验证 1013 请求体的字段/类型、1014 成功与 1020 失败、串行发送、1022 推送、
+# 以及"服务端一句都不回"时的超时收尾。真实服务端的回包信息量太少，测不出这些。
+qt_add_executable(qtClientChatMsgTest
+        tests/chatmessageflow.cpp
+)
+
+target_link_libraries(qtClientChatMsgTest PRIVATE qtclient_core)
+
+# 这几个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientRegisterTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientResetTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientContactTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientSocketTimeoutTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientChatMsgTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

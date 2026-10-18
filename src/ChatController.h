@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -8,27 +9,26 @@
 /**
  * ChatController —— 会话 / 消息控制器（QML 与 core 之间的唯一入口）
  *
- * ⚠ 服务端**没有**文本消息：
- *     · `TextChatMsgReq/Rsp`(1013/1014) 与 `NotifyTextChatMsgReq`(1015) 在 const.h 里
- *       有编号，但 ChatServer 没注册处理器 —— 发了也是石沉大海。
- *   但好友列表（1020/1021）已经有了 → **会话列表由好友列表驱动**（见 syncFriends）：
- *   每个好友就是一个会话入口，历史消息为空（点开显示"暂无消息"）。
- *   消息气泡的演示数据只剩 `MYCHAT_DEMO=1` 时才注入（见 seedDemoData），
- *   平时界面上不会再出现假数据。
+ * 服务端现状（`GateServer/docs/api-chat.md`，2026-10-18）：
+ *    · **发消息**：1013 请求 / 1014 回执 —— 已实现；
+ *    · **新消息通知**：1022 推送 —— 已实现，但**推送体不含内容**；
+ *    · **消息拉取 / 历史记录**：**未实现**（没有对应 message_id）。
+ *   所以：发出去的消息能看到状态（发送中 / 已发送 / 失败），
+ *   但**收不到别人的消息内容**，每个会话的历史依然是空的。
  *
- * ── 与服务器的接口（服务端补齐后按这里接，改动量很小）──────────────────
- *   发消息   sendText() → 本地追加（state = "local"）→ emit textMessageOutgoing(peerUid, text)
- *           接线点：ChatSocket 加 sendTextMessage() 发 1013；收到 1014 成功回包时
- *           调用 markMessageState(peerUid, msgId, "sent")，失败改成 "failed"。
- *   收消息   ChatSocket 收到 1015 后调用 appendIncoming(peerUid, text, time)
- *           —— 会顺带把会话置顶、未读 +1。
- *   会话列表 好友列表 → ContactController.friendList → 本类 syncFriends()（main.cpp 里接线）。
- *   历史消息 服务端没有"拉历史"接口，每个会话的初始消息是空的。
+ * ── 发送链路 ──────────────────────────────────────────────────────
+ *   QML: sendText(text)
+ *     → 本地先落一条气泡（state = "sending"），用本地消息 id 生成 msg_id（"c-<id>"）
+ *     → ChatSocket::sendTextMessage(msgId, toUid, body)（1013）
+ *     → 1014 回显 msg_id → ChatSocket::textMessageResult(ok, error, msgId, ...)
+ *     → 按 msgId 精确改那条气泡的状态（sent / failed）
+ *   msg_id 是服务端唯一回显的字段，也是**唯一**能把回执对回某条气泡的依据；
+ *   别在别处自己拼 msg_id 发 1013，否则本类的状态会留在「发送中」。
  *
  * QML 侧：
  *   ChatController.openConversation(uid, name) / sendText(text) / markRead(uid)
  *   读 conversations / messages / activePeerUid / activePeerName /
- *      hasActiveConversation / activePeerIsDemo / serverSupportsText / tip / tipIsError
+ *      hasActiveConversation / activePeerIsDemo / tip / tipIsError
  */
 class ChatController : public QObject
 {
@@ -42,7 +42,8 @@ class ChatController : public QObject
     Q_PROPERTY(int conversationCount READ conversationCount NOTIFY conversationsChanged)
 
     /// 当前会话的消息，每项 QVariantMap：id / fromSelf / text / time / state
-    /// state：demo（演示数据）/ local（只在本机）/ sent / failed（后两者待服务端实现后使用）
+    /// state：demo（演示数据）/ sending（已发出、等回执）/ sent（服务端已接收）/
+    ///        failed（发送失败）/ local（演示会话里的本机回显）
     Q_PROPERTY(QVariantList messages READ messages NOTIFY messagesChanged)
 
     Q_PROPERTY(bool hasActiveConversation READ hasActiveConversation NOTIFY activeConversationChanged)
@@ -50,10 +51,6 @@ class ChatController : public QObject
     Q_PROPERTY(QString activePeerName READ activePeerName NOTIFY activeConversationChanged)
     /// 当前会话是不是演示数据（MYCHAT_DEMO=1 造出来的那条）—— 界面据此决定要不要挂 DEMO 标签
     Q_PROPERTY(bool activePeerIsDemo READ activePeerIsDemo NOTIFY activeConversationChanged)
-
-    /// 服务端是否已支持文本消息。现在恒为 false —— 界面据此显示"仅本地"提示。
-    /// 服务端接好后把这里改成从能力协商/配置读取，UI 不用动。
-    Q_PROPERTY(bool serverSupportsText READ serverSupportsText CONSTANT)
 
     Q_PROPERTY(QString tip READ tip NOTIFY tipChanged)
     Q_PROPERTY(bool tipIsError READ tipIsError NOTIFY tipIsErrorChanged)
@@ -69,8 +66,6 @@ public:
     [[nodiscard]] QString activePeerUid() const { return m_active_uid; }
     [[nodiscard]] QString activePeerName() const { return m_active_name; }
     [[nodiscard]] bool activePeerIsDemo() const { return m_active_is_demo; }
-
-    [[nodiscard]] bool serverSupportsText() const { return false; }
 
     [[nodiscard]] QString tip() const { return m_tip; }
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
@@ -94,9 +89,10 @@ public:
     Q_INVOKABLE void closeConversation();
 
     /**
-     * 发一条文本。服务端未支持时只做本地回显，并给出明确提示。
+     * 发一条文本（走真实链路：1013 → 1014）。
      *
-     * @return true 表示已经追加到本地（界面可以清空输入框）；
+     * @return true 表示已经落了一条气泡（界面可以清空输入框），
+     *         此时投递结果可能是 sending → sent / failed，看 messages 里的 state；
      *         false 表示没发 —— 没有会话 / 空串 / 超长，QML 那边不要清空用户输入。
      */
     Q_INVOKABLE bool sendText(const QString& text);
@@ -105,13 +101,15 @@ public:
     Q_INVOKABLE void markRead(const QString& peerUid);
 
     /**
-     * 收到别人发来的消息（服务端 NotifyTextChatMsgReq 的落点，**待接**）。
+     * 收到别人发来的消息内容（**目前没有调用方**）。
      *
-     * 现在没有调用方 —— 预留着，接上以后：会话置顶、未读 +1、当前会话里直接追加。
+     * 服务端 1022 推送不带内容、也没有拉取接口，所以"真正收到一条消息"这件事
+     * 现在根本无从触发。等拉取接口（提案 1023/1024）落地后接到这里：
+     * 会话置顶、未读 +1、当前会话里直接追加。
      */
     void appendIncoming(const QString& peerUid, const QString& text, const QString& time);
 
-    /// 改某条消息的投递状态（sent / failed）。服务端回包后调用。
+    /// 改某条消息的投递状态（sending / sent / failed）
     void markMessageState(const QString& peerUid, int messageId, const QString& state);
 
     signals:
@@ -122,17 +120,18 @@ public:
     void tipChanged();
     void tipIsErrorChanged();
 
-    /// 有消息要发出去。**服务端接口的接线点**：接上 TextChatMsgReq(1013) 后转发即可。
-    void textMessageOutgoing(const QString& peerUid, const QString& text);
-
 private:
+    /// 1013 的结果（由 ChatSocket 的 textMessageResult 转入；回执按 msg_id 认领）
+    void onTextMessageResult(bool ok, int error, const QString& msgId,
+                             const QString& toUid, const QString& body);
+
     void setTip(const QString& text, bool is_error = false);
 
     /// 把会话置顶并更新摘要（真实链路里收到消息也该走这一步）
     void touchConversation(const QString& peerUid, const QString& last_text, const QString& last_time);
-    /// 往某个会话追加一条消息
-    void appendMessage(const QString& peerUid, bool from_self, const QString& text,
-                       const QString& time, const QString& state);
+    /// 往某个会话追加一条消息，返回它的本地 id（用于后续改状态）
+    int appendMessage(const QString& peerUid, bool from_self, const QString& text,
+                      const QString& time, const QString& state);
     /// 未读数 -1 之类的小改动，找不到就返回
     [[nodiscard]] int indexOf(const QString& peerUid) const;
 
@@ -146,6 +145,20 @@ private:
     QString m_active_name;
     /// 当前会话是不是演示数据（openConversation 时按会话表里的 demo 字段算）
     bool m_active_is_demo = false;
+
+    /**
+     * 已经发出去、还没等到回执的消息，**按 msg_id 索引**。
+     *
+     * 1014 会把请求里的 msg_id 原样回显，所以不用再赌发送顺序：
+     * 回执里带哪个 id，就改哪个气泡。断线时用它把所有「发送中」标红。
+     */
+    struct PendingSend
+    {
+        QString peer_uid;
+        int message_id = 0; // 本地气泡 id（不是服务端消息编号）
+    };
+
+    QHash<QString, PendingSend> m_sending;
 
     int m_next_message_id = 1;
     QString m_tip;

@@ -114,6 +114,9 @@ void LoginController::logout()
     m_user_label.clear();
     emit userLabelChanged();
 
+    // 主动退出不是"链路异常"，提示条不该留着
+    setLinkError(QString());
+
     MCLOG_INFO() << "[login] 已退出登录";
 }
 
@@ -201,6 +204,8 @@ void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QStrin
 
     MCLOG_INFO() << "[login] 聊天服登录成功:" << m_user_label;
 
+    // 重新连上以后"最近一次链路异常"就过期了，别让提示条继续挂着
+    setLinkError(QString());
     setBusy(false);
     setTip(tr("登录成功"));
     emit loginSucceeded();
@@ -215,7 +220,23 @@ void LoginController::onChatLoginFailed(const int error)
 void LoginController::onLinkError(const QString& reason)
 {
     MCLOG_WARN() << "[login] 链路异常:" << reason;
-    fail(mychat::protocol::errorToTip(static_cast<int>(ErrorCode::NetworkError)));
+
+    // 把原因原样带上，别替换成一句"网络连接异常"：断连有可能是服务端回了畸形帧、
+    // 也可能是对端主动关连接，抹平之后用户和日志都只剩"网络问题"，排查方向直接跑偏。
+    setLinkError(reason.isEmpty()
+                     ? mychat::protocol::errorToTip(static_cast<int>(ErrorCode::NetworkError))
+                     : reason);
+
+    fail(m_link_error);
+}
+
+void LoginController::setLinkError(const QString& text)
+{
+    if (m_link_error == text)
+        return;
+
+    m_link_error = text;
+    emit linkErrorChanged();
 }
 
 void LoginController::fail(const QString& reason)
