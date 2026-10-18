@@ -17,6 +17,7 @@ cmake-build-*/
 # CMakeUserPresets.json 是 IDE 自动生成的本地配置，环境相关，不进库
 .idea/
 .vs/
+.vscode/
 .cache/
 compile_commands.json
 CMakeUserPresets.json
