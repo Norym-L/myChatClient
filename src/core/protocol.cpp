@@ -316,4 +316,61 @@ namespace mychat::protocol
         qWarning() << "[protocol] 在线状态回包里的 online 取值无法识别:" << online;
         return std::nullopt;
     }
+
+    QList<ChatMessage> parseChatMessages(const QJsonObject& object)
+    {
+        QList<ChatMessage> list;
+
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::JsonError));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qWarning() << "[protocol] 拉取消息失败, error =" << error;
+            return list;
+        }
+
+        /*
+         * ⚠ `count` 是**字符串**（服务端 `std::to_string(messages.size())`），
+         *   与 1021 的 count 一致；文档 §10.1 表格里写成 number 是错的。
+         *   这里只当日志：真正相信的是 msgs 数组长度（群聊消息会被服务端跳过，
+         *   count 可能大于实际条数）。
+         */
+        qDebug() << "[protocol] 拉取回包 count 字段:" << object.value(QStringLiteral("count"));
+        // 没有消息时服务端**不写** msgs 字段（不是空数组）→ toArray() 得到空数组，正好走空态
+        const QJsonArray items = object.value(QStringLiteral("msgs")).toArray();
+        list.reserve(items.size());
+
+        for (const QJsonValue& item: items)
+        {
+            if (!item.isObject())
+                continue;
+
+            const QJsonObject entry = item.toObject();
+            ChatMessage message;
+            message.id = entry.value(QStringLiteral("id")).toString();
+            message.fromUid = parseUid(entry.value(QStringLiteral("from_uid"))).value_or(0);
+            message.body = entry.value(QStringLiteral("body")).toString();
+
+            /*
+             * `type` 文档写的是 number，但服务端的历史习惯是把数字 to_string 之后再发
+             * （1013 请求里就是字符串）。两种都吃掉，别因为它换了形态就丢掉整条消息。
+             */
+            const QJsonValue type_value = entry.value(QStringLiteral("type"));
+            message.type = type_value.isString()
+                               ? type_value.toString().toInt()
+                               : type_value.toInt();
+
+            if (!message.valid())
+            {
+                // 缺 id（没法 ACK）或缺 from_uid（不知道是谁发的）：留着也没用，
+                // 而且 ACK 不了会让它在服务端 PEL 里躺着 —— 至少要留一条日志。
+                qWarning() << "[protocol] 拉取到的消息字段不完整，已跳过:" << entry;
+                continue;
+            }
+
+            list.append(message);
+        }
+
+        return list;
+    }
 } // namespace mychat::protocol

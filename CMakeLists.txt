@@ -193,6 +193,15 @@ qt_add_executable(qtClientChatMsgTest
 
 target_link_libraries(qtClientChatMsgTest PRIVATE qtclient_core)
 
+# ── 消息拉取自检（自带假 ChatServer）──────────────────────────────────
+# 验证 1022 → 1023（节流 / count 上限）→ 1024 落库（会话 / 未读）→ 1025 确认，
+# 以及"拉满一批自动续拉"。这条链路的正确性在策略上，真实服务端测不出来。
+qt_add_executable(qtClientChatPullTest
+        tests/chatpullflow.cpp
+)
+
+target_link_libraries(qtClientChatPullTest PRIVATE qtclient_core)
+
 # 这几个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
@@ -201,6 +210,7 @@ if (WIN32)
     set_target_properties(qtClientContactTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientSocketTimeoutTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatMsgTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientChatPullTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

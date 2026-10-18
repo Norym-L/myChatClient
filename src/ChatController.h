@@ -3,18 +3,35 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QQueue>
+#include <QSet>
 #include <QString>
 #include <QVariantList>
+
+#include "protocol.h"
+
+class QTimer;
 
 /**
  * ChatController —— 会话 / 消息控制器（QML 与 core 之间的唯一入口）
  *
- * 服务端现状（`GateServer/docs/api-chat.md`，2026-10-18）：
- *    · **发消息**：1013 请求 / 1014 回执 —— 已实现；
- *    · **新消息通知**：1022 推送 —— 已实现，但**推送体不含内容**；
- *    · **消息拉取 / 历史记录**：**未实现**（没有对应 message_id）。
- *   所以：发出去的消息能看到状态（发送中 / 已发送 / 失败），
- *   但**收不到别人的消息内容**，每个会话的历史依然是空的。
+ * 服务端现状（`GateServer/docs/api-chat.md` + 2026-10-18 晚的三个提交）：
+ *   发送 1013/1014、推送 1022、拉取 1023/1024（**PEL 优先重投**）、确认 1025/1026
+ *   （`XACKDEL`）都已实现；**所有 handler 都会校验登录态**（未登录回 1011）。
+ *   历史记录与群聊未实现。
+ *
+ * ── 收消息链路（先拉后确认，at-least-once）─────────────────────────
+ *   1022 推送（只有"你有新消息"，不含内容）
+ *     → 本地攒计数；攒够 10 条或 2s 内没新推送 → 发 1023（count = min(计数, 10)）
+ *     → 1024 返回 ≤10 条（**可能包含上次没确认的旧消息**）
+ *     → 按 `msgs[].id` **去重**后落进对应会话（置顶 / 未读 +1）
+ *     → 发 1025 确认（一次 ≤10 个 id）→ 服务端 XACKDEL 删除
+ *   登录成功后也会主动拉一次：离线期间的消息**不会**补推 1022，
+ *   而且 PEL 里上次没确认的也会在这一步被重投回来。
+ *
+ *   ⚠ 服务端先读 PEL（已投递未确认），PEL 为空才读新消息。未确认的消息会
+ *     反复重投，所以**去重是必须的**（`m_seen_message_ids`）；确认失败也不要紧，
+ *     下一轮会把它们再送回来。
  *
  * ── 发送链路 ──────────────────────────────────────────────────────
  *   QML: sendText(text)
@@ -22,8 +39,6 @@
  *     → ChatSocket::sendTextMessage(msgId, toUid, body)（1013）
  *     → 1014 回显 msg_id → ChatSocket::textMessageResult(ok, error, msgId, ...)
  *     → 按 msgId 精确改那条气泡的状态（sent / failed）
- *   msg_id 是服务端唯一回显的字段，也是**唯一**能把回执对回某条气泡的依据；
- *   别在别处自己拼 msg_id 发 1013，否则本类的状态会留在「发送中」。
  *
  * QML 侧：
  *   ChatController.openConversation(uid, name) / sendText(text) / markRead(uid)
@@ -101,11 +116,11 @@ public:
     Q_INVOKABLE void markRead(const QString& peerUid);
 
     /**
-     * 收到别人发来的消息内容（**目前没有调用方**）。
+     * 收到别人发来的**单条**消息内容。
      *
-     * 服务端 1022 推送不带内容、也没有拉取接口，所以"真正收到一条消息"这件事
-     * 现在根本无从触发。等拉取接口（提案 1023/1024）落地后接到这里：
-     * 会话置顶、未读 +1、当前会话里直接追加。
+     * 现在收消息走的是 `onChatMessages()` 的**批量**路径（一次拉最多 10 条，
+     * 只发一轮信号）；这个单条口子留作外部注入 / 调试，业务链路里没有调用方。
+     * 会顺带把会话置顶、未读 +1。
      */
     void appendIncoming(const QString& peerUid, const QString& text, const QString& time);
 
@@ -125,7 +140,29 @@ private:
     void onTextMessageResult(bool ok, int error, const QString& msgId,
                              const QString& toUid, const QString& body);
 
+    /// 1024 的结果：把消息落进会话、发确认、视积压情况决定要不要继续拉
+    void onChatMessages(const QList<mychat::protocol::ChatMessage>& messages, int error);
+
+    /**
+     * 发一次 1023。
+     *
+     * 条数取 `min(待拉取计数, 10)`；计数为 0（登录后主动拉）就拉满 10 条。
+     * 若已有一个拉取在飞，只记下"还想再拉"（\l m_pull_again），等回包后补。
+     */
+    void requestPull();
+
+    /**
+     * 记下一条已经落过库的消息 id。
+     *
+     * @return false = 重复（PEL 重投），这条**不该再显示**；但它仍然要被 ACK，
+     *         否则服务端会一直把它重投回来。
+     */
+    bool markMessageSeen(const QString& id);
+
     void setTip(const QString& text, bool is_error = false);
+
+    /// 会话不存在就建一条空会话（收到陌生人消息时用；服务端不校验好友关系）
+    void ensureConversation(const QString& peerUid);
 
     /// 把会话置顶并更新摘要（真实链路里收到消息也该走这一步）
     void touchConversation(const QString& peerUid, const QString& last_text, const QString& last_time);
@@ -159,6 +196,33 @@ private:
     };
 
     QHash<QString, PendingSend> m_sending;
+
+    /*
+     * 拉取节流。
+     *
+     * 1022 每条都会来一次，但拉取是"批量"的（单次 ≤10）—— 每来一条就拉一次
+     * 等于把服务端当轮询机用。规则照文档 §3.1：
+     *   · 攒够 10 条（> 10）→ 立刻拉；
+     *   · 否则等 2s，期间没有新推送就拉。
+     */
+    QTimer* m_pull_timer = nullptr;
+    /// 距离上次拉取，又收到了多少条 1022
+    int m_pull_hint = 0;
+    /// 拉取在飞时又想来一次 → 等回包后补，别丢
+    bool m_pull_again = false;
+    /// 最近一次拉取请求的条数：回来的条数达到它说明只拉了一半，还要继续拉
+    int m_pull_count = 0;
+    /// 确认连续失败次数（消息会留在 PEL 被重投，重试几次就够了，别无限空转）
+    int m_ack_retry = 0;
+
+    /*
+     * 去重表：服务端 PEL 优先重投（at-least-once），同一条消息可能被拉到多次。
+     * 只记内存、**不落盘** —— 进程重启后 PEL 里还没确认的消息本来就该重新显示，
+     * 那时候"重复"其实是"找回"。上限 2000 条（一个会话窗口的量级），
+     * 超了淘汰最老的 id；真出现更老的重投，最多多显示一条，不会乱。
+     */
+    QSet<QString> m_seen_message_ids;
+    QQueue<QString> m_seen_message_order;
 
     int m_next_message_id = 1;
     QString m_tip;

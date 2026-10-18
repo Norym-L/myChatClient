@@ -1,9 +1,12 @@
 #include "ChatController.h"
 
+#include <QDateTime>
 #include <QTime>
+#include <QTimer>
 #include <QVariantMap>
 #include <QtGlobal>
 
+#include <algorithm>
 #include <utility>
 
 #include "ChatSocket.h"
@@ -31,9 +34,51 @@ constexpr int kMaxTextLength = 500;
  */
 constexpr int kMaxBodyBytes = mychat::protocol::MAX_BODY_LEN - 128;
 
+/**
+ * 收到 1022 后等多久再拉（毫秒）。
+ *
+ * 文档 §3.1 的建议是 2s：一条一条拉太浪费，等一小会儿正好把连续几条合并成一批。
+ * 攒够 10 条就不等了，直接拉（见 messageReceived 的接线）。
+ */
+constexpr int kPullDebounceMs = 2000;
+
+/// 拉满一批（10 条）后，隔多久再拉下一批 —— 说明可能还有积压，但别空转
+constexpr int kPullBacklogDelayMs = 200;
+
+/// 拉取失败（超时 / 服务端错误）后隔多久重试：消息还在服务端，重试是安全的
+constexpr int kPullRetryDelayMs = 2000;
+
+/// 确认失败后隔多久再拉一次（PEL 会把那批消息重投回来，去重后重新确认）
+constexpr int kAckRetryDelayMs = 1000;
+/// 确认连续失败这么多次就不再自动重试（避免对着一个不健康的服务端空转）
+constexpr int kAckRetryLimit = 3;
+
+/// 去重表上限（条）：一个会话窗口的量级，够用且不会无限长
+constexpr int kSeenMessageLimit = 2000;
+
 QString nowText()
 {
     return QTime::currentTime().toString(QStringLiteral("HH:mm"));
+}
+
+/**
+ * 从 Redis Stream ID（`<毫秒时间戳>-<序号>`）里取一个 HH:mm 显示时间。
+ *
+ * 服务端不回消息时间，但消息编号本身就是毫秒时间戳 —— 比"拉到的时间"更准
+ * （离线消息可能是几天前的）。解析不出来就退回当前时间。
+ */
+QString timeFromStreamId(const QString& id)
+{
+    const qsizetype dash = id.indexOf(QLatin1Char('-'));
+    if (dash <= 0)
+        return nowText();
+
+    bool be_valid = false;
+    const qint64 msecs = id.left(dash).toLongLong(&be_valid);
+    if (!be_valid || msecs <= 0)
+        return nowText();
+
+    return QDateTime::fromMSecsSinceEpoch(msecs).toString(QStringLiteral("HH:mm"));
 }
 
 QVariantMap makeMessage(const int id, const bool from_self, const QString& text,
@@ -62,25 +107,91 @@ ChatController::ChatController(QObject* parent)
 
     auto& socket = mychat::ChatSocket::instance();
 
-    // 1013 的结果：按 FIFO 认领（1014 不回消息编号，这是唯一的配对方式）
+    // 1013 的结果：按 msg_id 认领（1014 会原样回显它）
     connect(&socket, &mychat::ChatSocket::textMessageResult,
             this, &ChatController::onTextMessageResult);
 
+    // 1024 的结果：落消息 + 确认 + 决定要不要继续拉
+    connect(&socket, &mychat::ChatSocket::chatMessagesReceived,
+            this, &ChatController::onChatMessages);
+
     /*
-     * 1022 推送：只知道"有新消息"，**拿不到内容**（服务端没有拉取接口）。
-     * 这里只给一句如实的提示 —— 不要凭空造一个气泡，那是在编数据。
+     * 1022 推送只说明"有新消息"，内容要自己拉（1023）。
+     *
+     * 节流规则见 api-chat.md §3.1：攒够 10 条立刻拉，否则 2s 后拉。
+     * 计时器**不**因为每条推送重启 —— 持续有消息时那样会一直推后，永远拉不成。
      */
+    m_pull_timer = new QTimer(this);
+    m_pull_timer->setSingleShot(true);
+    connect(m_pull_timer, &QTimer::timeout, this, &ChatController::requestPull);
+
     connect(&socket, &mychat::ChatSocket::messageReceived, this, [this]()
                 {
-                    setTip(QStringLiteral("对方发来新消息；服务端暂未提供消息拉取接口，看不到内容"));
+                    ++m_pull_hint;
+
+                    if (m_pull_hint > mychat::protocol::MAX_CHAT_MESSAGES_PER_BATCH)
+                    {
+                        requestPull();
+                        return;
+                    }
+
+                    if (!m_pull_timer->isActive())
+                        m_pull_timer->start(kPullDebounceMs);
+                });
+
+    /*
+     * 登录成功后主动拉一次：离线期间的消息**不会**补推 1022，
+     * 不主动拉就得等下一条消息来才顺带看到（甚至永远看不到）。
+     * 顺便把去重表清空 —— 新会话、新进程，PEL 里没确认的消息本来就该重新显示。
+     */
+    connect(&socket, &mychat::ChatSocket::loginSucceeded, this,
+            [this](std::uint64_t, const QString&, const QString&)
+                {
+                    m_pull_hint = 0;
+                    m_pull_again = false;
+                    m_pull_count = 0;
+                    m_ack_retry = 0;
+                    m_seen_message_ids.clear();
+                    m_seen_message_order.clear();
+                    requestPull();
+                });
+
+    /*
+     * 确认失败不必慌：消息还在服务端 PEL 里，会随下一轮拉取重投回来。
+     * 隔一秒再拉一次（去重会挡掉重复气泡），连续失败几次就停手。
+     */
+    connect(&socket, &mychat::ChatSocket::chatMessagesAcked, this,
+            [this](const bool ok, const int error)
+                {
+                    if (ok)
+                    {
+                        m_ack_retry = 0;
+                        return;
+                    }
+
+                    qWarning() << "[chat] 确认消息失败, error =" << error
+                        << "，准备重新拉取（PEL 会重投）";
+
+                    if (m_ack_retry >= kAckRetryLimit)
+                        return;
+
+                    ++m_ack_retry;
+                    QTimer::singleShot(kAckRetryDelayMs, this, &ChatController::requestPull);
                 });
 
     /*
      * 断线：在飞的消息不会再有回执（ChatSocket 断线时直接清空队列，不补报超时），
      * 所以必须在这里把它们标红并销账，否则界面上会永远停在「发送中」。
+     * 拉取节流状态也一起复位，重连（重新登录）后从 0 开始。
      */
     connect(&socket, &mychat::ChatSocket::linkError, this, [this](const QString&)
                 {
+                    if (m_pull_timer != nullptr)
+                        m_pull_timer->stop();
+                    m_pull_hint = 0;
+                    m_pull_again = false;
+                    m_pull_count = 0;
+
                     if (m_sending.isEmpty())
                         return;
 
@@ -435,6 +546,187 @@ void ChatController::onTextMessageResult(const bool ok, const int error, const Q
     setTip(QStringLiteral("消息发送失败：%1").arg(mychat::protocol::errorToTip(error)), true);
 }
 
+void ChatController::requestPull()
+{
+    m_pull_timer->stop();
+
+    auto& socket = mychat::ChatSocket::instance();
+    if (!socket.isLoggedIn())
+        return; // 登录成功后会自动拉一次，这里不用嚷嚷
+
+    /*
+     * 条数 = min(待拉取计数, 10)：
+     *   · 计数为 0 是"登录后主动拉"或"上批拉满了"→ 直接拉满；
+     *   · 计数只有 2 就只拉 2 条，没必要多问。
+     */
+    const int count = m_pull_hint > 0
+                          ? std::min(m_pull_hint, mychat::protocol::MAX_CHAT_MESSAGES_PER_BATCH)
+                          : mychat::protocol::MAX_CHAT_MESSAGES_PER_BATCH;
+
+    if (!socket.syncChatMessages(count))
+    {
+        // 已有一个拉取在飞：记下意图，等那一批回来再补。**不能丢** ——
+        // 丢了就意味着"有新消息但永远不拉"，界面上什么都看不到。
+        m_pull_again = true;
+        return;
+    }
+
+    m_pull_hint = 0;
+    // 记下这次要了几条：回来的条数 == 它，说明服务端那边可能还有（PEL 或新消息）
+    m_pull_count = count;
+}
+
+bool ChatController::markMessageSeen(const QString& id)
+{
+    if (id.isEmpty() || m_seen_message_ids.contains(id))
+        return false;
+
+    m_seen_message_ids.insert(id);
+    m_seen_message_order.enqueue(id);
+
+    while (m_seen_message_order.size() > kSeenMessageLimit)
+    {
+        const QString oldest = m_seen_message_order.dequeue();
+        m_seen_message_ids.remove(oldest);
+    }
+    return true;
+}
+
+void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& messages,
+                                    const int error)
+{
+    if (messages.isEmpty())
+    {
+        if (error != kSuccess)
+        {
+            // 消息还在服务端（没被 ACK 的不丢），过两秒再试一次，比干等强
+            qWarning() << "[chat] 拉取消息失败, error =" << error << "，2s 后重试";
+            QTimer::singleShot(kPullRetryDelayMs, this, &ChatController::requestPull);
+            return;
+        }
+
+        if (m_pull_again || m_pull_hint > 0)
+        {
+            m_pull_again = false;
+            requestPull();
+        }
+        return;
+    }
+
+    /*
+     * 逐条落进会话：
+     *   · **按 msgs[].id 去重** —— 服务端 PEL 优先重投，同一条会被拉到多次；
+     *   · 发送者没有会话就建一条（服务端不校验好友关系，理论上能收到陌生人的消息）；
+     *   · 时间从 Stream ID 的毫秒部分取 —— 服务端不回消息时间，离线消息可能是几天前的；
+     *   · 未读先按会话累计，最后一次性写回，避免每加一条就重建一次列表。
+     */
+    QStringList ids;
+    ids.reserve(messages.size());
+
+    QHash<QString, int> unread_delta;
+    bool active_got_message = false;
+    int skipped = 0;
+
+    for (const mychat::protocol::ChatMessage& message: messages)
+    {
+        // 重复的（PEL 重投）不落库，但**照样确认**，否则它会一直被重投
+        if (!markMessageSeen(message.id))
+        {
+            ++skipped;
+            ids.append(message.id);
+            continue;
+        }
+
+        const QString peer = QString::number(message.fromUid);
+        ensureConversation(peer);
+
+        const QString stamp = timeFromStreamId(message.id);
+
+        // 收到的消息状态用 "sent"：气泡组件对 sent 不挂任何小字（正常消息）
+        appendMessage(peer, false, message.body, stamp, QStringLiteral("sent"));
+        touchConversation(peer, message.body, stamp);
+
+        if (peer == m_active_uid)
+            active_got_message = true;
+        else
+            unread_delta[peer] += 1;
+
+        ids.append(message.id);
+    }
+
+    if (skipped > 0)
+        qInfo() << "[chat] 本批" << skipped << "条是 PEL 重投的旧消息，已去重";
+
+    for (auto it = unread_delta.cbegin(); it != unread_delta.cend(); ++it)
+    {
+        const int index = indexOf(it.key());
+        if (index < 0)
+            continue;
+
+        QVariantMap item = m_conversations.at(index).toMap();
+        item.insert(QStringLiteral("unread"), item.value(QStringLiteral("unread")).toInt() + it.value());
+        m_conversations[index] = item;
+    }
+
+    if (active_got_message)
+    {
+        // 人正开着这个会话：收到就算已读，不攒角标
+        markRead(m_active_uid);
+        emit messagesChanged();
+    }
+
+    emit conversationsChanged();
+
+    /*
+     * 确认（1025）：服务端 XACKDEL 之后这条才真正消失，否则下一轮 PEL 还会送回来。
+     * 重复的也要确认（上面已经放进 ids）。服务端单次上限 10 个，保险起见分批。
+     */
+    for (int offset = 0; offset < ids.size();
+         offset += mychat::protocol::MAX_CHAT_MESSAGES_PER_BATCH)
+    {
+        mychat::ChatSocket::instance().ackChatMessages(
+            ids.mid(offset, mychat::protocol::MAX_CHAT_MESSAGES_PER_BATCH));
+    }
+
+    /*
+     * 回来的条数达到这次要的条数 → 服务端那边（PEL 或新消息）可能还有：
+     * 隔一小会儿再拉，别空转也不要干等 2s。
+     * ⚠ 判据是"本次请求的 count"，不是硬编码 10 —— PEL 里可能只有 3 条，
+     *   拉了 3 条回来也该继续把下一批新消息拉走。
+     */
+    if (m_pull_count > 0 && messages.size() >= m_pull_count)
+    {
+        QTimer::singleShot(kPullBacklogDelayMs, this, &ChatController::requestPull);
+    }
+    else if (m_pull_again || m_pull_hint > 0)
+    {
+        m_pull_again = false;
+        requestPull();
+    }
+}
+
+void ChatController::ensureConversation(const QString& peerUid)
+{
+    if (peerUid.isEmpty() || indexOf(peerUid) >= 0)
+        return;
+
+    // 只可能是"陌生人发来消息"（服务端未校验好友关系）：先用 uid 占位，
+    // 等下次好友列表同步时再补昵称 / 备注
+    QVariantMap item;
+    item.insert(QStringLiteral("uid"), peerUid);
+    item.insert(QStringLiteral("name"), peerUid);
+    item.insert(QStringLiteral("nick"), QString());
+    item.insert(QStringLiteral("displayName"), peerUid);
+    item.insert(QStringLiteral("icon"), QString());
+    item.insert(QStringLiteral("desc"), QString());
+    item.insert(QStringLiteral("sex"), 2);
+    item.insert(QStringLiteral("lastText"), QString());
+    item.insert(QStringLiteral("lastTime"), QString());
+    item.insert(QStringLiteral("unread"), 0);
+    item.insert(QStringLiteral("demo"), false);
+    m_conversations.prepend(item);
+}
+
 void ChatController::appendIncoming(const QString& peerUid, const QString& text, const QString& time)
 {
     if (peerUid.isEmpty() || text.isEmpty())
@@ -443,22 +735,7 @@ void ChatController::appendIncoming(const QString& peerUid, const QString& text,
     const QString stamp = time.isEmpty() ? nowText() : time;
 
     // 会话不存在说明是个新联系人：先建一行，否则消息没地方落
-    if (indexOf(peerUid) < 0)
-    {
-        QVariantMap item;
-        item.insert(QStringLiteral("uid"), peerUid);
-        item.insert(QStringLiteral("name"), peerUid);
-        item.insert(QStringLiteral("nick"), QString());
-        item.insert(QStringLiteral("displayName"), peerUid);
-        item.insert(QStringLiteral("icon"), QString());
-        item.insert(QStringLiteral("desc"), QString());
-        item.insert(QStringLiteral("sex"), 2);
-        item.insert(QStringLiteral("lastText"), QString());
-        item.insert(QStringLiteral("lastTime"), QString());
-        item.insert(QStringLiteral("unread"), 0);
-        item.insert(QStringLiteral("demo"), false);
-        m_conversations.prepend(item);
-    }
+    ensureConversation(peerUid);
 
     appendMessage(peerUid, false, text, stamp, QStringLiteral("sent"));
     touchConversation(peerUid, text, stamp);

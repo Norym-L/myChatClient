@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonValue>
+#include <QList>
 #include <QString>
 
 #include <cstdint>
@@ -70,6 +71,10 @@ namespace mychat::protocol
         SyncFriendListReq,    // 1020
         SyncFriendListRsp,    // 1021
         NotifyReceiveMessage, // 1022 —— 服务端推送「你有新消息」，**不含内容**
+        SyncChatMessageReq,   // 1023 —— 拉取消息
+        SyncChatMessageRsp,   // 1024
+        AckChatMessageReq,    // 1025 —— 确认收到（服务端 XACK + XDEL）
+        AckChatMessageRsp,    // 1026
     };
 
     /**
@@ -97,6 +102,34 @@ namespace mychat::protocol
      * 再密就是白耗流量，再疏（比如 25 秒）就没有容错余量了。
      */
     inline constexpr int HEARTBEAT_INTERVAL_MS = 10000;
+
+    /**
+     * 一次拉取（1023）或一次确认（1025）的**条数上限**。
+     *
+     * 服务端硬编码 10：`count > 10` 或 `ids` 超过 10 个直接回 `1020`。
+     * 客户端的策略是"拉 10 条 → 确认这 10 条"，正好一批，不用分批。
+     */
+    inline constexpr int MAX_CHAT_MESSAGES_PER_BATCH = 10;
+
+    /**
+     * 拉取回包（1024）里的一条消息。
+     *
+     * 字段与服务端 `syncChatMessageHandler` 的序列化一致；`id` 是 Redis Stream
+     * 的编号（`<毫秒>-<序号>`），**确认（1025）时必须原样回传**。
+     */
+    struct ChatMessage
+    {
+        QString id;
+        std::uint64_t fromUid = 0;
+        int type = 1;
+        QString body;
+
+        [[nodiscard]] bool valid() const { return !id.isEmpty() && fromUid != 0; }
+    };
+
+    /// 拉取回包（1024）-> 消息列表；失败 / 空时返回空列表。
+    /// （没有消息时服务端**不出现** `msgs` 字段，不是空数组。）
+    [[nodiscard]] QList<ChatMessage> parseChatMessages(const QJsonObject& object);
 
     /// 客户端内部请求编号（HTTP 用），与 TCP 的 MessageId 各自独立
     enum class ReqId : std::uint16_t

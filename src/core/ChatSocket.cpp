@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -65,6 +66,14 @@ namespace mychat
                 return "SyncFriendListRsp";
             case protocol::MessageId::NotifyReceiveMessage:
                 return "NotifyReceiveMessage";
+            case protocol::MessageId::SyncChatMessageReq:
+                return "SyncChatMessageReq";
+            case protocol::MessageId::SyncChatMessageRsp:
+                return "SyncChatMessageRsp";
+            case protocol::MessageId::AckChatMessageReq:
+                return "AckChatMessageReq";
+            case protocol::MessageId::AckChatMessageRsp:
+                return "AckChatMessageRsp";
             }
             return "Unknown";
         }
@@ -410,6 +419,104 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         }
     }
 
+    bool ChatSocket::syncChatMessages(const int count)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            // 服务端不校验登录态，未登录会以 uid=0 去读一个不存在的消费组 —— 本地先挡
+            qWarning() << "[chat] 未登录或未连接，无法拉取消息";
+            return false;
+        }
+
+        if (m_pull_in_flight)
+        {
+            // 串行：1024 没有请求序号，并发拉取分不清哪批对哪发。
+            // 调用方（ChatController）会记下"还想再拉"，等这一批回来再补。
+            qDebug() << "[chat] 上一个拉取还没回包，本次跳过";
+            return false;
+        }
+
+        const int n = std::clamp(count, 1, protocol::MAX_CHAT_MESSAGES_PER_BATCH);
+
+        QJsonObject body;
+        body.insert(QStringLiteral("count"), QString::number(n)); // 服务端按字符串读
+
+        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageReq), body))
+            return false;
+
+        m_pull_in_flight = true;
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageRsp),
+                    [this]()
+                        {
+                            m_pull_in_flight = false;
+                            emit chatMessagesReceived(
+                                {}, static_cast<int>(protocol::ErrorCode::RequestTimeout));
+                        });
+        return true;
+    }
+
+    bool ChatSocket::ackChatMessages(const QStringList& ids)
+    {
+        if (ids.isEmpty())
+            return false;
+
+        if (ids.size() > protocol::MAX_CHAT_MESSAGES_PER_BATCH)
+        {
+            // 服务端 >10 直接回 1020。这里不替调用方切分 —— 切分意味着"确认了一半"，
+            // 调用方应该自己按批调（一次拉 10 条，正好一批）。
+            qWarning() << "[chat] 一次最多确认" << protocol::MAX_CHAT_MESSAGES_PER_BATCH
+                << "条，实际" << ids.size() << "条，已拒绝";
+            return false;
+        }
+
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法确认消息";
+            return false;
+        }
+
+        m_ack_queue.append(ids);
+        pumpAckQueue();
+        return true;
+    }
+
+    void ChatSocket::pumpAckQueue()
+    {
+        while (!m_ack_in_flight && !m_ack_queue.isEmpty())
+        {
+            const QStringList ids = m_ack_queue.takeFirst();
+
+            QJsonArray array;
+            for (const QString& id: ids)
+                array.append(id);
+
+            QJsonObject body;
+            body.insert(QStringLiteral("ids"), array); // 唯一的数组字段，别写成字符串
+
+            if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageReq), body))
+            {
+                emit chatMessagesAcked(false,
+                                       static_cast<int>(protocol::ErrorCode::NetworkError));
+                continue;
+            }
+
+            m_ack_in_flight = true;
+
+            expectReply(static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageReq),
+                        static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageRsp),
+                        [this]()
+                            {
+                                m_ack_in_flight = false;
+                                emit chatMessagesAcked(
+                                    false, static_cast<int>(protocol::ErrorCode::RequestTimeout));
+                                pumpAckQueue();
+                            });
+            return;
+        }
+    }
+
     bool ChatSocket::authFriendRequest(const std::uint64_t requestId, const int state)
     {
         // 服务端只认 1（接受）/ 2（拒绝），其它值会被顶回 1020。本地先挡一层，
@@ -557,6 +664,11 @@ void ChatSocket::reset()
         m_text_queue.clear();
         m_text_in_flight.reset();
 
+        // 拉取 / 确认的排队也一并作废：换连接后消费组是新的，旧批次没有意义
+        m_pull_in_flight = false;
+        m_ack_queue.clear();
+        m_ack_in_flight = false;
+
         if (m_socket->state() != QAbstractSocket::UnconnectedState)
             m_socket->abort();
     }
@@ -583,6 +695,10 @@ void ChatSocket::reset()
         // 排队中的消息跟着连接一起作废（重连后不该把上一轮的旧消息偷偷补发出去）
         m_text_queue.clear();
         m_text_in_flight.reset();
+        // 拉取 / 确认同理：断线时那批消息的服务端状态已经无法保证，别在重连后补 ACK
+        m_pull_in_flight = false;
+        m_ack_queue.clear();
+        m_ack_in_flight = false;
 
         const bool was_logged_in = m_logged_in;
         m_logged_in = false;
@@ -704,6 +820,12 @@ void ChatSocket::reset()
             break;
         case protocol::MessageId::NotifyReceiveMessage:
             handleNotifyReceiveMessage(body);
+            break;
+        case protocol::MessageId::SyncChatMessageRsp:
+            handleSyncChatMessages(body);
+            break;
+        case protocol::MessageId::AckChatMessageRsp:
+            handleAckChatMessages(body);
             break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
@@ -1196,8 +1318,78 @@ void ChatSocket::reset()
             return;
         }
 
-        qInfo() << "[chat] 收到新消息通知（推送不含内容，服务端暂无拉取接口）";
+        qInfo() << "[chat] 收到新消息通知（推送不含内容，需要发 1023 拉取）";
         emit messageReceived();
+    }
+
+    void ChatSocket::handleSyncChatMessages(const QByteArray& body)
+    {
+        /*
+         * 1024：{"error":0, "count":"2", "msgs":[{type,from_uid,body,id}, ...]}
+         *
+         * 没有消息时服务端**不带 msgs 字段**，count 为 "0"（字符串）。
+         *
+         * ⚠ 服务端按 **PEL 优先**投递：未确认的消息会在下一次拉取时重复返回
+         *   （at-least-once）。去重交给 ChatController（按 msgs[].id），
+         *   这里只管把这一批原样上报。
+         *   迟到的回包也照常处理 —— 反正下一轮 PEL 还会重投，能早一步是一步。
+         */
+        m_pull_in_flight = false;
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 拉取消息回包解析失败:" << parse_error.errorString();
+            emit chatMessagesReceived({}, static_cast<int>(protocol::ErrorCode::JsonError));
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                  .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        const QList<protocol::ChatMessage> messages = protocol::parseChatMessages(object);
+        if (!messages.isEmpty())
+        {
+            qInfo() << "[chat] 拉到" << messages.size() << "条消息, 首条 from_uid ="
+                << messages.first().fromUid;
+        }
+
+        emit chatMessagesReceived(messages, error);
+    }
+
+    void ChatSocket::handleAckChatMessages(const QByteArray& body)
+    {
+        // 1026：{"error":0} —— 只有 error。谁确认的不重要，按批 FIFO 记一笔即可。
+        m_ack_in_flight = false;
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 确认消息回包解析失败:" << parse_error.errorString();
+            emit chatMessagesAcked(false, static_cast<int>(protocol::ErrorCode::JsonError));
+            pumpAckQueue();
+            return;
+        }
+
+        const int error = document.object().value(QStringLiteral("error"))
+                                  .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 失败 = 那批消息还在 PEL 里。现在的服务端会**重投**，所以不算丢；
+            // 调用方（ChatController）会隔一会儿再拉一次，把 PEL 抽干。
+            qWarning() << "[chat] 确认消息失败（消息仍在 PEL，会被重投）, error =" << error;
+            emit chatMessagesAcked(false, error);
+            pumpAckQueue();
+            return;
+        }
+
+        qDebug() << "[chat] 消息已确认（服务端 XACK + XDEL）";
+        emit chatMessagesAcked(true, error);
+        pumpAckQueue();
     }
 
     bool ChatSocket::sendJson(const std::uint16_t message_id, const QJsonObject& body)

@@ -137,6 +137,29 @@ namespace mychat
         bool sendTextMessage(const QString& msgId, const QString& toUid, const QString& body,
                              protocol::ChatMessageType type = protocol::ChatMessageType::Text);
 
+        /**
+         * 拉取消息（message_id = SyncChatMessageReq 1023）。
+         *
+         * 请求体只有 `{ "count": "<string>" }`，拉取对象就是当前会话的登录 uid。
+         * 服务端**单次最多 10 条**，`count > 10` 直接回 1020 —— 这里会先夹到 1..10。
+         * 未登录时服务端回 `1011`（2026-10-18 起所有 handler 都查登录态）。
+         *
+         * 结果走 \l chatMessagesReceived。**服务端按 PEL 优先**：已投递但未确认的消息
+         * 会在下一次拉取（包括重连后）**重复返回**（at-least-once）——
+         * 所以调用方必须按 `msgs[].id` 去重，拿到之后仍要用 \l ackChatMessages 确认。
+         *
+         * @return false = 没发（未登录 / 未连接 / 已经有一个拉取在飞）
+         */
+        bool syncChatMessages(int count = protocol::MAX_CHAT_MESSAGES_PER_BATCH);
+
+        /**
+         * 确认收到（message_id = AckChatMessageReq 1025）。
+         *
+         * @param ids 来自 1024 的 `msgs[].id`，**最多 10 个**（服务端硬上限）。
+         * 服务端执行 `XACK + XDEL` —— **确认后消息即被删除，不能再次拉取**。
+         */
+        bool ackChatMessages(const QStringList& ids);
+
         /// 断开并复位全部状态
         void disconnectFromServer();
 
@@ -221,11 +244,23 @@ namespace mychat
         /**
          * 服务端推送「你有新消息」（message_id = 1022 NotifyReceiveMessage）。
          *
-         * ⚠ 推送体只有 `{"error":0}`：**没有发送者、没有类型、没有内容**，
-         *   服务端也**没有**消息拉取 / 历史接口，所以收到之后拿不到消息本身 ——
-         *   客户端目前只能提示"有新消息"。等拉取接口（提案 1023/1024）落地再补内容。
+         * ⚠ 推送体只有 `{"error":0}`：**没有发送者、没有类型、没有内容** ——
+         *   收到之后必须发 1023 拉取（见 \l syncChatMessages），内容才拿得到。
          */
         void messageReceived();
+
+        /**
+         * 拉取回包（1024）。
+         *
+         * \note 服务端 PEL 优先重投（at-least-once）→ 同一条消息可能被拉到多次，
+         *   去重是**调用方**的职责（按 `msgs[].id`）。
+         *   迟到的回包仍照常解析上报：服务端已经把它投递过一次，这次不收就得等
+         *   下一轮 PEL 重投（虽然现在不会丢，但白等一轮没意义）。
+         */
+        void chatMessagesReceived(const QList<mychat::protocol::ChatMessage>& messages, int error);
+
+        /// 确认回包（1026）；error 非 0 时那批消息仍在服务端 PEL 里，下次拉取会重投
+        void chatMessagesAcked(bool ok, int error);
 
     private
         slots :
@@ -301,6 +336,10 @@ namespace mychat
         void handleTextMessageResponse(const QByteArray& body);
         /// 服务端主动推送「你有新消息」（1022，不含内容）
         void handleNotifyReceiveMessage(const QByteArray& body);
+        /// 拉取消息回包（1024）
+        void handleSyncChatMessages(const QByteArray& body);
+        /// 确认回包（1026，只有 error）
+        void handleAckChatMessages(const QByteArray& body);
         bool sendJson(std::uint16_t message_id, const QJsonObject& body);
         /// 直接发一段已序列化好的 body（心跳要发体长 0 的空帧，走不了 sendJson）
         bool sendFrame(std::uint16_t message_id, const QByteArray& payload);
@@ -308,6 +347,8 @@ namespace mychat
         void pumpOnlineQueue();
         /// 一次只发一条聊天消息；上一条回包（或超时）了就接着发下一条
         void pumpTextQueue();
+        /// 一次只发一批确认；上一批回包了就接着发下一批
+        void pumpAckQueue();
 
         /// 文档：服务端无读超时，客户端自己做连接超时
         static constexpr int kConnectTimeoutMs = 5000;
@@ -377,5 +418,15 @@ namespace mychat
         QList<OutgoingText> m_text_queue;
         /// 当前在飞的那一条；没有在飞时为空
         std::optional<OutgoingText> m_text_in_flight;
+
+        /*
+         * 拉取：一次只允许一个在飞。1024 里没有"请求序号"，并发拉取会分不清
+         * 哪一批回包对应哪一发；而且拉取本身就是"有积压才拉"，串行完全够用。
+         */
+        bool m_pull_in_flight = false;
+
+        /// 待确认的消息编号，按批（每批 ≤10）排队；一次只发一批
+        QList<QStringList> m_ack_queue;
+        bool m_ack_in_flight = false;
     };
 } // namespace mychat
