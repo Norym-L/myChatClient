@@ -88,6 +88,22 @@ Item {
     /// MYCHAT_SENDMSG 挂起的自动发送：会话还没被打开时先记下来，等选好会话再发
     property bool pendingAutoMessage: false
 
+    /*
+     * 选择模式（批量删除本地聊天记录）。
+     *
+     * selectedIds 用 "id -> true" 的普通对象：QML 里改属性不会触发绑定，
+     * 所以每次切换都**整体替换**（Object.assign 出一份新的）再赋值。
+     */
+    property bool selecting: false
+    property var selectedIds: ({})
+    property int selectedCount: 0
+
+    /// 自动化用：等历史到位后再执行的选择 / 删除 / 清空动作（见 tryPendingChatAction）
+    property string pendingChatAction: ""
+
+    /// 进入选择模式时所在的会话：只有**真的换会话**才退出选择
+    property string selectionPeerUid: ""
+
     /// 上一次批量查在线问的是哪几个 uid（拼成字符串）—— 同一批不重复问
     property string presenceKey: ""
 
@@ -614,6 +630,13 @@ Item {
                                             tooltip: "查看资料"
                                             onClicked: page.openChatPeerInfo()
                                         }
+
+                                        ZIconButton {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            glyph: "…"
+                                            tooltip: "会话操作"
+                                            onClicked: chatActionsDialog.open()
+                                        }
                                     }
                                 }
 
@@ -623,7 +646,7 @@ Item {
                                     anchors.top: chatHeader.bottom
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.bottom: composer.top
+                                    anchors.bottom: page.selecting ? selectionBar.top : composer.top
                                     anchors.leftMargin: Theme.spacingLg
                                     anchors.rightMargin: Theme.spacingLg
                                     clip: true
@@ -755,6 +778,11 @@ Item {
                                         peerUid: ChatController.activePeerUid
                                         selfName: LoginController.name
                                         selfUid: LoginController.uid
+
+                                        // 选择模式：整行可点，点一下切换选中
+                                        selectable: page.selecting
+                                        selected: page.selectedIds[modelData.id] === true
+                                        onToggleRequested: page.toggleSelection(modelData.id)
                                     }
                                 }
 
@@ -764,6 +792,8 @@ Item {
                                 // 写多行不会把消息区顶上去，超出的内容在框内滚动。
                                 Column {
                                     id: composer
+                                    // 选择模式下让位给下面的操作条
+                                    visible: !page.selecting
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
@@ -845,6 +875,54 @@ Item {
                                         opacity: page.composerNotice.length > 0 || ChatController.tipIsError
                                             ? 1 : 0.75
                                         elide: Text.ElideRight
+                                    }
+                                }
+
+                                /*
+                                 * ── 选择模式的底部操作条 ──
+                                 *
+                                 * 和输入区同一个位置、同一套边距：切换时视觉上只是"换了一个底栏"，
+                                 * 消息区高度跟着走（messageView.bottom 已按 selecting 切过）。
+                                 */
+                                Rectangle {
+                                    id: selectionBar
+                                    visible: page.selecting
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: Theme.spacingMd
+                                    height: 52
+                                    color: Theme.surface
+                                    border.width: Theme.border
+                                    border.color: Theme.line
+
+                                    Text {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: Theme.spacingMd
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "已选 " + page.selectedCount + " 条"
+                                        font: Theme.fontMonoMd
+                                        color: Theme.ink
+                                    }
+
+                                    Row {
+                                        id: selectionActions
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: Theme.spacingMd
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: Theme.spacingSm
+
+                                        ZButton {
+                                            text: "删除"
+                                            enabled: page.selectedCount > 0
+                                            onClicked: deleteSelectedDialog.open()
+                                        }
+
+                                        ZButton {
+                                            text: "取消"
+                                            variant: Theme.Variant.Secondary
+                                            onClicked: page.exitSelection()
+                                        }
                                     }
                                 }
                             }
@@ -1159,6 +1237,109 @@ Item {
         单向依赖：页面 → 弹窗 → 头像，就不会有这个问题，也顺带把"展示组件"和
         "业务弹窗"解耦了。
     */
+    /*!
+        会话操作入口（会话头右上角「…」）：选择消息 / 清空聊天记录。
+
+        两项都**只影响本机**：服务端没有"删除 / 撤回"接口 ——
+        消息在我们确认收到（1025）时就已经被服务端 XACKDEL 删掉了。
+    */
+    ZDialog {
+        id: chatActionsDialog
+        title: "会话操作"
+        code: "CHAT-01"
+        subtitle: "只影响本机记录"
+        showFooter: false
+        width: 420
+
+        Column {
+            width: parent.width
+            spacing: Theme.spacingSm
+
+            ZButton {
+                width: parent.width
+                text: "选择消息（批量删除）"
+                variant: Theme.Variant.Secondary
+                onClicked: {
+                    chatActionsDialog.close()
+                    page.enterSelection()
+                }
+            }
+
+            ZButton {
+                width: parent.width
+                text: "清空聊天记录"
+                variant: Theme.Variant.Secondary
+                onClicked: {
+                    chatActionsDialog.close()
+                    clearHistoryDialog.open()
+                }
+            }
+
+            Text {
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: "聊天记录只存在本机，删除后不可恢复；对方那边不受影响。"
+                font: Theme.fontMonoSm
+                color: Theme.muted
+            }
+        }
+    }
+
+    ZDialog {
+        id: deleteSelectedDialog
+        title: "删除所选消息"
+        code: "CHAT-02"
+        subtitle: "不可恢复"
+        confirmText: "删除 " + page.selectedCount + " 条"
+        width: 460
+        onConfirmed: page.deleteSelectedMessages()
+
+        Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "将从本机删除选中的 " + page.selectedCount + " 条聊天记录。"
+            font: Theme.fontBody
+            color: Theme.ink
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "服务端没有删除接口，这里删的只是本机这份记录；对方不受影响。"
+            font: Theme.fontMonoSm
+            color: Theme.muted
+        }
+    }
+
+    ZDialog {
+        id: clearHistoryDialog
+        title: "清空聊天记录"
+        code: "CHAT-03"
+        subtitle: "不可恢复"
+        confirmText: "清空"
+        width: 460
+        onConfirmed: page.clearActiveConversation()
+
+        Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "将清空与「"
+                + (ChatController.activePeerName.length > 0
+                    ? ChatController.activePeerName : ChatController.activePeerUid)
+                + "」的全部本地聊天记录。"
+            font: Theme.fontBody
+            color: Theme.ink
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "对方的记录不受影响；本机删除后无法恢复（服务端没有历史接口）。"
+            font: Theme.fontMonoSm
+            color: Theme.muted
+        }
+    }
+
     UserInfoDialog {
         id: userInfoDialog
 
@@ -1380,6 +1561,97 @@ Item {
         }
     }
 
+    /*!
+        进入 / 退出选择模式（批量删除本地聊天记录）。
+
+        选择只在**当前会话**内有效：切换会话会自动退出（见 onActiveConversationChanged），
+        否则选中的 id 会跨会话串味。
+    */
+    function enterSelection() {
+        if (!ChatController.hasActiveConversation)
+            return
+        page.selectedIds = ({})
+        page.selectedCount = 0
+        page.selectionPeerUid = ChatController.activePeerUid
+        page.selecting = true
+    }
+
+    function exitSelection() {
+        page.selecting = false
+        page.selectedIds = ({})
+        page.selectedCount = 0
+        page.selectionPeerUid = ""
+    }
+
+    /// 点一条气泡切换选中。对象要整体替换，QML 才会重算依赖它的绑定
+    function toggleSelection(id) {
+        const next = Object.assign({}, page.selectedIds)
+        if (next[id])
+            delete next[id]
+        else
+            next[id] = true
+
+        page.selectedIds = next
+        page.selectedCount = Object.keys(next).length
+    }
+
+    /// 删掉选中的那些（只删本机；调用前已经让用户确认过）
+    function deleteSelectedMessages() {
+        if (page.selectedCount === 0)
+            return
+
+        const ids = Object.keys(page.selectedIds).map((key) => Number(key))
+        ChatController.deleteMessages(ids)
+        page.exitSelection()
+    }
+
+    /// 清空当前会话的聊天记录（只清本机）
+    function clearActiveConversation() {
+        if (!ChatController.hasActiveConversation)
+            return
+        ChatController.clearConversation(ChatController.activePeerUid)
+        page.exitSelection()
+    }
+
+    /*!
+        自动化用（MYCHAT_OPENDLG=chatselect:N / chatdelete / chatwipe）。
+
+        这些动作用来做无头截图与链路验证，必须等"会话已打开、历史已到位"才执行 ——
+        进页面那一刻好友列表和本地库都还在路上。
+    */
+    function tryPendingChatAction() {
+        if (page.pendingChatAction === "")
+            return
+        if (!ChatController.hasActiveConversation)
+            return
+
+        const list = ChatController.messages
+        if (list.length === 0)
+            return
+
+        const action = page.pendingChatAction
+        page.pendingChatAction = ""
+
+        if (action === "chatwipe") {
+            page.clearActiveConversation()
+            return
+        }
+
+        let count = 1
+        if (action.startsWith("chatselect")) {
+            const parts = action.split(":")
+            if (parts.length > 1 && !isNaN(Number(parts[1])))
+                count = Number(parts[1])
+        }
+
+        page.enterSelection()
+        for (let i = 0; i < Math.min(count, list.length); ++i)
+            page.toggleSelection(list[i].id)
+
+        if (action === "chatdelete")
+            page.deleteSelectedMessages()
+    }
+
     /// 会话头部点头像 / 点 ◎：打开这个人的资料卡
     function openChatPeerInfo() {
         page.openUserInfo({
@@ -1493,6 +1765,30 @@ Item {
             // 只看申请列表本身（不弹资料卡）：验证方向标签与对面 uid 的显示
             page.section = 2
             return
+        } else if (app.autoDialog === "chatactions") {
+            // 自动化验证：会话操作弹窗（选择消息 / 清空聊天记录）
+            page.section = 0
+            chatActionsDialog.open()
+            return
+        } else if (app.autoDialog === "chatclear") {
+            // 自动化验证：清空确认弹窗
+            page.section = 0
+            clearHistoryDialog.open()
+            return
+        } else if (app.autoDialog.startsWith("chatselect")
+                   || app.autoDialog === "chatdelete"
+                   || app.autoDialog === "chatwipe") {
+            /*
+             * 自动化验证：选择 / 删除 / 清空。
+             *
+             * ⚠ 这些动作要等"会话已打开且历史到了"才能做 —— 进页面的这一刻
+             *   好友列表和本地历史都还在路上，直接执行只会对着空列表空转。
+             *   所以挂起，由 onMessagesChanged 触发 tryPendingChatAction()。
+             */
+            page.section = 0
+            page.pendingChatAction = app.autoDialog
+            page.tryPendingChatAction()
+            return
         } else if (app.autoDialog === "applyreceived" || app.autoDialog === "applysent") {
             // 自动化验证：打开申请列表里「收到」/「已发出」的第一条 ——
             // 用来确认弹出来的资料卡是**对方**的，而不是被判成"自己"的编辑态。
@@ -1560,6 +1856,10 @@ Item {
             const last = list.length > 0 ? list[list.length - 1] : null
             const mine = last !== null && last.fromSelf === true
 
+            // 自动化：等历史到位后执行挂起的选择 / 删除 / 清空（必须放在下面的
+            // "不跟随时直接 return" 之前，否则翻着历史就永远轮不到它）
+            page.tryPendingChatAction()
+
             if (!mine && !messageView.followTail)
                 return
 
@@ -1569,6 +1869,17 @@ Item {
         }
 
         function onActiveConversationChanged() {
+            /*
+             * 换会话就退出选择模式（选中的 id 属于上一个会话，串过来会删错）。
+             *
+             * ⚠ 只在**真的换了人**时退：好友列表同步（syncFriends）也会 emit
+             *   activeConversationChanged（名字 / demo 标记可能变了），
+             *   早先按"只要这个信号来了就退"，结果刚进选择模式就被那次同步退掉，
+             *   截图里操作条根本出不来。
+             */
+            if (page.selecting && ChatController.activePeerUid !== page.selectionPeerUid)
+                page.exitSelection()
+
             if (ChatController.hasActiveConversation)
                 PresenceController.refresh(ChatController.activePeerUid)
             // 换会话一律从最新的看起

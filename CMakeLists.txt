@@ -63,6 +63,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
         Quick
         QuickControls2      # QML 里 import QtQuick.Controls.Basic，链接上才保证被部署
         Network             # 服务层引入后需要
+        Sql                 # 本地聊天记录（SQLite，src/core/ChatStore）
 )
 
 # 编译器家族与 Qt 套件必须匹配：MinGW 配 msvc 套件（或反之）能编过，运行时必崩。
@@ -107,6 +108,8 @@ add_library(qtclient_core STATIC
         src/core/HttpClient.cpp
         src/core/ChatSocket.h
         src/core/ChatSocket.cpp
+        src/core/ChatStore.h
+        src/core/ChatStore.cpp
 
         src/AccountValidator.h
         src/AccountValidator.cpp
@@ -132,6 +135,8 @@ target_include_directories(qtclient_core PUBLIC
 target_link_libraries(qtclient_core PUBLIC
         Qt6::Core
         Qt6::Network
+        # SQLite 驱动（qsqlite）由 windeployqt 按这个依赖部署到 sqldrivers/
+        Qt6::Sql
 )
 
 # ── 应用（只含 QML 前端自身）──────────────────────────────────────────
@@ -202,6 +207,14 @@ qt_add_executable(qtClientChatPullTest
 
 target_link_libraries(qtClientChatPullTest PRIVATE qtclient_core)
 
+# ── 本地聊天记录自检（SQLite，不需要服务端）──────────────────────────
+# 服务端确认即删除，本地库是唯一的历史来源：落盘 / 去重 / 崩溃态恢复必须钉住。
+qt_add_executable(qtClientChatStoreTest
+        tests/chatstore.cpp
+)
+
+target_link_libraries(qtClientChatStoreTest PRIVATE qtclient_core)
+
 # 这几个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
@@ -211,6 +224,7 @@ if (WIN32)
     set_target_properties(qtClientSocketTimeoutTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatMsgTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatPullTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientChatStoreTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

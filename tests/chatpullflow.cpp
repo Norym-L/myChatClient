@@ -18,11 +18,13 @@
 // 退出码：0 全部通过；3 某一步断言失败；4 整体超时；5 起不了本地监听。
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QString>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -40,6 +42,7 @@
 
 #include "ChatController.h"
 #include "ChatSocket.h"
+#include "ChatStore.h"
 #include "logger.h"
 
 namespace
@@ -165,6 +168,13 @@ int main(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     mychat::log::init();
 
+    // 本地库指到临时目录：自检不该往真实用户的 %APPDATA% 里写东西
+    const QString data_dir =
+        QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+        .filePath(QStringLiteral("mychat-pull-test"));
+    QDir(data_dir).removeRecursively();
+    qputenv("MYCHAT_DATA_DIR", data_dir.toUtf8());
+
     FakeServer server;
     if (!server.listen())
     {
@@ -248,6 +258,54 @@ int main(int argc, char* argv[])
         {
             check(chat.messages().size() == 11, QStringLiteral("当前会话共 11 条消息（1 + 10，重投的那条没重复）"));
             check(ack_count == 3, QStringLiteral("确认共 3 批（2 条 / 1 条重投 / 10 条）"));
+
+            /*
+             * 落盘验证：控制器开着同一个库，这里另开一个连接读 ——
+             * SQLite 允许多连接（WAL），能读到就说明真的写进磁盘了。
+             */
+            {
+                ChatStore store;
+                const bool opened = store.openAt(ChatStore::databasePathFor(666672));
+                check(opened, QStringLiteral("登录时已按 uid 建好本地库"));
+
+                if (opened)
+                {
+                    const QList<ChatStore::Message> stored =
+                        store.recentMessages(QString::fromLatin1(kPeerUid), 100);
+                    check(stored.size() == 11, QStringLiteral("11 条消息都落盘了"));
+
+                    const QList<ChatStore::Conversation> conversations = store.conversations();
+                    int stranger_unread = -1;
+                    for (const ChatStore::Conversation& row: conversations)
+                    {
+                        if (row.peerUid == QString::fromLatin1(kStrangerUid))
+                            stranger_unread = row.unread;
+                    }
+                    check(stranger_unread == 1, QStringLiteral("陌生会话的未读也落盘了（=1）"));
+
+                    /*
+                     * 删除所选 / 清空（只影响本机）：
+                     * 界面与库两边都要跟着少，摘要还要按剩下的最后一条重算。
+                     */
+                    const QVariantList ids{chat.messages().first().toMap()
+                                               .value(QStringLiteral("id"))};
+                    const int removed = chat.deleteMessages(ids);
+                    check(removed == 1 && chat.messages().size() == 10,
+                          QStringLiteral("删除所选：界面少一条"));
+                    check(store.recentMessages(QString::fromLatin1(kPeerUid), 100).size() == 10,
+                          QStringLiteral("删除所选：库里也少一条"));
+                    check(!conversationOf(QString::fromLatin1(kPeerUid))
+                               .value(QStringLiteral("lastText")).toString().isEmpty(),
+                          QStringLiteral("删完摘要按剩下的最后一条重算，不是空的"));
+
+                    chat.clearConversation(QString::fromLatin1(kPeerUid));
+                    check(chat.messages().isEmpty(), QStringLiteral("清空后界面为空"));
+                    check(store.recentMessages(QString::fromLatin1(kPeerUid), 100).isEmpty(),
+                          QStringLiteral("清空后库为空"));
+                }
+            }
+
+            QDir(data_dir).removeRecursively();
 
             writeLine(stdout, fail_count == 0
                           ? QStringLiteral("\n[PASS] 拉取链路全部通过")
@@ -456,6 +514,18 @@ int main(int argc, char* argv[])
                                  check(stranger.value(QStringLiteral("lastText")).toString()
                                          == QStringLiteral("陌生人消息"),
                                        QStringLiteral("会话摘要更新为最新一条"));
+
+                                 /*
+                                  * 好友列表再同步一次：非好友但有聊天记录的会话**不能删** ——
+                                  * 服务端不校验好友关系，删了就等于"消息收到了但看不到"。
+                                  */
+                                 QVariantMap again;
+                                 again.insert(QStringLiteral("uid"), QString::fromLatin1(kPeerUid));
+                                 again.insert(QStringLiteral("name"), QStringLiteral("peer"));
+                                 again.insert(QStringLiteral("displayName"), QStringLiteral("peer"));
+                                 chat.syncFriends({again});
+                                 check(conversations().size() == 2,
+                                       QStringLiteral("好友同步不会删掉有聊天记录的非好友会话"));
 
                                  // 下一阶段：推一条 1022，验 2s 合并窗口
                                  push_clock.start();

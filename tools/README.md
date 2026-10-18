@@ -200,7 +200,41 @@ done; done
 11 条连推立刻拉（count 夹到 10）；拉到的消息按 `from_uid` 落进对应会话
 （陌生自动建会话、非当前会话记未读）；`ids` 是字符串数组且一次 ≤10；
 **PEL 重投的同 id 消息要去重但仍要确认**；回来的条数达到请求的 count 就续拉；
-空回包不确认。
+空回包不确认。末尾还会另开一个连接读本地库，确认 11 条消息与未读**真的落盘了**。
+
+## 验证「本地聊天记录」（SQLite，不需要服务端）
+
+服务端确认即删除（`XACKDEL`），本地库是唯一的历史来源，所以这条链路单独测：
+
+```bash
+./qtClientChatStoreTest          # 退出码 0 = 全部通过（29 项断言）
+```
+
+钉住四件事：重开库还能读回来（真落盘）；同一个 `server_id` 只进一条（PEL 重投兜底）；
+自己发的消息（无 `server_id`）不受唯一性限制；进程被杀时还是 `sending` 的消息
+读回来一律是 `failed`，不会再永远转圈。另外还测了**删除所选 / 清空会话**：
+删几条就少几条、重复删返回 0、`lastMessage` 取到剩下那批的最后一条、清空后消息与会话行都没了。
+测试库建在系统临时目录，跑完即删。
+
+## 验证「删除 / 清空聊天记录」（两个入口都是只删本机）
+
+`tools` 里的自动化钩子（都进聊天页并等历史到位后执行）：
+
+```bash
+# 会话头「…」菜单 / 清空确认弹窗（弹窗离屏抓不到，必须让它自己弹）
+MYCHAT_OPENDLG=chatactions   MYCHAT_SMOKE=.../chatactions.png  ./qtClient.exe
+MYCHAT_OPENDLG=chatclear     MYCHAT_SMOKE=.../chatclear.png    ./qtClient.exe
+
+# 选择模式：选中前 N 条（底部出现操作条、气泡高亮）
+MYCHAT_OPENDLG=chatselect:2  MYCHAT_SMOKE=.../sel.png          ./qtClient.exe
+
+# 直接执行删除所选 / 清空（跳过点击确认，用来验"界面→控制器→库"整条链）
+MYCHAT_OPENDLG=chatdelete
+MYCHAT_OPENDLG=chatwipe
+```
+
+判读：`chatdelete` 之后 `data/chat_<uid>.db` 里消息少一条、列表摘要按剩下的最后一条重算；
+`chatwipe` 之后消息表清空、会话摘要行也没了（界面上好友会话还在、显示"暂无消息"）。
 
 ## 验证「好友申请推送」（NotifyAddFriendReq / 1009）
 

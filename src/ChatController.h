@@ -9,6 +9,7 @@
 #include <QVariantList>
 
 #include "protocol.h"
+#include "ChatStore.h"
 
 class QTimer;
 
@@ -44,6 +45,14 @@ class QTimer;
  *   ChatController.openConversation(uid, name) / sendText(text) / markRead(uid)
  *   读 conversations / messages / activePeerUid / activePeerName /
  *      hasActiveConversation / activePeerIsDemo / tip / tipIsError
+ *
+ * ── 本地记录（`ChatStore`，SQLite）──────────────────────────────────
+ *   服务端确认即删除、也没有历史接口 → **本地库是唯一的历史来源**。
+ *   · 登录成功后按 uid 打开 `chat_<uid>.db`，回填会话列表；
+ *   · 打开会话时懒加载最近 200 条；收发消息**先落库**（收到的那批要先落库再 ACK，
+ *     反了的话进程崩在中间就既不在服务端也不在本地）；
+ *   · 未读 / 已读 / 发送状态一并持久化；`server_id UNIQUE` 兜住跨进程的 PEL 重投；
+ *   · 库打不开只是"没有历史"，聊天照常（退化成纯内存）。
  */
 class ChatController : public QObject
 {
@@ -116,6 +125,24 @@ public:
     Q_INVOKABLE void markRead(const QString& peerUid);
 
     /**
+     * 删除若干条消息（**只删本地**）。
+     *
+     * 服务端没有"删除消息"接口 —— 消息在确认（1025）时就被 XACKDEL 删掉了，
+     * 所以这里删的只是本机这份记录，**对方那边完全不受影响**、也删不掉。
+     *
+     * @param ids 消息 id（`messages[].id`，本地库自增 id）
+     * @return 实际删掉的条数；0 = 没找到 / 本地库不可用
+     */
+    Q_INVOKABLE int deleteMessages(const QVariantList& ids);
+
+    /**
+     * 清空与某人的聊天记录（**只清本地**）。
+     *
+     * 会话本身保留（还在好友列表里就继续显示空会话），只是消息与摘要没了。
+     */
+    Q_INVOKABLE void clearConversation(const QString& peerUid);
+
+    /**
      * 收到别人发来的**单条**消息内容。
      *
      * 现在收消息走的是 `onChatMessages()` 的**批量**路径（一次拉最多 10 条，
@@ -124,7 +151,7 @@ public:
      */
     void appendIncoming(const QString& peerUid, const QString& text, const QString& time);
 
-    /// 改某条消息的投递状态（sending / sent / failed）
+    /// 改某条消息的投递状态（sending / sent / failed），同时写回本地库
     void markMessageState(const QString& peerUid, int messageId, const QString& state);
 
     signals:
@@ -161,14 +188,35 @@ private:
 
     void setTip(const QString& text, bool is_error = false);
 
+    /// 登录后按 uid 打开本地库并回填会话列表（失败只是没有历史，不影响聊天）
+    void openStore(std::uint64_t uid);
+    /// 打开会话时懒加载历史（同一会话只查一次库）
+    void ensureHistoryLoaded(const QString& peerUid);
+    /// 把某个会话的摘要 / 未读写回本地库
+    void persistConversation(const QString& peerUid);
+    /// 删掉消息后按库里剩下的最后一条重算会话摘要
+    void refreshConversationSummary(const QString& peerUid);
+
     /// 会话不存在就建一条空会话（收到陌生人消息时用；服务端不校验好友关系）
     void ensureConversation(const QString& peerUid);
 
     /// 把会话置顶并更新摘要（真实链路里收到消息也该走这一步）
     void touchConversation(const QString& peerUid, const QString& last_text, const QString& last_time);
-    /// 往某个会话追加一条消息，返回它的本地 id（用于后续改状态）
+
+    /**
+     * 往某个会话追加一条消息（内存 + 本地库）。
+     *
+     * @param created_ms 消息时间（毫秒）。0 = 用当前时间；收到的消息用 Stream ID 里的时间戳
+     * @param server_id  服务端消息编号（收到的消息才有）—— 库里的 UNIQUE 键，重投时挡住重复
+     * @param from_uid   发送者 uid（自己发的填空）
+     * @return 消息 id（= 库里的自增 id，用于后续改状态）；
+     *         **0 表示重复**（库里有同一个 server_id，PEL 重投），调用方不该显示它
+     */
     int appendMessage(const QString& peerUid, bool from_self, const QString& text,
-                      const QString& time, const QString& state);
+                      const QString& time, const QString& state,
+                      qint64 created_ms = 0, const QString& server_id = QString(),
+                      const QString& from_uid = QString());
+
     /// 未读数 -1 之类的小改动，找不到就返回
     [[nodiscard]] int indexOf(const QString& peerUid) const;
 
@@ -177,6 +225,11 @@ private:
 
     QVariantList m_conversations;
     QHash<QString, QVariantList> m_history;
+    /// 已经从本地库加载过历史的会话（空历史也算，避免每次点开都查一遍）
+    QSet<QString> m_history_loaded;
+
+    /// 本地聊天记录（SQLite）。登录成功后按 uid 打开；打不开就退化成纯内存
+    ChatStore m_store;
 
     QString m_active_uid;
     QString m_active_name;

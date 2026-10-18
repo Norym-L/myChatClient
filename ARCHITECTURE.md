@@ -62,13 +62,17 @@ ZmdUI 组件库（终末地工业机能风）。
 - ✅ **会话界面**（会话列表 / 消息气泡 / 输入框 / 未读角标）—— 版式与交互已就绪，
   会话列表来自好友列表；**收发都已接通服务端**：
   发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 拉取 → 1025 确认。
-  ⚠ 确认后服务端即删除，没有历史记录可翻。
+  ⚠ 确认后服务端即删除 → **本地 SQLite 才是历史来源**（`ChatStore`，见 §5.6）。
   演示数据只在 `MYCHAT_DEMO=1` 时注入（用于版式自检）
-- ✅ 七套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
+- ✅ **本地聊天记录**（SQLite）：按 uid 分库、收发先落库再 ACK、未读/已读/发送状态持久化、
+  `server_id` 唯一索引兜住 PEL 重投、重启后会话与历史自动回填
+- ✅ **删除 / 清空聊天记录**（只影响本机）：会话头「…」→ 选择消息（批量删）/ 清空会话，
+  两个操作都有确认弹窗；服务端没有删除接口，对方不受影响
+- ✅ 八套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
-- **历史消息**：服务端 `XACK + XDEL`，消息确认即删除，翻不到旧消息
+- **服务端历史**：`XACKDEL` 确认即删，跨设备翻不到旧消息（只有本机 SQLite 里有）
 - **群聊**：服务端 `is_to_group` 恒为 false
 - 会话持久化（目前关掉进程就要重新登录）
 
@@ -96,6 +100,7 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │       ├── protocol.h/.cpp        帧格式、MessageId、ReqId→路径、ErrorCode、parseUid
 │       ├── HttpClient.h/.cpp      QNetworkAccessManager 单例
 │       ├── ChatSocket.h/.cpp      QTcpSocket 单例 + 帧组包/解包
+│       ├── ChatStore.h/.cpp       本地聊天记录（SQLite，按 uid 分库）
 │       ├── SessionManager.h/.cpp  登录态（uid / name / token）
 │       └── logger.h/.cpp          mychat::log，级别过滤与统一格式
 │
@@ -370,7 +375,7 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 会话 / 消息的唯一入口。 **会话列表由好友列表驱动**（`syncFriends()`）；
 收发都已接通服务端：发 1013/1014（本地落一条 `sending` 气泡 → 回执按 `msg_id` 改状态），
-收 1022 推送 → 1023 拉取 → 1024 落库 → 1025 确认。历史仍为空（服务端确认即删除）。
+收 1022 推送 → 1023 拉取 → 1024 落库 → 1025 确认。历史在本地 SQLite（服务端确认即删除）。
 `MYCHAT_DEMO=1` 时才注入演示会话（`demo: true`，`syncFriends` 不会清掉它们）。
 
 | 方法                            | 用途                                                             |
@@ -415,6 +420,28 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 4. 断线时 `ChatSocket` 直接清空队列（不补报超时），所以 `ChatController` 监听
    `linkError` 把 `m_sending` 里的气泡统一标成 `failed`。
 
+**本地记录的约定**（`ChatStore`，SQLite）：
+
+| 项 | 做法 |
+|----|------|
+| 库位置 | `<exe 目录>/data/chat_<uid>.db`（便携式；`MYCHAT_DATA_DIR` 可覆盖，自检用） |
+| 分库 | **按账号分**：换号登录历史天然隔离，表里不用再挂 owner_uid |
+| 落盘顺序 | 收到 1024 → **先写库 → 再 ACK**。反了的话进程崩在中间就两头都没了 |
+| 去重 | 收到：`messages.server_id` 上的**部分唯一索引**（`WHERE server_id <> ''`）；自己发的没有编号，不参与 |
+| 状态 | `sending` 读回来一律降级成 `failed`（进程被杀时在飞的消息不可能再有回执） |
+| 会话 | `conversations` 表存 last_text / last_time / unread / updated_ms，列表与红点重启后都在 |
+| 加载 | 登录后回填会话；打开会话时懒加载最近 **200** 条（第一版不做翻页） |
+| 失败 | 库打不开（缺 `sqldrivers/qsqlite.dll`、目录没权限）→ 只提示一句，聊天照常，退化成纯内存 |
+| 删除 | `deleteMessages(ids)` / `clearConversation(uid)`：事务内批量 DELETE；删完按库里最后一条**重算摘要**；清空会话连摘要行一起删（不回写空行） |
+
+⚠ **别给字符串列随便加 `NOT NULL`**：Qt 把空 `QString` 绑定成 NULL，
+`INSERT OR IGNORE` 遇到 NOT NULL 违约会**静默丢整行**——表现是"自己发的消息一条都没存进去"。
+（这个坑踩了两次：`server_id`、`from_uid`。）
+
+⚠ **`syncFriends()` 不能把非好友会话删掉**：服务端不校验好友关系，陌生人也能发消息；
+之前按"好友列表投影"重建列表，重启后本地有记录、界面上那个会话却消失了。
+现在规则是：好友更新资料、**非好友只在其有聊天记录时保留**、删掉的好友留下的空壳才丢弃。
+
 ⚠ **`syncFriends()` 里的信号重入陷阱**：`emit conversationsChanged()` 之后 QML 会 **同步**
 自动打开第一个会话（`ChatPage` 的 handler），所以"原来有没有活动会话"必须在 emit **之前**
 记下来。之前写成 emit 之后再判断，结果订阅方刚打开就被 `closeConversation()` 关掉 ——
@@ -423,6 +450,11 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 ⚠ **QML 绑定的坑**：`PresenceController.hasState(uid)` 这类 **函数调用**在 QML 眼里是黑盒，
 属性变了也不会重算绑定（曾表现为日志里明明回了 offline、界面一直停在"状态未知"）。
 需要依赖时把 `PresenceController.online` 当 **参数**传进函数（见 `ChatPage.peerStateText`）。
+
+⚠ **选择模式不能"收到 activeConversationChanged 就退出"**：好友列表同步
+（`syncFriends()`）也会 emit 这个信号（名字 / demo 标记可能变了），
+早先那样写会让刚进的选择模式被那次同步立刻退掉（截图里操作条根本出不来）。
+判断条件是"`activePeerUid` 真的换了人"。
 
 ### 5.7 路由
 
@@ -707,10 +739,10 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **认证 + 好友链路 + 好友列表 + 收发消息已完成；历史 / 群聊未做。** 会话列表由好友列表驱动，
-   发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 → 1025（`XACK + XDEL`）。
-   ⚠ 消息**确认即删除**，所以每个会话只能看到"进程启动后收到 / 发出"的那些，
-   翻不到更早的记录。后续可参考 `docs/ServerDocs/api-chat.md`。
+1. **认证 + 好友链路 + 好友列表 + 收发消息 + 本地记录已完成；群聊未做。**
+   发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 → 1025（`XACKDEL`）。
+   ⚠ 服务端**确认即删除**，所以历史只在**本机 SQLite** 里（`ChatStore`）——
+   换台机器 / 换账号看不到；卸载或删库就没了。后续可参考 `docs/ServerDocs/api-chat.md`。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**
    目前处理了登录 / 搜索 / 发申请 / 申请列表 / 好友列表 / 心跳 / 查在线 / 发消息 /

@@ -56,6 +56,9 @@ constexpr int kAckRetryLimit = 3;
 /// 去重表上限（条）：一个会话窗口的量级，够用且不会无限长
 constexpr int kSeenMessageLimit = 2000;
 
+/// 每个会话一次从本地库读多少条历史（第一版不做翻页）
+constexpr int kHistoryMessageLimit = 200;
+
 QString nowText()
 {
     return QTime::currentTime().toString(QStringLiteral("HH:mm"));
@@ -67,15 +70,26 @@ QString nowText()
  * 服务端不回消息时间，但消息编号本身就是毫秒时间戳 —— 比"拉到的时间"更准
  * （离线消息可能是几天前的）。解析不出来就退回当前时间。
  */
-QString timeFromStreamId(const QString& id)
+/**
+ * Stream ID（`<毫秒>-<序号>`）→ 毫秒时间戳。
+ *
+ * @return 0 = 解析失败（调用方用当前时间兜底）
+ */
+qint64 streamIdToMsecs(const QString& id)
 {
     const qsizetype dash = id.indexOf(QLatin1Char('-'));
     if (dash <= 0)
-        return nowText();
+        return 0;
 
     bool be_valid = false;
     const qint64 msecs = id.left(dash).toLongLong(&be_valid);
-    if (!be_valid || msecs <= 0)
+    return be_valid && msecs > 0 ? msecs : 0;
+}
+
+QString timeFromStreamId(const QString& id)
+{
+    const qint64 msecs = streamIdToMsecs(id);
+    if (msecs <= 0)
         return nowText();
 
     return QDateTime::fromMSecsSinceEpoch(msecs).toString(QStringLiteral("HH:mm"));
@@ -145,7 +159,7 @@ ChatController::ChatController(QObject* parent)
      * 顺便把去重表清空 —— 新会话、新进程，PEL 里没确认的消息本来就该重新显示。
      */
     connect(&socket, &mychat::ChatSocket::loginSucceeded, this,
-            [this](std::uint64_t, const QString&, const QString&)
+            [this](const std::uint64_t uid, const QString&, const QString&)
                 {
                     m_pull_hint = 0;
                     m_pull_again = false;
@@ -153,6 +167,9 @@ ChatController::ChatController(QObject* parent)
                     m_ack_retry = 0;
                     m_seen_message_ids.clear();
                     m_seen_message_order.clear();
+
+                    // 先开本地库：登录后马上要拉的离线消息要能落盘（落库后才 ACK）
+                    openStore(uid);
                     requestPull();
                 });
 
@@ -201,6 +218,234 @@ ChatController::ChatController(QObject* parent)
                     m_sending.clear();
                     setTip(QStringLiteral("连接已断开，发送中的消息未送达"), true);
                 });
+}
+
+void ChatController::openStore(const std::uint64_t uid)
+{
+    m_store.close();
+    m_history_loaded.clear();
+
+    if (uid == 0 || !m_store.open(uid))
+    {
+        // 常见原因：windeployqt 没带 sqldrivers/qsqlite.dll，或者目录没权限。
+        // 不阻断聊天 —— 只是这次会话不会留下历史。
+        qWarning() << "[chat] 本地记录不可用，本次聊天不会保存";
+        setTip(QStringLiteral("本地记录不可用，本次聊天不会保存"));
+        return;
+    }
+
+    /*
+     * 回填会话列表：库里存的只是摘要（最后一条 / 未读），显示名等好友列表同步时补。
+     * 库按 updated_ms 倒序，这里按同样顺序 append 即可。
+     */
+    const QList<ChatStore::Conversation> rows = m_store.conversations();
+    for (const ChatStore::Conversation& row: rows)
+    {
+        const int index = indexOf(row.peerUid);
+        if (index >= 0)
+        {
+            QVariantMap item = m_conversations.at(index).toMap();
+            item.insert(QStringLiteral("lastText"), row.lastText);
+            item.insert(QStringLiteral("lastTime"), row.lastTime);
+            item.insert(QStringLiteral("unread"), row.unread);
+            m_conversations[index] = item;
+            continue;
+        }
+
+        // 本地有记录、但当前不在好友列表里（删过好友 / 陌生人发过消息）
+        QVariantMap item;
+        item.insert(QStringLiteral("uid"), row.peerUid);
+        item.insert(QStringLiteral("name"), row.peerUid);
+        item.insert(QStringLiteral("nick"), QString());
+        item.insert(QStringLiteral("displayName"), row.peerUid);
+        item.insert(QStringLiteral("icon"), QString());
+        item.insert(QStringLiteral("desc"), QString());
+        item.insert(QStringLiteral("sex"), 2);
+        item.insert(QStringLiteral("lastText"), row.lastText);
+        item.insert(QStringLiteral("lastTime"), row.lastTime);
+        item.insert(QStringLiteral("unread"), row.unread);
+        item.insert(QStringLiteral("demo"), false);
+        m_conversations.append(item);
+    }
+
+    if (!rows.isEmpty())
+    {
+        qInfo() << "[chat] 从本地库回填" << rows.size() << "个会话";
+        emit conversationsChanged();
+    }
+
+    // 已经选好会话的（比如自动打开了第一条）把历史补上
+    if (!m_active_uid.isEmpty())
+    {
+        ensureHistoryLoaded(m_active_uid);
+        emit messagesChanged();
+    }
+}
+
+void ChatController::ensureHistoryLoaded(const QString& peerUid)
+{
+    if (peerUid.isEmpty() || m_history_loaded.contains(peerUid))
+        return;
+
+    // 先标记再查：空历史也算"加载过"，否则每次点开都会查一遍库
+    m_history_loaded.insert(peerUid);
+
+    if (!m_store.isOpen())
+        return;
+
+    const QList<ChatStore::Message> rows = m_store.recentMessages(peerUid, kHistoryMessageLimit);
+    if (rows.isEmpty())
+        return;
+
+    QVariantList list;
+    list.reserve(rows.size());
+    for (const ChatStore::Message& row: rows)
+    {
+        QVariantMap item;
+        item.insert(QStringLiteral("id"), row.id);
+        item.insert(QStringLiteral("fromSelf"), row.fromSelf);
+        item.insert(QStringLiteral("text"), row.body);
+        item.insert(QStringLiteral("time"),
+                    QDateTime::fromMSecsSinceEpoch(row.createdMs).toString(QStringLiteral("HH:mm")));
+        item.insert(QStringLiteral("state"), row.state);
+        list.append(item);
+    }
+
+    m_history[peerUid] = list;
+    qInfo() << "[chat] 从本地库加载" << list.size() << "条历史:" << peerUid;
+}
+
+int ChatController::deleteMessages(const QVariantList& ids)
+{
+    QList<qint64> row_ids;
+    row_ids.reserve(ids.size());
+    for (const QVariant& value: ids)
+    {
+        bool be_valid = false;
+        const qint64 id = value.toLongLong(&be_valid);
+        if (be_valid && id > 0)
+            row_ids.append(id);
+    }
+
+    if (row_ids.isEmpty())
+        return 0;
+
+    const int removed = m_store.deleteMessages(row_ids);
+    if (removed < 0)
+    {
+        setTip(QStringLiteral("删除失败：本地记录写入异常"), true);
+        return 0;
+    }
+
+    // 内存里同步删（id 是全局唯一的，虽然通常只会命中当前会话）
+    QSet<qint64> id_set;
+    for (const qint64 id: row_ids)
+        id_set.insert(id);
+
+    QSet<QString> touched;
+    for (auto it = m_history.begin(); it != m_history.end(); ++it)
+    {
+        QVariantList& list = it.value();
+        for (int i = list.size() - 1; i >= 0; --i)
+        {
+            if (!id_set.contains(list.at(i).toMap().value(QStringLiteral("id")).toLongLong()))
+                continue;
+
+            list.removeAt(i);
+            touched.insert(it.key());
+        }
+    }
+
+    // 摘要按"库里剩下的最后一条"重算，否则删掉最后一条后列表上还挂着那句
+    for (const QString& peer: touched)
+        refreshConversationSummary(peer);
+
+    if (touched.contains(m_active_uid))
+        emit messagesChanged();
+    if (!touched.isEmpty())
+        emit conversationsChanged();
+
+    setTip(QStringLiteral("已删除 %1 条聊天记录（仅本机）").arg(removed));
+    return removed;
+}
+
+void ChatController::clearConversation(const QString& peerUid)
+{
+    if (peerUid.isEmpty())
+        return;
+
+    if (m_store.isOpen() && !m_store.clearConversation(peerUid))
+        qWarning() << "[chat] 清空本地记录失败:" << peerUid;
+
+    m_history[peerUid].clear();
+    // 标成"已加载"：库里已经空了，别让懒加载再查一遍
+    m_history_loaded.insert(peerUid);
+
+    const int index = indexOf(peerUid);
+    QString name = peerUid;
+    if (index >= 0)
+    {
+        QVariantMap item = m_conversations.at(index).toMap();
+        name = item.value(QStringLiteral("displayName")).toString();
+        item.insert(QStringLiteral("lastText"), QString());
+        item.insert(QStringLiteral("lastTime"), QString());
+        item.insert(QStringLiteral("unread"), 0);
+        m_conversations[index] = item;
+        /*
+         * 这里**故意不回写会话摘要**：清空时 store 已经把 conversations 行删了，
+         * 再 persist 会立刻造回一条"空摘要"的行。等真有新消息时 touchConversation
+         * 会重新建行；期间重启，好友会话由好友列表重建、陌生人会话自然消失。
+         */
+    }
+
+    if (peerUid == m_active_uid)
+        emit messagesChanged();
+    emit conversationsChanged();
+
+    setTip(QStringLiteral("已清空与 %1 的聊天记录（仅本机，对方不受影响）")
+               .arg(name.isEmpty() ? peerUid : name));
+}
+
+void ChatController::refreshConversationSummary(const QString& peerUid)
+{
+    const int index = indexOf(peerUid);
+    if (index < 0)
+        return;
+
+    ChatStore::Message last;
+    const bool has_last = m_store.lastMessage(peerUid, last);
+
+    QVariantMap item = m_conversations.at(index).toMap();
+    item.insert(QStringLiteral("lastText"), has_last ? last.body : QString());
+    item.insert(QStringLiteral("lastTime"),
+                has_last
+                    ? QDateTime::fromMSecsSinceEpoch(last.createdMs).toString(QStringLiteral("HH:mm"))
+                    : QString());
+    if (!has_last)
+        item.insert(QStringLiteral("unread"), 0); // 删空了，红点也没意义
+    m_conversations[index] = item;
+
+    persistConversation(peerUid);
+}
+
+void ChatController::persistConversation(const QString& peerUid)
+{
+    if (!m_store.isOpen())
+        return;
+
+    const int index = indexOf(peerUid);
+    if (index < 0)
+        return;
+
+    const QVariantMap item = m_conversations.at(index).toMap();
+
+    ChatStore::Conversation row;
+    row.peerUid = peerUid;
+    row.lastText = item.value(QStringLiteral("lastText")).toString();
+    row.lastTime = item.value(QStringLiteral("lastTime")).toString();
+    row.unread = item.value(QStringLiteral("unread")).toInt();
+    row.updatedMs = QDateTime::currentMSecsSinceEpoch();
+    m_store.saveConversation(row);
 }
 
 int ChatController::indexOf(const QString& peerUid) const
@@ -302,27 +547,31 @@ void ChatController::openConversation(const QString& peerUid, const QString& pee
                                                     .value(QStringLiteral("demo"))
                                                     .toBool();
 
+    // 历史在本地库里，第一次点开时懒加载（演示会话没有库，直接跳过）
+    ensureHistoryLoaded(peerUid);
+
     markRead(peerUid);
 
     if (changed)
         emit activeConversationChanged();
-    // 同一个会话重复点开也要刷一次消息（真实链路里这里该去拉历史）
     emit messagesChanged();
 }
 
 void ChatController::syncFriends(const QVariantList& friends)
 {
     /*
-     * 会话列表 = 好友列表（投影），但**不能直接替换**：
-     *   已有会话的未读 / 摘要 / 顺序是会话状态，重建会把它们清掉。
-     * 所以按 uid 做一次合并：资料字段用新的，会话状态沿用旧的。
+     * 会话列表以好友列表为**主**，但不再是"好友列表的投影"：
      *
-     * demo = true 的那几条（只有 MYCHAT_DEMO=1 才有）原样追加到末尾 ——
-     * 它们是版式自检数据，不该被真实好友列表冲掉。
+     *   · 已有会话的未读 / 摘要 / **顺序**是会话状态，重建会把它们清掉；
+     *   · **非好友会话不能一概删掉** —— 服务端不校验好友关系，陌生人也能发消息，
+     *     删了就等于"消息收到了但永远看不到"（本地库里有记录、界面上却没有）；
+     *   · 好友被删且从没聊过的空会话才丢掉（那种留着只是噪声）；
+     *   · demo = true 的演示会话原样保留（MYCHAT_DEMO=1 才有的版式自检数据）。
+     *
+     * 做法：先按现有顺序原地更新（好友补资料字段），再把新好友补到末尾。
      */
-    QVariantList next;
-    next.reserve(friends.size() + m_conversations.size());
-
+    QSet<QString> friend_uids;
+    QHash<QString, QVariantMap> friend_fields;
     for (const QVariant& entry: friends)
     {
         const QVariantMap f = entry.toMap();
@@ -330,32 +579,68 @@ void ChatController::syncFriends(const QVariantList& friends)
         if (uid.isEmpty())
             continue;
 
-        QVariantMap conv;
-        conv.insert(QStringLiteral("uid"), uid);
-        conv.insert(QStringLiteral("name"), f.value(QStringLiteral("name")));
-        conv.insert(QStringLiteral("nick"), f.value(QStringLiteral("nick")));
-        conv.insert(QStringLiteral("displayName"), f.value(QStringLiteral("displayName")));
-        conv.insert(QStringLiteral("icon"), f.value(QStringLiteral("icon")));
-        conv.insert(QStringLiteral("desc"), f.value(QStringLiteral("desc")));
-        conv.insert(QStringLiteral("sex"), f.value(QStringLiteral("sex")));
-        conv.insert(QStringLiteral("demo"), false);
-
-        // 会话状态沿用上一个版本的（首次出现就是空的）
-        const int old = indexOf(uid);
-        const QVariantMap prev = old >= 0 ? m_conversations.at(old).toMap() : QVariantMap();
-        // ⚠ 一定要给默认值：QVariantMap 里插一个无效 QVariant，QML 那边读到的就是
-        //   undefined → ConversationRow 的 QString 属性会刷 "Unable to assign [undefined]"
-        conv.insert(QStringLiteral("lastText"), prev.value(QStringLiteral("lastText"), QString()));
-        conv.insert(QStringLiteral("lastTime"), prev.value(QStringLiteral("lastTime"), QString()));
-        conv.insert(QStringLiteral("unread"), prev.value(QStringLiteral("unread"), 0));
-
-        next.append(conv);
+        friend_uids.insert(uid);
+        friend_fields.insert(uid, f);
     }
+
+    QVariantList next;
+    next.reserve(m_conversations.size() + friends.size());
+    QSet<QString> kept;
 
     for (const QVariant& entry: m_conversations)
     {
-        if (entry.toMap().value(QStringLiteral("demo")).toBool())
-            next.append(entry);
+        QVariantMap conv = entry.toMap();
+        const QString uid = conv.value(QStringLiteral("uid")).toString();
+        if (uid.isEmpty())
+            continue;
+
+        const bool is_demo = conv.value(QStringLiteral("demo")).toBool();
+        const bool is_friend = friend_uids.contains(uid);
+
+        // 既不是好友、也没有任何聊天记录 → 只可能是"删掉的好友留下的空壳"
+        if (!is_demo && !is_friend && conv.value(QStringLiteral("lastText")).toString().isEmpty())
+            continue;
+
+        if (is_friend)
+        {
+            const QVariantMap f = friend_fields.value(uid);
+            // ⚠ 一定要给默认值：QVariantMap 里插一个无效 QVariant，QML 那边读到的就是
+            //   undefined → ConversationRow 的 QString 属性会刷 "Unable to assign [undefined]"
+            conv.insert(QStringLiteral("name"), f.value(QStringLiteral("name"), QString()));
+            conv.insert(QStringLiteral("nick"), f.value(QStringLiteral("nick"), QString()));
+            conv.insert(QStringLiteral("displayName"),
+                        f.value(QStringLiteral("displayName"), QString()));
+            conv.insert(QStringLiteral("icon"), f.value(QStringLiteral("icon"), QString()));
+            conv.insert(QStringLiteral("desc"), f.value(QStringLiteral("desc"), QString()));
+            conv.insert(QStringLiteral("sex"), f.value(QStringLiteral("sex"), 2));
+            conv.insert(QStringLiteral("demo"), false);
+        }
+
+        next.append(conv);
+        kept.insert(uid);
+    }
+
+    // 新好友（本地还没有会话）补到末尾
+    for (const QVariant& entry: friends)
+    {
+        const QVariantMap f = entry.toMap();
+        const QString uid = f.value(QStringLiteral("uid")).toString();
+        if (uid.isEmpty() || kept.contains(uid))
+            continue;
+
+        QVariantMap conv;
+        conv.insert(QStringLiteral("uid"), uid);
+        conv.insert(QStringLiteral("name"), f.value(QStringLiteral("name"), QString()));
+        conv.insert(QStringLiteral("nick"), f.value(QStringLiteral("nick"), QString()));
+        conv.insert(QStringLiteral("displayName"), f.value(QStringLiteral("displayName"), QString()));
+        conv.insert(QStringLiteral("icon"), f.value(QStringLiteral("icon"), QString()));
+        conv.insert(QStringLiteral("desc"), f.value(QStringLiteral("desc"), QString()));
+        conv.insert(QStringLiteral("sex"), f.value(QStringLiteral("sex"), 2));
+        conv.insert(QStringLiteral("lastText"), QString());
+        conv.insert(QStringLiteral("lastTime"), QString());
+        conv.insert(QStringLiteral("unread"), 0);
+        conv.insert(QStringLiteral("demo"), false);
+        next.append(conv);
     }
 
     m_conversations = next;
@@ -421,6 +706,10 @@ void ChatController::markRead(const QString& peerUid)
 
     item.insert(QStringLiteral("unread"), 0);
     m_conversations[index] = item;
+
+    // 未读也持久化，否则重启后又冒出红点
+    m_store.markConversationRead(peerUid);
+
     emit conversationsChanged();
 }
 
@@ -642,8 +931,22 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
 
         const QString stamp = timeFromStreamId(message.id);
 
-        // 收到的消息状态用 "sent"：气泡组件对 sent 不挂任何小字（正常消息）
-        appendMessage(peer, false, message.body, stamp, QStringLiteral("sent"));
+        /*
+         * 收到的消息状态用 "sent"：气泡组件对 sent 不挂任何小字（正常消息）。
+         * 时间 / 服务端编号一起写进库 —— `server_id` 的 UNIQUE 是跨进程去重的兜底。
+         */
+        const int local_id = appendMessage(peer, false, message.body, stamp,
+                                           QStringLiteral("sent"),
+                                           streamIdToMsecs(message.id), message.id,
+                                           QString::number(message.fromUid));
+        if (local_id == 0)
+        {
+            // 库里已经有同一个 server_id（上个进程留下的 PEL 重投）：不显示，但照样确认
+            ++skipped;
+            ids.append(message.id);
+            continue;
+        }
+
         touchConversation(peer, message.body, stamp);
 
         if (peer == m_active_uid)
@@ -666,6 +969,9 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
         QVariantMap item = m_conversations.at(index).toMap();
         item.insert(QStringLiteral("unread"), item.value(QStringLiteral("unread")).toInt() + it.value());
         m_conversations[index] = item;
+
+        // 未读落库（touchConversation 那次写的是加未读之前的值）
+        persistConversation(it.key());
     }
 
     if (active_got_message)
@@ -755,6 +1061,7 @@ void ChatController::appendIncoming(const QString& peerUid, const QString& text,
             item.insert(QStringLiteral("unread"),
                         item.value(QStringLiteral("unread")).toInt() + 1);
             m_conversations[index] = item;
+            persistConversation(peerUid);
         }
     }
 
@@ -778,6 +1085,9 @@ void ChatController::markMessageState(const QString& peerUid, const int messageI
         item.insert(QStringLiteral("state"), state);
         list[i] = item;
 
+        // 状态也要落库：重启后失败的气泡仍然标红
+        m_store.updateMessageState(messageId, state);
+
         if (peerUid == m_active_uid)
             emit messagesChanged();
         return;
@@ -786,9 +1096,39 @@ void ChatController::markMessageState(const QString& peerUid, const int messageI
 
 int ChatController::appendMessage(const QString& peerUid, const bool from_self,
                                   const QString& text, const QString& time,
-                                  const QString& state)
+                                  const QString& state, const qint64 created_ms,
+                                  const QString& server_id, const QString& from_uid)
 {
-    const int id = m_next_message_id++;
+    const qint64 created = created_ms > 0 ? created_ms : QDateTime::currentMSecsSinceEpoch();
+
+    ChatStore::Message row;
+    row.peerUid = peerUid;
+    row.fromSelf = from_self;
+    row.fromUid = from_uid;
+    row.body = text;
+    row.type = 1;
+    row.createdMs = created;
+    row.serverId = server_id;
+    row.state = state;
+
+    int id = 0;
+    switch (m_store.insertMessage(row))
+    {
+    case ChatStore::InsertResult::Duplicate:
+        // 库里有同一个 server_id：PEL 重投（可能是上个进程留下的），不该再显示
+        return 0;
+
+    case ChatStore::InsertResult::Inserted:
+        // 直接用库的自增 id 当界面消息 id —— 重启后读回来的 id 也是它，状态能对上
+        id = static_cast<int>(row.id);
+        break;
+
+    case ChatStore::InsertResult::Failed:
+        // 没开库 / 写失败：退化成内存 id，消息照常显示
+        id = m_next_message_id++;
+        break;
+    }
+
     m_history[peerUid].append(makeMessage(id, from_self, text, time, state));
     return id;
 }
@@ -807,6 +1147,9 @@ void ChatController::touchConversation(const QString& peerUid, const QString& la
     // 有新消息就置顶（服务端排序不可靠时，这一条也要保持）
     m_conversations.removeAt(index);
     m_conversations.prepend(item);
+
+    // 摘要跟着落库：重启后会话列表才有内容
+    persistConversation(peerUid);
 }
 
 void ChatController::setTip(const QString& text, const bool is_error)

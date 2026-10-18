@@ -28,3 +28,5 @@ CMakeUserPresets.json
 # ⚠ /docs/ 下是 ServerDocs 接口文档，**未被 git 跟踪** —— 删掉了就找不回来
 /docs/
 /.workbuddy/
+# 本地聊天记录（exe 目录下的便携数据目录，含 SQLite 库与 -wal/-shm）
+/data/

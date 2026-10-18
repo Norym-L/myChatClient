@@ -36,6 +36,13 @@ Item {
     property string selfName: ""
     property string selfUid: ""
 
+    /*! 选择模式：整行可点，点一下切换选中 */
+    property bool selectable: false
+    /*! 是否已选中（只在 selectable 时有意义） */
+    property bool selected: false
+    /*! 选择模式下点了这一行 */
+    signal toggleRequested()
+
     readonly property int avatarSize: 28
     readonly property int hPad: 12
     readonly property int vPad: 8
@@ -216,5 +223,34 @@ Item {
             name: root.selfName.length > 0 ? root.selfName : "我"
             uid: root.selfUid
         }
+    }
+
+    // ══════════════════ 选择模式 ══════════════════
+    /*
+     * 选中态只画在整行外围（描边 + 淡淡一层底色），不去动气泡本身的版式 ——
+     * 挑消息的时候还要能看清每条说的是什么。
+     *
+     * 试过再加一个圆形「✓」角标：不管放哪都会压在"昵称 + 时间"那一行上，
+     * 反而不如这一圈高亮清楚（底部操作条还会显示已选条数）。
+     */
+    Rectangle {
+        anchors.fill: parent
+        visible: root.selectable && root.selected
+        color: Theme.accentSoft
+        opacity: 0.35
+        border.width: 2
+        border.color: Theme.accent
+        radius: 4
+    }
+
+    /*
+     * 整行点击切换选中。**只有选择模式下才启用** ——
+     * enabled=false 的 MouseArea 不消费事件，普通模式下的排版/滚动不受影响。
+     */
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.selectable
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.toggleRequested()
     }
 }
