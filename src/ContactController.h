@@ -56,6 +56,19 @@ class ContactController : public QObject
     Q_PROPERTY(QVariantList applyList READ applyList NOTIFY applyListChanged)
 
     /**
+     * 还没看过的好友申请数（侧栏「好友申请」的红点）。
+     *
+     * 只数「别人发给我 + 还在等处理 + 编号大于已读水位」的：
+     *   · 我已经接受 / 拒绝的立刻从计数里消失；
+     *   · 我发出去的不算（那是等对方处理，不该提醒我自己）；
+     *   · MySQL 申请编号自增且单调，所以"这之前我都看过"用一个水位数字就够，
+     *     不用往配置里塞一长串 id（那玩意只会越长越大）。
+     *
+     * 打开「好友申请」分区时调 markApplyListRead() 把水位推到当前最新。
+     */
+    Q_PROPERTY(int unreadApplyCount READ unreadApplyCount NOTIFY unreadApplyCountChanged)
+
+    /**
      * 好友列表（1020/1021），每项 QVariantMap：
      * uid / name / desc / nick / displayName / sex / icon
      *
@@ -76,6 +89,7 @@ public:
     [[nodiscard]] int searchResultCount() const { return static_cast<int>(m_search_results.size()); }
 
     [[nodiscard]] QVariantList applyList() const { return m_apply_list; }
+    [[nodiscard]] int unreadApplyCount() const { return m_unread_apply_count; }
 
     [[nodiscard]] QVariantList friendList() const { return m_friend_list; }
     [[nodiscard]] int friendCount() const { return static_cast<int>(m_friend_list.size()); }
@@ -100,6 +114,14 @@ public:
     Q_INVOKABLE void refreshApplyList();
 
     /**
+     * 把申请列表标记成"已看过"：红点清掉，水位按 uid 存进 QSettings。
+     *
+     * 由界面在**真的把列表摆到眼前**时调用（进入「好友申请」分区、以及停在
+     * 该分区时列表又变了）；不看就不清，否则红点等于从来不会亮。
+     */
+    Q_INVOKABLE void markApplyListRead();
+
+    /**
      * 刷新好友列表（1020）。
      *
      * 与 refreshApplyList() 共用同一个 busy 门：同一时刻只让一条链路占着控制器，
@@ -107,6 +129,14 @@ public:
      * 需要补刷的场合（比如刚接受完申请）请走 \l m_friend_refresh_pending 那套排队。
      */
     Q_INVOKABLE void refreshFriendList();
+
+    /**
+     * 静默刷新好友列表：不覆盖底部那一行提示。
+     *
+     * 用在"用户并没有主动点刷新"的场合 —— 例如发消息收到 1022（可能是对方删了我），
+     * 此时屏幕上该留着的仍是那条发送失败提示，不能被"共 N 位好友"盖掉。
+     */
+    Q_INVOKABLE void refreshFriendListSilently();
 
     /**
      * 接受 / 拒绝一条收到的好友申请。
@@ -119,6 +149,27 @@ public:
      */
     Q_INVOKABLE void handleFriendRequest(const QString& requestId, int state);
 
+    /**
+     * 判断某个 uid 现在是不是我的好友（读的是最近一次 1020/1021 的结果）。
+     *
+     * 用途：资料卡打开时决定要不要给「删除好友」按钮 —— 那个判断放在页面里、
+     * 设置成弹窗属性传进去（弹窗是展示组件，不去读控制器）。
+     */
+    Q_INVOKABLE bool isFriend(const QString& uid) const;
+
+    /**
+     * 删除好友（1027 / 1028）。
+     *
+     * 服务端**双向删除**（双方的好友关系和备注一起删），并同步 Redis 好友集合；
+     * 但**不通知被删除方** —— 对方的列表要等他自己刷新才会变。
+     *
+     * 成功后本地立刻把这条从 friendList 里摘掉（friendListChanged → 会话列表同步）。
+     * 历史聊天记录**保留**：删除好友不删本地库，会话照旧能看到（只是发不出去了）。
+     *
+     * @param uid 要删的好友 uid（applyList / friendList 里的字符串形式）
+     */
+    Q_INVOKABLE void removeFriend(const QString& uid);
+
     /// 清空当前搜索结果（比如用户改了关键字）
     Q_INVOKABLE void clearSearchResult();
 
@@ -128,10 +179,19 @@ signals:
     void busyChanged();
     void searchResultsChanged();
     void applyListChanged();
+    void unreadApplyCountChanged();
     void friendListChanged();
 
     /// 好友列表刷新结束（ok=false 时 error 是服务端 / 本地错误码）
     void friendListRefreshed(bool ok, int error);
+
+    /**
+     * 删除好友结束。
+     *
+     * ok=false 时 error 可能是：1022（本来就不是好友）、1013（数据库 / Redis 不可用）、
+     * 5（本地等回包超时）等。
+     */
+    void friendDeleteFinished(bool ok, int error, const QString& uid);
 
     /// 搜索结束；found=false 时 error 是服务端错误码（未找到通常是 1014）
     void searchFinished(bool found, int error);
@@ -151,6 +211,12 @@ private:
     /// 自己的 uid；未登录时为 0
     [[nodiscard]] std::uint64_t selfUid() const;
 
+    /// 换账号后按下 uid 懒加载「已读水位」（QSettings；同一 uid 只读一次）
+    void ensureSeenLoaded();
+
+    /// 按 applyList 重算红点数（申请列表 / 登录状态一变就调）
+    void refreshUnreadApplyCount();
+
     /**
      * 发送成功后，**立刻在本地补一条「已发出」的申请记录**。
      *
@@ -165,6 +231,7 @@ private:
     void onFriendRequestResult(bool ok, int error, std::uint64_t requestId);
     void onFriendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
     void onFriendList(const QList<mychat::protocol::FriendInfo>& friends, int error);
+    void onFriendDeleteResult(bool ok, int error, const QString& uid);
     void onAuthFriendResult(bool ok, int error, std::uint64_t requestId, int state);
     void onFriendRequestHandled(std::uint64_t requestId, int state);
 
@@ -213,6 +280,13 @@ private:
     QVariantList m_search_results;
     QVariantList m_apply_list;
     QVariantList m_friend_list;
+
+    /// 红点数（unreadApplyCount 的缓存值）
+    int m_unread_apply_count = 0;
+    /// 「这个编号之前的好友申请我都看过了」—— QSettings 里的已读水位，按 uid 分开
+    qint64 m_seen_apply_id = 0;
+    /// 上面这个水位属于哪个 uid（换账号要重读；空串 = 还没读过）
+    QString m_seen_uid;
 
     // 本次「发送好友申请」的目标信息，成功后用来补那条本地记录
     std::uint64_t m_pending_peer_uid = 0;

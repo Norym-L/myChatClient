@@ -215,6 +215,24 @@ qt_add_executable(qtClientChatStoreTest
 
 target_link_libraries(qtClientChatStoreTest PRIVATE qtclient_core)
 
+# ── 删除好友自检（自带假 ChatServer，不需要服务端）────────────────────
+# 服务端 2026-10-19 新增 1027/1028：请求体形状、成功后本地列表同步、1022 的处理。
+# 真实服务端上删一次就破坏测试账号的好友关系，而且 1022 场景没法稳定复现。
+qt_add_executable(qtClientFriendDeleteTest
+        tests/frienddelete.cpp
+)
+
+target_link_libraries(qtClientFriendDeleteTest PRIVATE qtclient_core)
+
+# ── 账号切换自检（需要真实服务端 + 两个账号）──────────────────────────
+# 同一进程「登录 A → 退出 → 登录 B」，验证不会残留 A 的会话
+# （否则 B 的列表里会出现一条 peer_uid == B 的"自己和自己聊天"）。
+qt_add_executable(qtClientAccountSwitchTest
+        tests/accountswitch.cpp
+)
+
+target_link_libraries(qtClientAccountSwitchTest PRIVATE qtclient_core)
+
 # 这几个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
@@ -225,6 +243,8 @@ if (WIN32)
     set_target_properties(qtClientChatMsgTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatPullTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatStoreTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientFriendDeleteTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientAccountSwitchTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

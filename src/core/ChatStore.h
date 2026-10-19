@@ -95,6 +95,18 @@ public:
     /// 某个会话最近 \a limit 条消息（按时间正序返回）
     [[nodiscard]] QList<Message> recentMessages(const QString& peerUid, int limit = 200) const;
 
+    /**
+     * 某个会话里比 \a beforeId 更早的一批消息（按时间正序返回）。
+     *
+     * 聊天记录往上翻页用：id 是自增主键，同一个会话里 id 越大越新，
+     * 所以"比这条更早"就是 id < beforeId —— 比再传一个时间戳去比更稳，
+     * 同一毫秒里发的几条也不会漏掉或者重复。
+     *
+     * @return 最多 \a limit 条；不足 limit 说明已经翻到头了
+     */
+    [[nodiscard]] QList<Message> messagesBefore(const QString& peerUid, qint64 beforeId,
+                                                int limit = 30) const;
+
     /// 某个会话的最后一条消息（删完消息后重算摘要用）；没有时返回 false
     [[nodiscard]] bool lastMessage(const QString& peerUid, Message& out) const;
 

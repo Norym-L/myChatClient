@@ -118,6 +118,9 @@ Window {
     Component {
         id: chatPageComponent
         ChatPage {
+            // 窗口在前台？后台收到的消息不算已读，攒成红点（见 ChatPage.syncAttention）
+            windowActive: app.active
+
             // 退出登录：回到登录页并断开聊天服连接
             onLogoutRequested: {
                 LoginController.logout()

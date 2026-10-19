@@ -75,6 +75,8 @@ namespace mychat::protocol
         SyncChatMessageRsp,   // 1024
         AckChatMessageReq,    // 1025 —— 确认收到（服务端 XACK + XDEL）
         AckChatMessageRsp,    // 1026
+        DelFriendReq,         // 1027 —— 删除好友（服务端 2026-10-19 新增）
+        DelFriendRsp,         // 1028 —— 删除结果，回显 uid
     };
 
     /**
@@ -190,6 +192,17 @@ namespace mychat::protocol
         RequestValueInvalid = 1020,
         /// 重复处理：该条好友申请已经被处理过
         DoubleHandleRequest = 1021,
+        /**
+         * 不是好友关系（服务端 2026-10-19 新增 `NOT_FRIEND`）。
+         *
+         * 两个出处：
+         *   · 发消息（1013）的好友校验没过 —— 消息**不会**写进对方离线流；
+         *   · 删好友（1027）时双方本来就不是好友。
+         *
+         * ⚠ 这个数值和「新消息推送」的 message_id 1022 撞号，但那是两套独立枚举
+         *   （错误码 vs 消息编号），别混用。
+         */
+        NotFriend = 1022,
     };
 
 /// 错误码 -> 用户可读提示

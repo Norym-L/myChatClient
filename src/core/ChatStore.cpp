@@ -330,6 +330,52 @@ QList<ChatStore::Message> ChatStore::recentMessages(const QString& peerUid, cons
     return list;
 }
 
+QList<ChatStore::Message> ChatStore::messagesBefore(const QString& peerUid, const qint64 beforeId,
+                                                    const int limit) const
+{
+    QList<Message> list;
+    if (!isOpen() || peerUid.isEmpty() || beforeId <= 0 || limit <= 0)
+        return list;
+
+    QSqlQuery query(m_db);
+    // 倒序取"比 beforeId 更早的最近 limit 条"，再翻回正序 —— 和 recentMessages 相反的方向：
+    // 正序 LIMIT 会拿到整段历史最开头的几条，越翻越回不去。
+    query.prepare(QStringLiteral(
+        "SELECT id, from_self, from_uid, body, type, created_ms, server_id, state"
+        " FROM messages WHERE peer_uid=? AND id<? ORDER BY id DESC LIMIT ?"));
+    query.addBindValue(peerUid);
+    query.addBindValue(beforeId);
+    query.addBindValue(limit);
+    if (!query.exec())
+    {
+        qWarning() << "[store] 读更早的消息失败:" << query.lastError().text();
+        return list;
+    }
+
+    while (query.next())
+    {
+        Message message;
+        message.id = query.value(0).toLongLong();
+        message.peerUid = peerUid;
+        message.fromSelf = query.value(1).toInt() != 0;
+        message.fromUid = query.value(2).toString();
+        message.body = query.value(3).toString();
+        message.type = query.value(4).toInt();
+        message.createdMs = query.value(5).toLongLong();
+        message.serverId = query.value(6).toString();
+        message.state = query.value(7).toString();
+
+        // 和 recentMessages 一样：上次进程死在"等回执"时，这条不可能再有结果
+        if (message.state == QLatin1String(kStateSending))
+            message.state = QString::fromLatin1(kStateFailed);
+
+        list.append(message);
+    }
+
+    std::reverse(list.begin(), list.end());
+    return list;
+}
+
 bool ChatStore::lastMessage(const QString& peerUid, Message& out) const
 {
     if (!isOpen() || peerUid.isEmpty())

@@ -43,6 +43,26 @@ Item {
     /*! 选择模式下点了这一行 */
     signal toggleRequested()
 
+    /*!
+        右键点了这一行（要开操作菜单）。
+
+        a x / a y 是相对 \l coordinateSpace 的坐标 —— 气泡本身不知道
+        页面在哪，所以由 delegate 把页面根节点传进来换算菜单位置。
+    */
+    signal contextMenuRequested(real x, real y)
+
+    /*! 坐标参照物（页面根节点），右键菜单按它定位 */
+    property Item coordinateSpace: null
+
+    /*!
+        是否显示"这条是什么时候发的"。
+
+        默认藏起来：每条都挂一个 HH:mm，一整屏看下来全是重复的两位数，
+        把消息本身压下去了。鼠标在气泡上停满 1 秒才显形（QQ 的做法），
+        移开就收回去 —— 需要精确时间的时候停一下就有，平时不占视线。
+    */
+    property bool showTime: false
+
     readonly property int avatarSize: 28
     readonly property int hPad: 12
     readonly property int vPad: 8
@@ -62,6 +82,32 @@ Item {
 
     implicitHeight: root.fromSelf ? selfRow.implicitHeight : otherRow.implicitHeight
     width: parent ? parent.width : 400
+
+    /*
+     * 鼠标在气泡上停满 1 秒，才把"这条是什么时候发的"亮出来。
+     *
+     * 用 restart() 而不是 start()：在相邻消息之间划过去时，每进一条都重新计时，
+     * 不会因为"只划过 0.3 秒"就闪一下时间。移开立刻收回去。
+     */
+    HoverHandler {
+        id: hoverHandler
+
+        onHoveredChanged: {
+            if (hoverHandler.hovered) {
+                hoverTimer.restart()
+            } else {
+                hoverTimer.stop()
+                root.showTime = false
+            }
+        }
+    }
+
+    Timer {
+        id: hoverTimer
+        interval: 1000
+        repeat: false
+        onTriggered: root.showTime = true
+    }
 
     /*!
         投递状态的等宽小字。demo / sent 不显示 —— 前者是假数据，
@@ -106,11 +152,23 @@ Item {
                     color: Theme.muted
                 }
 
+                /*
+                 * 时间：默认藏着（占着位、透明），悬浮满 1s 才浮出来。
+                 * 用 opacity 而不是 visible —— visible 切换会让后面那个
+                 * StateMark 左右跳一下，看着像消息在抖。
+                 */
                 Text {
                     text: root.time
                     font: Theme.fontMonoSm
                     color: Theme.muted
-                    opacity: 0.7
+                    opacity: root.showTime ? 0.85 : 0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Theme.durFast
+                            easing.type: Theme.easingStd
+                        }
+                    }
                 }
 
                 StateMark {
@@ -171,11 +229,19 @@ Item {
                 StateMark {
                 }
 
+                // 自己的时间同样默认藏着，悬浮 1s 才显形（对齐对方那条的行为）
                 Text {
                     text: root.time
                     font: Theme.fontMonoSm
                     color: Theme.muted
-                    opacity: 0.7
+                    opacity: root.showTime ? 0.85 : 0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Theme.durFast
+                            easing.type: Theme.easingStd
+                        }
+                    }
                 }
             }
 
@@ -252,5 +318,24 @@ Item {
         enabled: root.selectable
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggleRequested()
+    }
+
+    /*
+     * 右键：消息操作菜单（复制 / 删除 / 将来的表情包）。
+     *
+     * 只收右键 —— acceptedButtons 限定成 RightButton 之后，左键事件仍然
+     * 落到下面的 Flickable（拖拽滚动）和上面那个选择模式 MouseArea，
+     * 不会因为多了一层 MouseArea 就把滚动吃掉。
+     */
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        enabled: !root.selectable
+
+        onClicked: (mouse) => {
+            const space = root.coordinateSpace !== null ? root.coordinateSpace : root
+            const spot = root.mapToItem(space, mouse.x, mouse.y)
+            root.contextMenuRequested(spot.x, spot.y)
+        }
     }
 }

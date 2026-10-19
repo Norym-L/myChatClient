@@ -96,6 +96,20 @@ namespace mychat
         bool syncFriendList();
 
         /**
+         * 删除好友（message_id = DelFriendReq 1027）。
+         *
+         * 请求体 `{ "uid": "<好友 uid>" }`，删除者取**当前会话已登录的 uid**
+         * （所以不用传自己）。服务端做双向删除，并同步 Redis 好友集合。
+         *
+         * ⚠ 服务端**不通知被删除方**（1028 只回给发起方）—— 对方的会话列表要等
+         *   他自己刷新好友列表（1020）才会变。
+         *
+         * @return true = 已发出（结果看 \l friendDeleteResult）
+         *         false = 没发（未连接 / 未登录 / uid 为空）
+         */
+        bool delFriend(const QString& uid);
+
+        /**
          * 心跳（message_id = HeartBeatReq）。
          *
          * 登录成功后由内部定时器按 HEARTBEAT_INTERVAL_MS 自动发送，外部一般不用调。
@@ -190,6 +204,18 @@ namespace mychat
          * 超时也会走到这里（error = \l RequestTimeout），否则调用方会一直等。
          */
         void friendListResult(const QList<mychat::protocol::FriendInfo>& friends, int error);
+
+        /**
+         * 删除好友的结果（1027 → 1028）。
+         *
+         * 回包把请求里的 `uid` **原样回显**（成功、失败都带），所以按它认领；
+         * 回显缺失（空串 / 老服务端）时退回请求侧记下的那一发。
+         *
+         * @param ok    error == 0：MySQL 与 Redis 好友缓存都已更新
+         * @param error 1022 = 本来就不是好友；1013 = 数据库 / Redis 不可用；
+         *              本地超时 = \l RequestTimeout
+         */
+        void friendDeleteResult(bool ok, int error, const QString& uid);
 
         /**
          * 服务端**主动推送**「有人申请加你为好友」（message_id = 1009 NotifyAddFriendReq）。
@@ -323,6 +349,8 @@ namespace mychat
         void handleFriendRequestList(const QByteArray& body);
         /// 好友列表回包（1021）
         void handleFriendList(const QByteArray& body);
+        /// 删除好友回包（1028，回显 uid）
+        void handleDelFriendResponse(const QByteArray& body);
         /// 服务端主动推送：只有 request id，没有回包可发
         void handleNotifyAddFriendRequest(const QByteArray& body);
         /// 处理好友申请的回包（1011，只有 error）
@@ -398,6 +426,13 @@ namespace mychat
          */
         std::uint64_t m_auth_in_flight = 0;
         int m_auth_state_in_flight = 0;
+
+        /*
+         * 「删除好友」的回包（1028）会回显 uid，正常按回包认领。
+         * 但回显字段缺失 / 空串时得有个兜底，否则界面上那次删除永远等不到结果。
+         * 同一时刻只允许一个删除在飞（界面一次只能点一个按钮）。
+         */
+        QString m_del_friend_in_flight;
 
         /// 一条待发的聊天消息（1013）
         struct OutgoingText

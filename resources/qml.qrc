@@ -26,6 +26,11 @@
         <file alias="components/ZAvatar.qml">../qml/components/ZAvatar.qml</file>
         <file alias="components/ConversationRow.qml">../qml/components/ConversationRow.qml</file>
         <file alias="components/ChatBubble.qml">../qml/components/ChatBubble.qml</file>
+        <file alias="components/ChatMessageMenu.qml">../qml/components/ChatMessageMenu.qml</file>
+        <file alias="components/ChatScrollBar.qml">../qml/components/ChatScrollBar.qml</file>
+        <file alias="components/NavIcon.qml">../qml/components/NavIcon.qml</file>
+        <file alias="components/NavRail.qml">../qml/components/NavRail.qml</file>
+        <file alias="components/NavRailButton.qml">../qml/components/NavRailButton.qml</file>
         <file alias="components/ThemeToggle.qml">../qml/components/ThemeToggle.qml</file>
 
         <!-- ── ZmdUI 组件库（vendor）─────────────────────────────── -->

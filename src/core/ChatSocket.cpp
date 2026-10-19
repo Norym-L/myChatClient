@@ -74,6 +74,10 @@ namespace mychat
                 return "AckChatMessageReq";
             case protocol::MessageId::AckChatMessageRsp:
                 return "AckChatMessageRsp";
+            case protocol::MessageId::DelFriendReq:
+                return "DelFriendReq";
+            case protocol::MessageId::DelFriendRsp:
+                return "DelFriendRsp";
             }
             return "Unknown";
         }
@@ -317,6 +321,49 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
                         {
                             emit friendListResult(
                                 {}, static_cast<int>(protocol::ErrorCode::RequestTimeout));
+                        });
+        return true;
+    }
+
+    bool ChatSocket::delFriend(const QString& uid)
+    {
+        const QString target = uid.trimmed();
+
+        if (!isConnected())
+            return false;
+
+        if (target.isEmpty())
+        {
+            qWarning() << "[chat] 删除好友的 uid 为空，请求被丢弃";
+            return false;
+        }
+
+        if (!m_del_friend_in_flight.isEmpty())
+        {
+            /*
+             * 1028 没有请求序号，两次删除同时在飞时无法分辨回包属于哪一次
+             * （而且 m_pending 的超时表按型号 FIFO 认领）。界面一次只能点一个按钮，
+             * 串行完全够用 —— 直接拒掉第二条，别让它悄悄错配。
+             */
+            qWarning() << "[chat] 上一个删除好友请求还没回包，本次丢弃:" << target;
+            return false;
+        }
+
+        QJsonObject body;
+        body.insert(QStringLiteral("uid"), target);
+
+        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::DelFriendReq), body))
+            return false;
+
+        m_del_friend_in_flight = target;
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::DelFriendReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::DelFriendRsp),
+                    [this, target]()
+                        {
+                            m_del_friend_in_flight.clear();
+                            emit friendDeleteResult(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                target);
                         });
         return true;
     }
@@ -655,6 +702,8 @@ void ChatSocket::reset()
         // 断线时在飞的处理请求也一并作废：否则重连后收了别的东西会拿旧 id 去报结果
         m_auth_in_flight = 0;
         m_auth_state_in_flight = 0;
+        // 删除好友同理：不清的话重连后会一直卡在"上一个还没回包"，再也删不了人
+        m_del_friend_in_flight.clear();
 
         /*
          * 消息队列同理：连接都没了，排队中的消息不可能再发出去。
@@ -826,6 +875,9 @@ void ChatSocket::reset()
             break;
         case protocol::MessageId::AckChatMessageRsp:
             handleAckChatMessages(body);
+            break;
+        case protocol::MessageId::DelFriendRsp:
+            handleDelFriendResponse(body);
             break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
@@ -1002,6 +1054,61 @@ void ChatSocket::reset()
         qInfo() << "[chat] 收到好友列表, 共" << friends.size() << "位, error =" << error;
 
         emit friendListResult(friends, error);
+    }
+
+    void ChatSocket::handleDelFriendResponse(const QByteArray& body)
+    {
+        /*
+         * 1028：{"error":0, "uid":"10002"}
+         *
+         * 服务端把请求里的 uid **原样回显**（成功、失败都带），所以优先用回包认领；
+         * 回显为空串 / 老服务端缺失时，退回请求侧记下的那一发。
+         */
+        const QString in_flight = m_del_friend_in_flight;
+        m_del_friend_in_flight.clear();
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 删除好友回包解析失败:" << parse_error.errorString();
+            emit friendDeleteResult(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                    in_flight);
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        const auto echoed = protocol::parseUid(object.value(QStringLiteral("uid")));
+        const QString uid = echoed.has_value() && *echoed != 0
+                                ? QString::number(*echoed)
+                                : in_flight;
+
+        if (uid.isEmpty())
+        {
+            // 既没回显、也没有在飞的请求 → 认不出删的是谁，别乱动好友列表
+            qWarning() << "[chat] 收到无法认领的删除好友回包，已忽略:" << object;
+            return;
+        }
+
+        if (echoed.has_value() && !in_flight.isEmpty() && uid != in_flight)
+        {
+            qWarning() << "[chat] 1028 回显的 uid 与在飞请求不一致: echoed =" << uid
+                << "in-flight =" << in_flight;
+        }
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 1022 = 本来就不是好友（关系不存在），1013 = 数据库 / Redis 不可用
+            qWarning() << "[chat] 删除好友失败, uid =" << uid << "error =" << error;
+            emit friendDeleteResult(false, error, uid);
+            return;
+        }
+
+        qInfo() << "[chat] 已删除好友, uid =" << uid;
+        emit friendDeleteResult(true, error, uid);
     }
 
     void ChatSocket::handleNotifyAddFriendRequest(const QByteArray& body)

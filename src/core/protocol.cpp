@@ -91,6 +91,9 @@ namespace mychat::protocol
             return QObject::tr("请求参数不合法");
         case ErrorCode::DoubleHandleRequest:
             return QObject::tr("这条好友申请已经处理过了");
+        case ErrorCode::NotFriend:
+            // 发消息时会被拼成「消息发送失败：你们还不是好友」
+            return QObject::tr("你们还不是好友");
         case ErrorCode::JsonError:
             return QObject::tr("服务器返回数据解析失败");
         case ErrorCode::NetworkError:

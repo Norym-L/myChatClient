@@ -79,6 +79,14 @@ ZDialog {
     property bool isSelf: false
 
     /*!
+        对方现在是不是我的好友（由页面按 ContactController.isFriend(uid) 写入）。
+
+        只影响一个按钮：是好友才给「删除好友」。非好友（搜索结果、陌生人）不显示 ——
+        服务端会回 1022，点了也只会得到一句错误。
+    */
+    property bool isFriend: false
+
+    /*!
         已有的好友申请（就是 applyList 里的那一项，null 表示没有）。
 
         非空时弹窗切到「申请详情」：只展示这条申请，底栏不再给「加好友」。
@@ -119,6 +127,13 @@ ZDialog {
 
     /// 是否处于编辑态（只有 isSelf 时有意义）
     property bool editing: false
+    /*!
+        「删除好友」是否已经按过一次、正在等确认。
+
+        删除是不可撤销的（服务端双向删除），所以做成两段式：第一次点变「确认删除」，
+        4 秒内不点就自动复位 —— 别让一个误触把好友删掉。
+    */
+    property bool deleteArmed: false
     /// 编辑态里选中的性别（0 男 / 1 女 / 2 不公开）
     property int editSex: 2
     /// 加好友时提交的验证信息
@@ -157,6 +172,14 @@ ZDialog {
     */
     signal avatarUploadRequested()
 
+    /*!
+        请求删除这位好友（页面 → ContactController.removeFriend）。
+
+        只在 isFriend && !isSelf && !hasRequest 时可能发出；弹窗自己不做网络，
+        也不做"删完关窗"这类判断 —— 那些都在页面那一侧。
+    */
+    signal friendDeleteRequested(string uid)
+
     // ══════════════════════════════════════════════════════════════
     //  外壳
     // ══════════════════════════════════════════════════════════════
@@ -170,8 +193,12 @@ ZDialog {
     /// 字段名的固定列宽：让所有字段的值左边缘对齐（工业面板的铭牌感）
     readonly property int labelWidth: 64
 
+    /// 「删除好友」第一次点击的提示；也是判断 hint 是不是自己那句的依据
+    readonly property string deleteHintText: "再点一次「确认删除」：双方好友关系都会被移除（本地聊天记录保留）"
+
     onClosed: {
         dialog.editing = false
+        dialog.deleteArmed = false
         dialog.hint = ""
         dialog.hintIsError = false
         dialog.verifyInfo = ""
@@ -444,7 +471,8 @@ ZDialog {
         // ── ④ 加好友随申请发出去的两条信息（仅"可以发申请"时）─────
         Column {
             width: parent.width
-            visible: !dialog.isSelf && !dialog.hasRequest
+            // 已经是好友 / 已有申请时都没有"发申请"这回事，输入框留着只会误导
+            visible: !dialog.isSelf && !dialog.hasRequest && !dialog.isFriend
             spacing: Theme.spacingMd
 
             ZTextField {
@@ -507,6 +535,21 @@ ZDialog {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.spacingSm
 
+            /*
+             * 删除好友：只对「已经是好友的别人」显示。
+             *
+             * 两段式确认（见 requestDeleteFriend）：第一次点只是把按钮换成「确认删除」，
+             * 4 秒内不点自动复位。删除不可撤销 —— 服务端会双向删掉关系和备注。
+             */
+            ZButton {
+                text: dialog.deleteArmed ? "确认删除" : "删除好友"
+                variant: Theme.Variant.Danger
+                visible: dialog.isFriend && !dialog.isSelf && !dialog.hasRequest
+                         && !dialog.editing
+                enabled: !dialog.busy
+                onClicked: dialog.requestDeleteFriend()
+            }
+
             ZButton {
                 text: dialog.editing ? "取消" : "关闭"
                 variant: Theme.Variant.Secondary
@@ -544,10 +587,17 @@ ZDialog {
                 visible: !dialog.canAuth
                 text: dialog.primaryText()
                 variant: Theme.Variant.Primary
-                // 已有申请时禁用：再发一次只会被服务端顶回来（1016 / 1018）
-                enabled: !dialog.busy && !dialog.hasRequest
+                // 已有申请 / 已经是好友时禁用：再发一次只会被服务端顶回来（1016 / 1018）
+                enabled: !dialog.busy && !dialog.hasRequest && !dialog.isFriend
                 onClicked: dialog.primaryAction()
             }
+        }
+
+        /// 「删除好友」的两段确认：4 秒不点就自动复位，免得误触
+        Timer {
+            id: deleteArmTimer
+            interval: 4000
+            onTriggered: dialog.resetDeleteArmed()
         }
     }
 
@@ -635,6 +685,11 @@ ZDialog {
 
         if (dialog.isSelf)
             return "编辑资料"
+
+        // 已经是好友：主按钮只是状态牌（点它发申请只会被服务端顶回 1016）
+        if (dialog.isFriend)
+            return "已是好友"
+
         return dialog.busy ? "提交中…" : "加好友"
     }
 
@@ -646,7 +701,7 @@ ZDialog {
             dialog.submitProfile()
         else if (dialog.isSelf)
             dialog.enterEdit()
-        else
+        else if (!dialog.isFriend)
             dialog.sendFriendRequest()
     }
 
@@ -682,7 +737,7 @@ ZDialog {
     }
 
     function sendFriendRequest() {
-        if (dialog.busy || dialog.isSelf)
+        if (dialog.busy || dialog.isSelf || dialog.isFriend)
             return
         dialog.friendRequestRequested(dialog.userId, dialog.verifyInfo, dialog.remark)
     }
@@ -697,6 +752,40 @@ ZDialog {
         if (dialog.busy || !dialog.canAuth)
             return
         dialog.friendAuthRequested(String(dialog.requestInfo.id), state)
+    }
+
+    /*!
+        删除好友：两段式确认。
+
+        第一次点只把按钮换成「确认删除」，第二次才真的抛信号；4 秒不点自动复位。
+        删除在服务端是**双向、不可撤销**的（连备注一起删），所以这里不做"一点就走"。
+    */
+    function requestDeleteFriend() {
+        if (dialog.busy || dialog.isSelf || dialog.hasRequest || !dialog.isFriend)
+            return
+
+        if (!dialog.deleteArmed) {
+            dialog.deleteArmed = true
+            dialog.showHint(dialog.deleteHintText, true)
+            deleteArmTimer.restart()
+            return
+        }
+
+        deleteArmTimer.stop()
+        dialog.deleteArmed = false
+        // 只抛信号：发请求、关窗、结果提示都在页面那侧
+        dialog.friendDeleteRequested(dialog.userId)
+    }
+
+    /// 复位删除确认（Timer 到点 / 弹窗关闭）
+    function resetDeleteArmed() {
+        if (!dialog.deleteArmed)
+            return
+
+        dialog.deleteArmed = false
+        // 只清自己写的那句，别把服务端刚回来的结果盖掉
+        if (dialog.hint === dialog.deleteHintText)
+            dialog.showHint("", false)
     }
 
     function submitProfile() {

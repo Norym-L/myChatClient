@@ -76,6 +76,41 @@ class ChatController : public QObject
     /// 当前会话是不是演示数据（MYCHAT_DEMO=1 造出来的那条）—— 界面据此决定要不要挂 DEMO 标签
     Q_PROPERTY(bool activePeerIsDemo READ activePeerIsDemo NOTIFY activeConversationChanged)
 
+    /**
+     * 窗口在不在前台（main.qml 把 Window.active 绑进来）。
+     *
+     * 只有"人真的在看"的时候，收到的消息才当场算已读；窗口在后台 / 最小化时
+     * 收到的消息照常攒成未读，切回来再清。否则用别的程序时来的消息会被悄悄
+     * 标成已读，用户永远看不到红点。
+     */
+    Q_PROPERTY(bool windowActive READ windowActive WRITE setWindowActive NOTIFY windowActiveChanged)
+    /// 「会话」分区现在可见（且窗口在前台）—— ChatPage 维护；停在联系人 / 好友申请页收的消息也算未读
+    Q_PROPERTY(bool chatVisible READ chatVisible WRITE setChatVisible NOTIFY chatVisibleChanged)
+
+    /**
+     * 消息列表此刻是不是停在最底部（ChatPage 用 messageView 的几何事实写进来）。
+     *
+     * 「只有滚在底部才算已读」：人往上翻历史时收到的消息**不该**当场标已读 ——
+     * 否则一边翻旧消息、一边把新消息悄悄吃掉，用户永远不知道有人找。
+     * 事件流：人滚上去 → false → 进来一条 → 未读 +1（侧栏 / 会话行亮红点）
+     *        → 人滚回底部（或点「新消息 ↓」）→ true → 顺手 markRead。
+     *
+     * 注意和 l chatVisible 的区别：那个是"分区 / 窗口"级别的可见，
+     * 这个再往下一层 —— 会话开着，但视口停在半截，也算"没在看"。
+     */
+    Q_PROPERTY(bool chatAtBottom READ chatAtBottom WRITE setChatAtBottom NOTIFY chatAtBottomChanged)
+
+    /**
+     * 这个会话还有没有更早的历史没加载（往上翻到头时靠它决定要不要再拉一页）。
+     *
+     * 历史在本地 SQLite 里：第一次打开会话读最近一批，之后每次翻到头再读 20 条。
+     * 一次把几千条全读出来不但慢，ListView 也扛不住 —— 这也是 QQ 那种
+     * "滚到顶再加载"的做法。
+     */
+    Q_PROPERTY(bool historyHasMore READ historyHasMore NOTIFY historyChanged)
+    /// 正在读更早的一页（本地读是同步的，这面旗子只是防止 QML 重复触发）
+    Q_PROPERTY(bool historyLoading READ historyLoading NOTIFY historyChanged)
+
     Q_PROPERTY(QString tip READ tip NOTIFY tipChanged)
     Q_PROPERTY(bool tipIsError READ tipIsError NOTIFY tipIsErrorChanged)
 
@@ -93,6 +128,23 @@ public:
 
     [[nodiscard]] QString tip() const { return m_tip; }
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
+
+    [[nodiscard]] bool windowActive() const { return m_window_active; }
+    void setWindowActive(bool active);
+    [[nodiscard]] bool chatVisible() const { return m_chat_visible; }
+    void setChatVisible(bool visible);
+    [[nodiscard]] bool chatAtBottom() const { return m_chat_at_bottom; }
+    void setChatAtBottom(bool atBottom);
+
+    /*!
+        清掉控制器提示（tip）。
+
+        页面用 toast 显示瞬时反馈时先清 tip，免得同一件事在底下那行再报一遍。
+    */
+    Q_INVOKABLE void clearTip();
+
+    [[nodiscard]] bool historyHasMore() const { return m_history_has_more.value(m_active_uid, false); }
+    [[nodiscard]] bool historyLoading() const { return m_history_loading; }
 
     /// 打开某个会话（同时清掉它的未读）
     Q_INVOKABLE void openConversation(const QString& peerUid, const QString& peerName);
@@ -123,6 +175,16 @@ public:
 
     /// 清未读
     Q_INVOKABLE void markRead(const QString& peerUid);
+
+    /**
+     * 往上翻页：再读 \a count 条更早的历史，拼到当前消息列表**前面**。
+     *
+     * 读进来的行会 emit messagesChanged（QML 的 syncMessageModel 认得出这是"头部新增"，
+     * 只 insert 不重建，并把视口钉回原来那条消息上）。
+     *
+     * @return 这次真的加进来几条；0 = 没有更早的了 / 本地库不可用 / 正在读 / 没会话
+     */
+    Q_INVOKABLE int loadOlderMessages(int count = 20);
 
     /**
      * 删除若干条消息（**只删本地**）。
@@ -161,6 +223,18 @@ public:
     void activeConversationChanged();
     void tipChanged();
     void tipIsErrorChanged();
+    void windowActiveChanged();
+    void chatVisibleChanged();
+    void chatAtBottomChanged();
+    void historyChanged();
+
+    /**
+     * 发消息被服务端判成"不是好友"（1014 的 error = 1022）。
+     *
+     * 服务端**不推送**「对方删了你」的通知，所以这是被删除方唯一能自动察觉的时机：
+     * 界面收到后静默刷新一次好友列表（1020），列表 / 会话跟着收敛。
+     */
+    void peerIsNotFriend(const QString& peerUid);
 
 private:
     /// 1013 的结果（由 ChatSocket 的 textMessageResult 转入；回执按 msg_id 认领）
@@ -220,6 +294,9 @@ private:
     /// 未读数 -1 之类的小改动，找不到就返回
     [[nodiscard]] int indexOf(const QString& peerUid) const;
 
+    /// 人此刻是不是正在看这个会话：窗口在前台 **且** 停在「会话」分区 **且** 视口在底部
+    [[nodiscard]] bool attention() const { return m_window_active && m_chat_visible && m_chat_at_bottom; }
+
     /// ⚠ 演示数据：只有 MYCHAT_DEMO=1 时注入（保留气泡版式自检能力），平时界面无假数据
     void seedDemoData();
 
@@ -227,6 +304,10 @@ private:
     QHash<QString, QVariantList> m_history;
     /// 已经从本地库加载过历史的会话（空历史也算，避免每次点开都查一遍）
     QSet<QString> m_history_loaded;
+
+    /// 每个会话还有没有更早的历史：首次加载没读满一页就说明到头了
+    QHash<QString, bool> m_history_has_more;
+    bool m_history_loading = false;
 
     /// 本地聊天记录（SQLite）。登录成功后按 uid 打开；打不开就退化成纯内存
     ChatStore m_store;
@@ -280,4 +361,11 @@ private:
     int m_next_message_id = 1;
     QString m_tip;
     bool m_tip_is_error = false;
+
+    /// 窗口在前台（默认 true：还没绑 QML 也不会把红点全吞掉）
+    bool m_window_active = true;
+    /// 「会话」分区可见（默认 true，理由同上）
+    bool m_chat_visible = true;
+    /// 消息列表停在底部（默认 true：还没绑 QML 时按"在看最底下"处理，别把红点全吞掉）
+    bool m_chat_at_bottom = true;
 };

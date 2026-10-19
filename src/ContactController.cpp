@@ -1,6 +1,7 @@
 #include "ContactController.h"
 
 #include <QJsonObject>
+#include <QSettings>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -59,11 +60,101 @@ ContactController::ContactController(QObject* parent)
             this, &ContactController::onFriendRequestHandled);
     connect(&socket, &mychat::ChatSocket::friendListResult,
             this, &ContactController::onFriendList);
+    connect(&socket, &mychat::ChatSocket::friendDeleteResult,
+            this, &ContactController::onFriendDeleteResult);
+
+    // 申请列表一变就重算红点：新申请进来会亮，接受/拒绝后又自己灭掉
+    connect(this, &ContactController::applyListChanged,
+            this, &ContactController::refreshUnreadApplyCount);
 }
 
 std::uint64_t ContactController::selfUid() const
 {
     return mychat::SessionManager::instance().uid();
+}
+
+void ContactController::ensureSeenLoaded()
+{
+    const QString uid = QString::number(selfUid());
+    if (uid == m_seen_uid)
+        return;
+
+    // 换账号（或刚退出到登录页）→ 水位重读；不同账号之间不共享"看过了"
+    m_seen_uid = uid;
+    m_seen_apply_id = 0;
+    if (selfUid() == 0)
+        return;
+
+    QSettings settings;
+    m_seen_apply_id = settings.value(QStringLiteral("applySeen/") + uid, 0).toLongLong();
+}
+
+void ContactController::refreshUnreadApplyCount()
+{
+    ensureSeenLoaded();
+
+    int count = 0;
+    for (const QVariant& entry: m_apply_list)
+    {
+        const QVariantMap item = entry.toMap();
+        // 只数别人发给我的、还在等处理的
+        if (!item.value(QStringLiteral("received")).toBool())
+            continue;
+
+        bool state_ok = false;
+        const int state = item.value(QStringLiteral("state")).toInt(&state_ok);
+        if (!state_ok || state != 0) // 0 = 等待处理；接受 / 拒绝过的不再提醒
+            continue;
+
+        // 水位之前的看过了
+        if (item.value(QStringLiteral("id")).toLongLong() <= m_seen_apply_id)
+            continue;
+
+        ++count;
+    }
+
+    if (count == m_unread_apply_count)
+        return;
+
+    m_unread_apply_count = count;
+    emit unreadApplyCountChanged();
+}
+
+void ContactController::markApplyListRead()
+{
+    ensureSeenLoaded();
+
+    qint64 newest = m_seen_apply_id;
+    for (const QVariant& entry: m_apply_list)
+    {
+        const QVariantMap item = entry.toMap();
+        if (!item.value(QStringLiteral("received")).toBool())
+            continue;
+
+        bool state_ok = false;
+        const int state = item.value(QStringLiteral("state")).toInt(&state_ok);
+        if (!state_ok || state != 0)
+            continue;
+
+        const qint64 id = item.value(QStringLiteral("id")).toLongLong();
+        if (id > newest)
+            newest = id;
+    }
+
+    if (newest > m_seen_apply_id)
+    {
+        m_seen_apply_id = newest;
+
+        // 落盘：重启后不该把看过一百遍的旧申请又点亮一遍
+        if (selfUid() != 0)
+        {
+            QSettings settings;
+            settings.setValue(QStringLiteral("applySeen/") + QString::number(selfUid()),
+                              m_seen_apply_id);
+        }
+    }
+
+    refreshUnreadApplyCount();
 }
 
 void ContactController::searchUser(const QString& keyword)
@@ -198,6 +289,12 @@ void ContactController::refreshFriendList()
     startFriendListRefresh();
 }
 
+void ContactController::refreshFriendListSilently()
+{
+    m_silent_friend_refresh = true;
+    startFriendListRefresh();
+}
+
 void ContactController::startFriendListRefresh()
 {
     if (m_busy)
@@ -236,6 +333,61 @@ void ContactController::startFriendListRefresh()
         m_silent_friend_refresh = false;
         setBusy(false);
         setTip(QStringLiteral("获取好友列表请求发送失败"), true);
+    }
+}
+
+bool ContactController::isFriend(const QString& uid) const
+{
+    const QString target = uid.trimmed();
+    if (target.isEmpty())
+        return false;
+
+    // 好友列表很小（界面上就几十条），线性扫一遍即可，不必再维护一份 QSet
+    for (const QVariant& entry: m_friend_list)
+    {
+        if (entry.toMap().value(QStringLiteral("uid")).toString() == target)
+            return true;
+    }
+    return false;
+}
+
+void ContactController::removeFriend(const QString& uid)
+{
+    const QString target = uid.trimmed();
+    if (target.isEmpty())
+    {
+        emit validationFailed(QStringLiteral("uid"));
+        return;
+    }
+
+    if (m_busy)
+    {
+        // 别静默丢弃：用户点了「删除好友」,界面上必须有反馈
+        setTip(QStringLiteral("正在处理上一个请求，请稍后再试"), true);
+        return;
+    }
+
+    if (selfUid() == 0 || !mychat::ChatSocket::instance().isLoggedIn())
+    {
+        setTip(QStringLiteral("未连接到聊天服务器，请先登录"), true);
+        return;
+    }
+
+    // 本地已经不是好友 → 不发请求（服务端会回 1022，白跑一趟）
+    if (!isFriend(target))
+    {
+        setTip(QStringLiteral("你们还不是好友"), true);
+        return;
+    }
+
+    setBusy(true);
+    setTip(QStringLiteral("正在删除好友…"));
+
+    if (!mychat::ChatSocket::instance().delFriend(target))
+    {
+        // setBusy(false) 放最后：busyChanged 会让订阅方立刻进入下一步
+        setTip(QStringLiteral("删除好友请求发送失败"), true);
+        setBusy(false);
     }
 }
 
@@ -348,15 +500,18 @@ void ContactController::appendLocalSentRequest(const std::uint64_t requestId)
 
     const QString peer_uid = QString::number(m_pending_peer_uid);
 
-    // 已经有"我发给同一个人"的记录了就不再补。
-    // 正常流程走不到这里（弹窗那边一旦有申请就不给发），但控制器是所有入口的必经之处，
-    // 兜一层比让列表里出现两条一模一样的更省事。
+    // 已经有"我发给同一个人、还在等处理"的记录就不再补。
+    // ⚠ 只认 state == 0：已接受 / 已拒绝的历史记录不算"已经发过" ——
+    //   删掉好友后重新发申请是正常路径，那种情况下必须补一条新的，
+    //   否则弹窗按 uid 只能找到那条旧记录，显示成"这条申请已经处理过了"。
     for (const QVariant& entry: m_apply_list)
     {
         const QVariantMap item = entry.toMap();
         if (item.value(QStringLiteral("received")).toBool())
             continue;
-        if (item.value(QStringLiteral("peerUid")).toString() == peer_uid)
+        if (item.value(QStringLiteral("peerUid")).toString() != peer_uid)
+            continue;
+        if (item.value(QStringLiteral("state"), -1).toInt() == 0)
             return;
     }
 
@@ -375,6 +530,19 @@ void ContactController::appendLocalSentRequest(const std::uint64_t requestId)
     // 刚发出去就是等待处理
     item.insert(QStringLiteral("state"), 0);
     item.insert(QStringLiteral("stateText"), applyStateText(0));
+
+    // 服务端对「申请人 + 接收人」有唯一键，重发时会**复用原申请编号**（状态重置回待处理）。
+    // 所以补记录前先把同编号的旧快照摘掉 —— 否则列表里会出现两条同 id、状态不同的记录。
+    QVariantList kept;
+    kept.reserve(m_apply_list.size());
+    for (const QVariant& entry: m_apply_list)
+    {
+        const QVariantMap item = entry.toMap();
+        if (item.value(QStringLiteral("id")).toString() == QString::number(requestId))
+            continue;
+        kept.append(item);
+    }
+    m_apply_list = kept;
 
     // 服务端按 created_at DESC 排序，新发出的插到最前面，和刷新后的顺序一致
     m_apply_list.prepend(item);
@@ -528,6 +696,57 @@ void ContactController::onFriendList(const QList<mychat::protocol::FriendInfo>& 
 
     MCLOG_INFO() << "[contact] 好友列表已更新, 共" << list.size() << "位";
     emit friendListRefreshed(true, kSuccess);
+
+    setBusy(false);
+}
+
+void ContactController::onFriendDeleteResult(const bool ok, const int error, const QString& uid)
+{
+    if (!ok)
+    {
+        setTip(mychat::protocol::errorToTip(error), true);
+        emit friendDeleteFinished(false, error, uid);
+        // 按约定放最后：busyChanged 会让订阅方立刻进入下一步
+        setBusy(false);
+        return;
+    }
+
+    /*
+     * 服务端已确认双向删除 → 本地立刻摘掉，不等下一次 1020。
+     *
+     * 会话列表由 main.cpp 接的 friendListChanged → ChatController::syncFriends 同步：
+     * 有历史记录的会话会保留（本地库里的消息仍然看得见），从没聊过的空壳才会被丢掉。
+     */
+    QVariantList list;
+    list.reserve(m_friend_list.size());
+    QString removed_name;
+    bool found = false;
+
+    for (const QVariant& entry: m_friend_list)
+    {
+        const QVariantMap item = entry.toMap();
+        if (item.value(QStringLiteral("uid")).toString() == uid)
+        {
+            removed_name = item.value(QStringLiteral("displayName")).toString();
+            found = true;
+            continue;
+        }
+        list.append(item);
+    }
+
+    m_friend_list = list;
+    emit friendListChanged();
+
+    if (!found)
+        qWarning() << "[contact] 删除好友成功，但好友列表里找不到这一条:" << uid;
+
+    setTip(removed_name.isEmpty()
+               ? QStringLiteral("已删除好友")
+               : QStringLiteral("已删除好友 %1").arg(removed_name));
+
+    MCLOG_INFO() << "[contact] 已删除好友, uid =" << uid << "剩余好友" << list.size() << "位";
+
+    emit friendDeleteFinished(true, kSuccess, uid);
 
     setBusy(false);
 }

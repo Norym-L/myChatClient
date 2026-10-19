@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import ZmdUI 1.0
 
@@ -39,7 +40,46 @@ Item {
     /// 当前分区：0 会话 / 1 联系人 / 2 好友申请
     property int section: 0
 
+    /**
+      * 窗口在不在前台（main.qml 绑的 Window.active）。
+
+      ⚠ 后台（切到别的程序 / 最小化）时收到的消息**不算已读**：它们照常攒成红点，
+        切回前台才清。否则用户在用别的程序时来的消息会被静默标掉，永远看不到红点。
+      */
+    property bool windowActive: true
+
+    /*!
+        告诉控制器"人现在到底在不在看会话"：窗口在前台、停在「会话」分区、
+        **而且视口停在最新那条上**，三条都成立才算。
+
+        只有算"在看"时，收到的消息才会被立刻标成已读（ChatController.attention()）；
+        否则攒成侧栏 / 会话行上的红点。
+        ⚠ 第三个条件（在底部）是这一版加的：翻着历史时收到的消息必须留着红点，
+          否则"往上翻两屏"等于把这段时间的消息全看过了，用户永远不知道有人找。
+        ⚠ 切回前台、从别的分区切回会话、或者从历史翻回底部时，把这段时间攒下的
+          未读当场清掉 —— 人已经看到最新那条了，再留着红点只是噪音。
+      */
+    function syncAttention() {
+        ChatController.chatVisible = page.windowActive && page.section === 0
+
+        if (ChatController.chatVisible && ChatController.hasActiveConversation
+                && messageView.atBottom())
+            ChatController.markRead(ChatController.activePeerUid)
+    }
+
+    onWindowActiveChanged: page.syncAttention()
+
+    onSectionChanged: {
+        page.syncAttention()
+
+        // 进「好友申请」分区 = 这份列表已经摆在眼前了 → 红点清掉
+        if (page.section === 2)
+            ContactController.markApplyListRead()
+    }
+
     Component.onCompleted: {
+        page.syncAttention()
+
         ContactController.refreshApplyList()
         // 好友列表：失败/忙碌都不要紧，refreshFriendList 会排队（见控制器注释）。
         // 会话列表要靠它才有内容，所以两个都发。
@@ -115,6 +155,7 @@ Item {
     */
     property string composerNotice: ""
 
+
     function tryAutoSearch() {
         if (pendingSearch === "")
             return
@@ -174,42 +215,34 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // ── 左侧导航 ─────────────────────────────────────────
-        ZSideBar {
-            id: sidebar
+        /*
+            ── 左侧导航（QQ 式图标条）──
+
+            原来的 ZSideBar 是 236px 的"品牌 + 文字导航"仪表盘式侧栏，
+            占掉了太多横向空间：窗口 960 宽时，会话列表 + 消息区只能挤在剩下
+            的 724px 里。按聊天软件的习惯收成 64px 图标条之后，同样的窗口宽度
+            能多出 170px 给正文。
+
+            顶部头像 = 自己的资料卡入口（原来是顶部身份条上的那个头像）；
+            退出登录、主题切换都收到底部图标里，顶部不再有一条横着的身份栏。
+        */
+        NavRail {
+            id: navRail
             Layout.fillHeight: true
-            Layout.preferredWidth: 236
-
-            brand: "MYCHAT"
-            brandSub: "MESSAGE TERMINAL"
-            brandCode: "CLI / 01"
-            version: "BUILD 0.1"
-
-            model: [
-                {
-                    label: "会 话", badge: sectionChat.unreadTotal > 0
-                        ? String(sectionChat.unreadTotal) : ""
-                },
-                {label: "联系人", badge: ""},
-                {
-                    label: "好友申请", badge: ContactController.applyList.length > 0
-                        ? String(ContactController.applyList.length) : ""
-                }
-            ]
+            Layout.preferredWidth: 64
 
             currentIndex: page.section
+            chatBadge: sectionChat.unreadTotal
+            applyBadge: ContactController.unreadApplyCount
+            selfName: LoginController.name
+            selfUid: LoginController.uid
+
             onActivated: (index) => {
                 page.section = index
             }
-
-            // ── 左下角：主题切换 ────────────────────────────────
-            // ZSideBar 的 default property 就是底部页脚，作为子项直接写进来即可，
-            // 不用自己算坐标（自己锚的话一改侧栏高度就会压到版本号上）。
-            // x 对齐侧栏里其它文字（品牌区、导航行都用 spacingLg 缩进）。
-            ThemeToggle {
-                x: Theme.spacingLg
-                width: parent.width - Theme.spacingLg - Theme.spacingMd
-            }
+            onSelfClicked: page.openSelfInfo()
+            onThemeClicked: themePopup.open()
+            onLogoutClicked: page.logoutRequested()
         }
 
         // ── 右侧内容区 ───────────────────────────────────────
@@ -254,42 +287,6 @@ Item {
                 }
             }
 
-            // 顶部：当前登录身份
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 56
-                color: Theme.surface
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: Theme.spacingMd
-                    spacing: Theme.spacingMd
-
-                    // 顶部这个就是"自己"：点它打开自己的资料卡，进去就能编辑
-                    ZAvatar {
-                        size: 32
-                        name: LoginController.name
-                        uid: LoginController.uid
-                        online: true
-                        clickable: true
-                        onClicked: page.openSelfInfo()
-                    }
-
-                    Text {
-                        text: LoginController.userLabel
-                        font: Theme.fontStrong
-                        color: Theme.ink
-                        Layout.fillWidth: true
-                    }
-
-                    ZButton {
-                        text: "退出"
-                        variant: Theme.Variant.Ghost
-                        onClicked: page.logoutRequested()
-                    }
-                }
-            }
-
             // 内容：按分区切换
             Item {
                 Layout.fillWidth: true
@@ -316,6 +313,19 @@ Item {
                         for (let i = 0; i < list.length; ++i)
                             sum += Number(list[i].unread) || 0
                         return sum
+                    }
+
+                    /// 当前打开的会话有多少未读（「新消息 ↓」按钮的角标）
+                    readonly property int activeUnread: {
+                        const uid = String(ChatController.activePeerUid)
+                        if (uid.length === 0)
+                            return 0
+                        const list = ChatController.conversations
+                        for (let i = 0; i < list.length; ++i) {
+                            if (String(list[i].uid) === uid)
+                                return Number(list[i].unread) || 0
+                        }
+                        return 0
                     }
 
                     /// 列表里有没有演示会话（只有 MYCHAT_DEMO=1 时会有）—— 决定底部标注写法
@@ -372,31 +382,47 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: Theme.spacingMd
 
-                                // 头：SESSIONS + 会话数
+                                /*
+                                    头：自己的身份（QQ 把头像和昵称放在列表顶部）。
+
+                                    头像在左边导航条里占了一格，这里只补文字：昵称 + UID。
+                                    原来这行是 "SESSIONS · 2" 和刷新按钮 —— 去掉顶栏那会儿
+                                    把用户名一起删了，界面上就再看不到"我是谁"，所以要补回来。
+                                */
                                 Item {
                                     id: listHeader
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    height: 20
+                                    height: 42
 
                                     Text {
                                         id: listTitle
                                         anchors.left: parent.left
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: "SESSIONS"
-                                        font: Theme.fontLabel
-                                        color: Theme.muted
+                                        anchors.right: friendRefresh.left
+                                        anchors.rightMargin: Theme.spacingSm
+                                        anchors.top: parent.top
+                                        elide: Text.ElideRight
+                                        text: LoginController.name.length > 0
+                                            ? LoginController.name
+                                            : LoginController.userLabel
+                                        font: Theme.fontHeading
+                                        color: Theme.ink
                                     }
 
                                     Text {
-                                        anchors.left: listTitle.right
-                                        anchors.leftMargin: Theme.spacingSm
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: "· " + ChatController.conversationCount
+                                        id: listSub
+                                        anchors.left: parent.left
+                                        anchors.right: friendRefresh.left
+                                        anchors.rightMargin: Theme.spacingSm
+                                        anchors.top: listTitle.bottom
+                                        anchors.topMargin: 2
+                                        elide: Text.ElideRight
+                                        text: "UID " + LoginController.uid + "  ·  "
+                                            + ChatController.conversationCount + " 个会话"
                                         font: Theme.fontMonoSm
                                         color: Theme.muted
-                                        opacity: 0.7
+                                        opacity: 0.8
                                     }
 
                                     // 好友列表是手动可刷的（进页面自动拉一次，之后靠这个按钮）
@@ -412,20 +438,40 @@ Item {
                                     }
                                 }
 
-                                ZTextField {
-                                    id: convSearch
+                                /*
+                                    搜索行：搜索框吃掉剩余宽度，右边跟一个固定宽度的「+」。
+
+                                    「+」的语义是"找个人开聊" —— 直接跳到联系人分区，
+                                    搜索用户 → 资料卡 → 加好友，这是唯一能新增会话的入口。
+                                    （好友列表的刷新按钮还在上面那行标题里，不重复占位。）
+                                */
+                                Row {
+                                    id: searchRow
                                     anchors.top: listHeader.bottom
                                     anchors.topMargin: Theme.spacingSm
                                     width: parent.width
-                                    placeholderText: "搜索会话"
-                                    onTextChanged: sectionChat.reloadConversations()
+                                    spacing: Theme.spacingSm
+
+                                    ZTextField {
+                                        id: convSearch
+                                        width: parent.width - searchAdd.width - parent.spacing
+                                        placeholderText: "搜索"
+                                        onTextChanged: sectionChat.reloadConversations()
+                                    }
+
+                                    ZIconButton {
+                                        id: searchAdd
+                                        glyph: "+"
+                                        tooltip: "加好友 / 发起会话"
+                                        onClicked: page.section = 1
+                                    }
                                 }
 
                                 Item {
                                     id: listArea
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.top: convSearch.bottom
+                                    anchors.top: searchRow.bottom
                                     anchors.topMargin: Theme.spacingSm
                                     anchors.bottom: listNote.top
                                     anchors.bottomMargin: Theme.spacingSm
@@ -529,6 +575,22 @@ Item {
                                 anchors.fill: parent
                                 visible: ChatController.hasActiveConversation
 
+                                /*
+                                 * 消息模型（增量同步）。
+                                 *
+                                 * 不能直接 `model: ChatController.messages`：那是整包
+                                 * QVariantList，追加一条也会被当成"模型重置"，ListView
+                                 * 把所有 delegate 拆了重建、contentY 归 0 —— 表现就是
+                                 * "来了条新消息，正在翻历史的人被甩回最顶部"。
+                                 *
+                                 * 这里用 ListModel 自己维护：同一会话内只是末尾追加时
+                                 * 走 append（视口一动不动）；换会话 / 删除 / 清空才重建。
+                                 * 同步逻辑见 page.syncMessageModel()。
+                                 */
+                                ListModel {
+                                    id: messageModel
+                                }
+
                                 // ── 会话头：对方是谁 + 在线状态 + 资料入口 ──
                                 Rectangle {
                                     id: chatHeader
@@ -561,20 +623,15 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         spacing: Theme.spacingMd
 
-                                        ZAvatar {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            size: 36
-                                            name: ChatController.activePeerName
-                                            uid: ChatController.activePeerUid
-                                            online: PresenceController.online[ChatController.activePeerUid] === true
-                                            clickable: true
-                                            onClicked: page.openChatPeerInfo()
-                                        }
-
+                                        /*
+                                            标题只放文字，头像不重复出现在这里 ——
+                                            QQ 的会话头就是"群名 + 人数 / 昵称 + 状态"，头像在左边那列。
+                                            要看资料有右边的 ◎ 按钮。
+                                        */
                                         Column {
                                             anchors.verticalCenter: parent.verticalCenter
                                             spacing: 3
-                                            width: chatHeaderLeft.width - 36 - chatHeaderLeft.spacing
+                                            width: chatHeaderLeft.width
 
                                             Text {
                                                 width: parent.width
@@ -641,7 +698,21 @@ Item {
                                 }
 
                                 // ── 消息区 ──
-                                ListView {
+                                /*
+                                 * 消息列表：Flickable + Column + Repeater。
+                                 *
+                                 * 为什么不用 ListView：ListView 复用 delegate，视口外的条目高度是按
+                                 * 平均行高**估**出来的。本项目的消息气泡高度差得离谱（一行十来个字到
+                                 * 整屏 430 字），估算值实测在 4446~21765 之间乱跳：
+                                 *   · 拉到底再往上跳，contentHeight 从 5895 炸到 21765、originY 变成
+                                 *     -8800、所有 delegate 被回收 —— 屏幕一片空白且不会自愈；
+                                 *   · 滚动条按 contentHeight 映射，滑块拖到一半内容就"滚完了"
+                                 *     （用户原话："滚动条只能滚动一半"）。
+                                 * Column 把每条消息都摆出来，高度是实数：contentHeight 精确、contentY
+                                 * 放哪就是哪、滚动条比例天然正确。代价是全部 delegate 常驻内存 ——
+                                 * 聊天记录每页 20 条地拉，几百条轻量气泡对这个场景完全够用。
+                                 */
+                                Flickable {
                                     id: messageView
                                     anchors.top: chatHeader.bottom
                                     anchors.left: parent.left
@@ -650,143 +721,408 @@ Item {
                                     anchors.leftMargin: Theme.spacingLg
                                     anchors.rightMargin: Theme.spacingLg
                                     clip: true
-                                    spacing: Theme.spacingMd
-                                    model: ChatController.messages
+                                    contentWidth: width
+                                    contentHeight: msgColumn.height
                                     boundsBehavior: Flickable.StopAtBounds
 
+                                    /// 消息条数（Flickable 没有 count，这里给出和 ListView 一样的读法）
+                                    readonly property int count: messageModel.count
+
                                     /*
-                                     * 贴底跟随（聊天软件的习惯）：有新消息时滚到底，
-                                     * 人自己往上翻历史时**不能**把人拽回来。
-                                     *
-                                     * ⚠ 别退回成"contentHeight 一变就 positionViewAtEnd"。
-                                     * ListView 的 contentHeight 在**滚动过程中**也会变：
-                                     * 滚出视口的 delegate 被回收、新进视口的先按平均高度估一个，
-                                     * 估算值一变信号就响 → 人刚往上滚就被拽回底部。
-                                     * 视口越小（窗口最小 760×560 时消息区只剩 ~265px）同时
-                                     * 实例化的 delegate 越少、估算抖动越大，症状就是
-                                     * "消息区滚不动，死锁在最底部"。
-                                     *
-                                     * 判定用"离底还有多远"而不是 atYEnd：内容变高时 atYEnd
-                                     * 也会变 false，那和我们想抓的"用户往上滚"是两回事。
-                                     * 这样滚轮 / 拖拽 / 滚回底部三种情况一套逻辑就够。
+                                     * 贴底跟随（聊天软件的习惯）：在底部时新消息跟着滚，
+                                     * 人往上翻历史时**不能**把人拽回来。
                                      */
                                     property bool followTail: true
 
+                                    /// 用户正在拖滚动条：这期间的位置变化不算"用户上滚"
+                                    property bool _barScrolling: false
+
+                                    /// 往上翻页的闸门：一页没落定之前不再拉下一页
+                                    property bool _paging: false
+
                                     /*
-                                     * "接下来这串位置变化是我们自己造成的"标志。
-                                     *
-                                     * ListView 在初次布局、delegate 回收 / 重建、模型变化时都会
-                                     * 自己改 contentY（首次布局甚至是 header 高度的负值），
-                                     * 这些都不是用户上滚。遮一小段时间（pinGuard），
-                                     * 期间只认贴底操作，不认"用户意图"。
+                                     * 翻页锚点：视口顶端那条消息是第几条、它离视口顶端多远。
+                                     * 更早的一页插进模型头部以后，把同一条消息放回同样的位置 ——
+                                     * 屏幕上就是"内容没动，上面接了一页"，而不是整屏往下跳。
                                      */
-                                    property bool _autoScrolling: true
+                                    property int _anchorIndex: -1
+                                    property real _anchorOffset: 0
 
+                                    /// 摆视口用的中间量
+                                    property int _restoreIndex: -1
+                                    property real _restoreOffset: 0
+                                    property real _restoreCh: 0
+                                    property int _restoreTries: 0
+
+                                    /// 离底部还有多少像素（Column 的高度是实数，这里是精确值）
                                     function distanceToBottom() {
-                                        // 顶部 header（"今天"分隔条）把 contentY 的基准整体挪了
-                                        // 一个 header 高度，不减掉它算出来的距离恒偏大
-                                        const headerH = headerItem ? headerItem.height : 0
-                                        return contentHeight - height - contentY - headerH
+                                        return contentHeight - height - contentY
                                     }
 
-                                    /// 声明"下面这段位置变化不是用户滚的"
-                                    function holdUserIntent() {
-                                        _autoScrolling = true
-                                        pinGuard.restart()
+                                    function atBottom() {
+                                        return distanceToBottom() <= 8
                                     }
 
-                                    function scrollToTail() {
-                                        holdUserIntent()
-                                        positionViewAtEnd()
+                                    /// 真正能滚到的最远处
+                                    function maxContentY() {
+                                        return Math.max(0, contentHeight - height)
                                     }
 
-                                    Timer {
-                                        id: pinGuard
-                                        interval: 150
-                                        onTriggered: messageView._autoScrolling = false
+                                    /// 滚停之后把视口收进真实范围（惯性有时会冲过头）
+                                    function settleScroll() {
+                                        if (contentY > maxContentY())
+                                            contentY = maxContentY()
                                     }
 
-                                    // 启动阶段先屏蔽，等第一次布局 + 贴底跑完
-                                    Component.onCompleted: holdUserIntent()
-
-                                    onContentHeightChanged: {
-                                        /*
-                                         * 延一拍再决定要不要贴底 —— 顺序很关键：
-                                         * 用户往上一跳时，ListView 会先报 contentHeight 变了
-                                         * （新进视口的 delegate 先按平均高度估），紧接着才报
-                                         * contentY 变了。当场就滚的话，这一拍 followTail 还是
-                                         * true，等于把刚落上去的位置又拽回底部。
-                                         * 等这一拍跑完，contentYChanged 已经把 followTail
-                                         * 改成 false，这里自然就不滚了。
-                                         */
-                                        Qt.callLater(function () {
-                                            if (messageView.followTail)
-                                                messageView.scrollToTail()
-                                        })
+                                    /// 把"在不在底部"报给控制器 —— 只有它决定收到的消息算不算已读
+                                    function syncReadState() {
+                                        ChatController.chatAtBottom = atBottom()
                                     }
 
-                                    onContentYChanged: {
-                                        // 屏蔽窗口之外的位置变化才是"用户滚的"：
-                                        // 滚到底就恢复跟随，往上滚就停止跟随。
-                                        // （以前这里无脑 positionViewAtEnd，正是这个 bug 的根源）
-                                        if (_autoScrolling)
+                                    /// 用户开始拖滚动条：交出方向盘，别再跟尾
+                                    function beginBarScroll() {
+                                        _barScrolling = true
+                                        followTail = false
+                                    }
+
+                                    /// 用户松手：接回方向盘，按真实位置重新判定
+                                    function endBarScroll() {
+                                        _barScrolling = false
+                                        syncReadState()
+                                        followTail = atBottom()
+                                        settleScroll()
+                                    }
+
+                                    /*
+                                     * 往上翻到头了 → 找控制器再要一页更早的（20 条）。
+                                     *
+                                     * 触发条件就是"contentY 贴到顶"：滚轮滚到顶、拖滚动条拖到顶都算。
+                                     */
+                                    function maybeLoadOlder() {
+                                        if (_paging || count === 0 || contentY > 24)
                                             return
-                                        followTail = distanceToBottom() <= 8
-                                    }
+                                        // 内容还没一屏长：根本没有"往上翻"这回事
+                                        if (atBottom())
+                                            return
+                                        if (!ChatController.historyHasMore || ChatController.historyLoading)
+                                            return
 
-                                    // 日期分隔条。真接了历史消息以后按天插，现在只有一段
-                                    header: Item {
-                                        width: messageView.width
-                                        height: 42
-
-                                        Row {
-                                            anchors.centerIn: parent
-                                            spacing: Theme.spacingSm
-
-                                            Rectangle {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: 30
-                                                height: 1
-                                                color: Theme.lineSoft
-                                            }
-
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: "今天"
-                                                font: Theme.fontMonoSm
-                                                color: Theme.muted
-                                            }
-
-                                            Rectangle {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: 30
-                                                height: 1
-                                                color: Theme.lineSoft
-                                            }
+                                        currentAnchor()
+                                        // 先上闸门再拉：控制器同步 emit messagesChanged，
+                                        // 不挡住就会在同一次 contentY 变化里连拉好几页
+                                        _paging = true
+                                        pageGuard.restart()
+                                        if (ChatController.loadOlderMessages(20) <= 0) {
+                                            releasePaging()
+                                            _anchorIndex = -1
+                                            _anchorOffset = 0
                                         }
                                     }
 
-                                    delegate: ChatBubble {
-                                        required property var modelData
+                                    /// 解锁翻页（加载落定 / 失败 / 兜底超时）
+                                    function releasePaging() {
+                                        _paging = false
+                                        pageGuard.stop()
+                                    }
 
+                                    /// 记下"视口顶端那条消息"（翻页后要用它把视口摆回原处）
+                                    function currentAnchor() {
+                                        for (let i = 0; i < messageModel.count; ++i) {
+                                            const item = msgColumn.children[i + 1]
+                                            if (item && item.y + item.height > contentY) {
+                                                _anchorIndex = i
+                                                _anchorOffset = item.y - contentY
+                                                return
+                                            }
+                                        }
+                                        _anchorIndex = -1
+                                        _anchorOffset = 0
+                                    }
+
+                                    /*
+                                     * 头部新增 added 条之后，把 _anchorIndex 那条消息放回原处。
+                                     *
+                                     * 插入时 Column 会整列往下推一页，视口不跟着动就等于"白翻"。
+                                     * 这里等下一帧（Column 排完版，y 才是新值）再按真实几何摆回去。
+                                     */
+                                    function restoreAnchor(added, chBefore) {
+                                        if (_anchorIndex < 0) {
+                                            releasePaging()
+                                            return
+                                        }
+                                        /*
+                                         * 用户正拖着滚动条：这一页是"拖到顶"顺带拉出来的，
+                                         * 位置由鼠标说了算。这时候再把视口摆回锚点，等于
+                                         * 跟用户的手抢方向盘 —— 实测拖到底松手后，一次
+                                         * 翻页的 restore 会把视图拽回锚点（停在 17:06 的
+                                         * 老消息上，而不是最新一条）。
+                                         */
+                                        if (_barScrolling) {
+                                            _anchorIndex = -1
+                                            _anchorOffset = 0
+                                            releasePaging()
+                                            return
+                                        }
+                                        _restoreIndex = Math.min(_anchorIndex + added, count - 1)
+                                        _restoreOffset = _anchorOffset
+                                        _restoreCh = chBefore
+                                        _anchorIndex = -1
+                                        _anchorOffset = 0
+                                        _restoreTries = 0
+                                        restoreTimer.restart()
+                                    }
+
+                                    function applyRestore() {
+                                        if (_restoreIndex < 0)
+                                            return
+                                        // Column 还没长高 = 这一页还没排进来，等下一帧
+                                        if (contentHeight <= _restoreCh + 0.5 && ++_restoreTries < 8) {
+                                            restoreTimer.restart()
+                                            return
+                                        }
+                                        const item = msgColumn.children[_restoreIndex + 1]
+                                        _restoreIndex = -1
+                                        if (item)
+                                            contentY = Math.max(0, item.y - _restoreOffset)
+                                        syncReadState()
+                                        // 视口已经离开顶部才解锁；还贴着顶就交给 pageGuard 兜底
+                                        if (contentY > 24)
+                                            releasePaging()
+                                    }
+
+                                    /*
+                                     * 摁到底。Column 的高度是实数，一次赋值就到 ——
+                                     * 不用再像 ListView 那样每 8ms 重试直到收敛。
+                                     */
+                                    function pinToBottom() {
+                                        followTail = true
+                                        // 先报"在底部"：人正被带到最新一条，这段时间的消息该算已读
+                                        ChatController.chatAtBottom = true
+                                        Qt.callLater(snapToBottom)
+                                    }
+
+                                    function snapToBottom() {
+                                        contentY = maxContentY()
+                                    }
+
+                                    // 翻页后摆视口：等下一帧再量（Column 这一拍还没排完版）
+                                    Timer {
+                                        id: restoreTimer
+                                        interval: 16
+                                        onTriggered: messageView.applyRestore()
+                                    }
+
+                                    // 翻页兜底：400ms 内视口还没摆回去也解锁，
+                                    // 宁可多拉一页也不能让「往上翻」彻底失灵
+                                    Timer {
+                                        id: pageGuard
+                                        interval: 400
+                                        onTriggered: messageView.releasePaging()
+                                    }
+
+                                    onContentHeightChanged: {
+                                        // 跟随中内容长高了（新消息 / 换会话铺开）→ 补摁到底
+                                        if (followTail && !_barScrolling) {
+                                            Qt.callLater(function () {
+                                                if (messageView.followTail && !messageView._barScrolling)
+                                                    messageView.snapToBottom()
+                                            })
+                                        }
+                                    }
+
+                                    onContentYChanged: {
+                                        // 人在看哪里就报给控制器（决定收到的消息算不算已读）
+                                        syncReadState()
+
+                                        // 翻到顶了 → 拉更早的一页（拖滚动条到顶也算）
+                                        maybeLoadOlder()
+
+                                        // 用户正在拖滚动条：位置变化不代表"用户想停在这"
+                                        if (_barScrolling)
+                                            return
+                                        followTail = atBottom()
+                                    }
+
+                                    onHeightChanged: {
+                                        // 视口高度变了（进 / 出选择模式、窗口缩放）：本来在底部就继续待在底部
+                                        if (followTail)
+                                            Qt.callLater(function () { messageView.snapToBottom() })
+                                    }
+
+                                    // 滚停（滚轮 / 拖动 / 惯性都算）：把视口收回真实范围
+                                    onMovementEnded: {
+                                        settleScroll()
+                                        // 已经在顶上还继续往上滚时 contentY 不变，上面那个信号不会来
+                                        maybeLoadOlder()
+                                    }
+
+                                    Column {
+                                        id: msgColumn
                                         width: messageView.width
-                                        fromSelf: modelData.fromSelf === true
-                                        text: modelData.text
-                                        time: modelData.time
-                                        state: modelData.state
-                                        peerName: ChatController.activePeerName
-                                        peerUid: ChatController.activePeerUid
-                                        selfName: LoginController.name
-                                        selfUid: LoginController.uid
+                                        spacing: Theme.spacingMd
 
-                                        // 选择模式：整行可点，点一下切换选中
-                                        selectable: page.selecting
-                                        selected: page.selectedIds[modelData.id] === true
-                                        onToggleRequested: page.toggleSelection(modelData.id)
+                                        // 日期分隔条。真接了历史消息以后按天插，现在只有一段
+                                        Item {
+                                            width: msgColumn.width
+                                            height: 42
+
+                                            Row {
+                                                anchors.centerIn: parent
+                                                spacing: Theme.spacingSm
+
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: 30
+                                                    height: 1
+                                                    color: Theme.lineSoft
+                                                }
+
+                                                Text {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    // 翻到头了就直说，省得用户以为"往上翻失灵了"
+                                                    // 上面再没有更早的消息时直说；还有就提示"更早" ——
+                                                    // 具体是哪一天由下面第一条的时间标签负责，别在这儿猜
+                                                    text: (!ChatController.historyHasMore && messageView.count > 0)
+                                                          ? "没有更多消息了" : "更早的消息"
+                                                    font: Theme.fontMonoSm
+                                                    color: Theme.muted
+                                                }
+
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: 30
+                                                    height: 1
+                                                    color: Theme.lineSoft
+                                                }
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: messageModel
+
+                                            /*
+                                             * 一行 = 可选的时间标签 + 气泡。
+                                             *
+                                             * 标签是**默认常显**的（QQ 那种居中灰字），只在
+                                             * "第一条 / 跟上一条隔了 5 分钟以上 / 跨天"时出现；
+                                             * 气泡旁那个 HH:mm 仍然是悬浮 1 秒才显示，两者不冲突。
+                                             */
+                                            delegate: Column {
+                                                width: msgColumn.width
+                                                spacing: Theme.spacingXs
+
+                                                Text {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    visible: text.length > 0
+                                                    text: page.stampFor(index, tsMs)
+                                                    font: Theme.fontMonoSm
+                                                    color: Theme.muted
+                                                    opacity: 0.85
+                                                }
+
+                                                ChatBubble {
+                                                    /*
+                                                     * ListModel 的 role 不能叫 text / state ——
+                                                     * 那会和 ChatBubble 自己的同名属性打架。所以
+                                                     * role 名统一加后缀，在这里转接。
+                                                     */
+                                                    width: parent.width
+                                                    fromSelf: fromMe
+                                                    text: body
+                                                    time: clock
+                                                    state: delivery
+                                                    peerName: ChatController.activePeerName
+                                                    peerUid: ChatController.activePeerUid
+                                                    selfName: LoginController.name
+                                                    selfUid: LoginController.uid
+
+                                                    // 右键菜单要按页面坐标系定位
+                                                    coordinateSpace: page
+                                                    onContextMenuRequested: (x, y) => page.openMessageMenu(msgId, body, x, y)
+
+                                                    // 选择模式：整行可点，点一下切换选中
+                                                    selectable: page.selecting
+                                                    selected: page.selectedIds[msgId] === true
+                                                    onToggleRequested: page.toggleSelection(msgId)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
-                                // ── 输入区：ZChatInput ──
+                                // ── 滚动条：贴着消息区右缘（落在右边距里，不压气泡）──
+                                ChatScrollBar {
+                                    anchors.top: messageView.top
+                                    anchors.bottom: messageView.bottom
+                                    anchors.left: messageView.right
+                                    anchors.leftMargin: Theme.spacingXs
+                                    width: 10
+                                    target: messageView
+                                }
+
+                                /*
+                                 * 「新消息 ↓」：人翻着历史时进来的消息。
+
+                                 * 出现条件：当前会话有未读 + 视口不在底部。点它滚到底，滚到底后
+                                 * 未读清零（chatAtBottom 变真 → 控制器 markRead），按钮自己消失。
+                                 */
+                                ZButton {
+                                    id: newMessagePill
+                                    anchors.horizontalCenter: messageView.horizontalCenter
+                                    anchors.bottom: messageView.bottom
+                                    anchors.bottomMargin: Theme.spacingMd
+                                    visible: messageView.count > 0
+                                             && sectionChat.activeUnread > 0
+                                             && !messageView.followTail
+                                    text: "新消息 ↓"
+                                    mono: String(sectionChat.activeUnread)
+                                    variant: Theme.Variant.Primary
+                                    onClicked: {
+                                        // 先滚到底（会把 chatAtBottom 置真），再显式清掉未读，
+                                        // 免得滚动还没落定、角标先闪一下
+                                        messageView.pinToBottom()
+                                        ChatController.markRead(ChatController.activePeerUid)
+                                    }
+                                }
+
+                                /*
+                                 * 轻提示：复制成功 / 已删除这类瞬时反馈，1.6 秒淡出。
+
+                                 * 和「新消息 ↓」用同一套锚点（贴消息区底部居中、比它高一行），
+                                 * 这样既压不住输入框，也不会挡住最后一条消息。
+                                 * 关掉后 visible 跟着 opacity 走，不占鼠标事件。
+                                 */
+                                Rectangle {
+                                    id: toast
+                                    anchors.horizontalCenter: messageView.horizontalCenter
+                                    anchors.bottom: messageView.bottom
+                                    anchors.bottomMargin: Theme.spacingMd + 44
+                                    width: toastLabel.implicitWidth + Theme.spacingLg * 2
+                                    height: 34
+                                    color: Theme.inkBlock
+                                    border.width: Theme.border
+                                    border.color: Theme.line
+                                    opacity: 0
+                                    visible: opacity > 0
+                                    z: 20
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 120
+                                            easing.type: Theme.easingStd
+                                        }
+                                    }
+
+                                    Text {
+                                        id: toastLabel
+
+                                        anchors.centerIn: parent
+                                        color: Theme.textOnSub
+                                        font: Theme.fontMonoSm
+                                    }
+                                }
+
+    // ── 输入区：ZChatInput ──
                                 // 面板高度由组件自己算，而且是**固定**的
                                 // （标题条 30 + 输入区 minTextHeight 74 + 工具栏 42）：
                                 // 写多行不会把消息区顶上去，超出的内容在框内滚动。
@@ -800,11 +1136,34 @@ Item {
                                     anchors.margins: Theme.spacingMd
                                     spacing: Theme.spacingXs
 
+                                    /*
+                                     * 提示行：页面临时提示 > 控制器提示
+                                     * （控制器提示承载"发送失败：<原因>"这类结果）
+                                     * 两者都空时整行隐藏 —— 常态下不再常驻快捷键说明。
+                                     *
+                                     * 放在输入面板**上面**：排在下面时，ZChatInput 的工具栏
+                                     * 是画在自己边界之外的，提示文字会跟"清空 / 发送"那行叠在一起。
+                                     */
+                                    Text {
+                                        width: parent.width
+                                        visible: text.length > 0
+                                        text: page.composerNotice.length > 0 ? page.composerNotice
+                                            : (ChatController.tip.length > 0 ? ChatController.tip : "")
+                                        font: Theme.fontMonoSm
+                                        color: page.composerNotice.length > 0 || ChatController.tipIsError
+                                            ? Theme.danger : Theme.muted
+                                        opacity: page.composerNotice.length > 0 || ChatController.tipIsError
+                                            ? 1 : 0.75
+                                        elide: Text.ElideRight
+                                    }
+
                                     ZChatInput {
                                         id: chatInput
                                         width: parent.width
 
-                                        placeholderText: "输入消息，Enter 发送，Shift+Enter 换行…"
+                                        // 输入框里不放提示语：快捷键说明也是噪音，
+                                        // 空着更干净（placeholderText 默认是"输入消息…"，这里盖掉）
+                                        placeholderText: ""
 
                                         // 与服务端对齐：ChatController 里 kMaxTextLength = 500
                                         // （服务端帧 body 只有 2KB）。超限时组件自己拦下不发送。
@@ -862,20 +1221,6 @@ Item {
                                         }
                                     }
 
-                                    // 提示行：页面临时提示 > 控制器提示 > 常驻快捷键说明
-                                    // （控制器提示现在承载"发送失败：<原因>"这类结果）
-                                    Text {
-                                        width: parent.width
-                                        text: page.composerNotice.length > 0 ? page.composerNotice
-                                            : (ChatController.tip.length > 0 ? ChatController.tip
-                                                : "Enter 发送 · Shift+Enter 换行")
-                                        font: Theme.fontMonoSm
-                                        color: page.composerNotice.length > 0 || ChatController.tipIsError
-                                            ? Theme.danger : Theme.muted
-                                        opacity: page.composerNotice.length > 0 || ChatController.tipIsError
-                                            ? 1 : 0.75
-                                        elide: Text.ElideRight
-                                    }
                                 }
 
                                 /*
@@ -930,13 +1275,187 @@ Item {
                     }
                 }
 
-                // ── 1. 联系人：搜索用户 + 发好友申请 ────────────
-                Column {
-                    id: searchArea
+                // ── 1. 联系人：好友列表 + 搜索用户 ──────────────
+                /*
+                    QQ 式的两栏：中栏是好友列表，右栏是「找人」（搜索 + 结果）。
+
+                    改造前这一页只有搜索框 —— 好友列表原来挂在已被删掉的左侧品牌栏里，
+                    导航图标化之后好友就"看不见"了。这里把好友列表放回中栏；
+                    点一行仍然打开资料卡（发消息 / 删除都在那儿），不重复做入口。
+                */
+                Row {
+                    id: contactsRow
                     anchors.fill: parent
-                    anchors.margins: Theme.spacingLg
-                    spacing: Theme.spacingMd
+                    spacing: 0
                     visible: page.section === 1
+
+                    /// 关键词过滤后的好友（数据源 ContactController.friendList）
+                    property var visibleFriends: []
+
+                    function reloadFriends() {
+                        const all = ContactController.friendList
+                        const kw = friendSearch.text.trim().toLowerCase()
+                        if (kw.length === 0) {
+                            visibleFriends = all
+                            return
+                        }
+
+                        const out = []
+                        for (let i = 0; i < all.length; ++i) {
+                            const f = all[i]
+                            if (String(f.name).toLowerCase().indexOf(kw) >= 0
+                                || String(f.displayName).toLowerCase().indexOf(kw) >= 0
+                                || String(f.uid).indexOf(kw) >= 0)
+                                out.push(f)
+                        }
+                        visibleFriends = out
+                    }
+
+                    Component.onCompleted: reloadFriends()
+
+                    Connections {
+                        target: ContactController
+
+                        function onFriendListChanged() {
+                            contactsRow.reloadFriends()
+                        }
+                    }
+
+                    // ══════ 中：好友列表 ══════
+                    Rectangle {
+                        width: 244
+                        height: parent.height
+                        color: Theme.surface
+
+                        // 右缘分隔线：和会话列表同一条视觉语言
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 1
+                            color: Theme.line
+                        }
+
+                        Item {
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingMd
+
+                            Item {
+                                id: contactsHeader
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                height: 42
+
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    text: "好友"
+                                    font: Theme.fontHeading
+                                    color: Theme.ink
+                                }
+
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.topMargin: 30
+                                    text: "CONTACTS · " + ContactController.friendCount + " 位"
+                                    font: Theme.fontMonoSm
+                                    color: Theme.muted
+                                    opacity: 0.8
+                                }
+
+                                ZIconButton {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    glyph: "⟳"
+                                    tooltip: ContactController.busy
+                                        ? "正在刷新…" : "刷新好友列表"
+                                    enabled: !ContactController.busy
+                                    onClicked: ContactController.refreshFriendList()
+                                }
+                            }
+
+                            ZTextField {
+                                id: friendSearch
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: contactsHeader.bottom
+                                anchors.topMargin: Theme.spacingSm
+                                placeholderText: "搜索好友"
+                                onTextChanged: contactsRow.reloadFriends()
+                            }
+
+                            Item {
+                                id: friendArea
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: friendSearch.bottom
+                                anchors.topMargin: Theme.spacingSm
+                                anchors.bottom: parent.bottom
+
+                                Flickable {
+                                    anchors.fill: parent
+                                    clip: true
+                                    contentHeight: friendColumn.height
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    Column {
+                                        id: friendColumn
+                                        width: parent.width
+                                        spacing: 0
+
+                                        Repeater {
+                                            model: contactsRow.visibleFriends
+
+                                            ConversationRow {
+                                                required property var modelData
+
+                                                width: friendColumn.width
+                                                uid: String(modelData.uid)
+                                                // 备注优先；字段缺失时要挡一下，
+                                                // 否则 String(undefined) 会显示成 "undefined"
+                                                name: (modelData.displayName !== undefined
+                                                    && String(modelData.displayName).length > 0)
+                                                    ? String(modelData.displayName)
+                                                    : String(modelData.name)
+                                                lastText: (modelData.desc !== undefined
+                                                    && String(modelData.desc).length > 0)
+                                                    ? String(modelData.desc) : "（暂无签名）"
+                                                lastTime: ""
+                                                unread: 0
+                                                selected: false
+                                                online: PresenceController.online[String(modelData.uid)] === true
+                                                onClicked: page.openUserInfo(modelData)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: contactsRow.visibleFriends.length === 0
+                                    text: friendSearch.text.length > 0
+                                        ? "没有匹配的好友"
+                                        : (ContactController.busy
+                                            ? "正在获取好友列表…" : "暂无好友")
+                                    font: Theme.fontBody
+                                    color: Theme.muted
+                                }
+                            }
+                        }
+                    }
+
+                    // ══════ 右：搜索用户 ══════
+                    Item {
+                        width: parent.width - 244
+                        height: parent.height
+
+                        Column {
+                            id: searchArea
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingLg
+                            spacing: Theme.spacingMd
 
                     ZSectionTitle {
                         width: parent.width
@@ -1076,6 +1595,8 @@ Item {
                         font: Theme.fontBody
                         color: ContactController.tipIsError ? Theme.danger : Theme.muted
                         wrapMode: Text.WordWrap
+                    }
+                        }
                     }
                 }
 
@@ -1238,6 +1759,41 @@ Item {
         "业务弹窗"解耦了。
     */
     /*!
+        主题切换浮层（左侧导航底部的「太阳」按钮弹出）。
+
+        以前 ThemeToggle 常驻在 ZSideBar 页脚里；导航收成 64px 图标条之后放不下了，
+        改成点图标弹一层。选择仍然由 ThemeToggle 自己写进 QSettings（重启后记得住）。
+    */
+    Popup {
+        id: themePopup
+        parent: navRail
+        x: parent.width + 6
+        // 贴着底部两个辅助图标上方弹出来
+        y: parent.height - height - 56
+        width: 212
+        height: 112
+        padding: 0
+        modal: false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Theme.surface
+            border.width: Theme.border
+            border.color: Theme.line
+        }
+
+        contentItem: Item {
+            implicitWidth: 212
+            implicitHeight: 112
+
+            ThemeToggle {
+                anchors.fill: parent
+                anchors.margins: Theme.spacingMd
+            }
+        }
+    }
+
+    /*!
         会话操作入口（会话头右上角「…」）：选择消息 / 清空聊天记录。
 
         两项都**只影响本机**：服务端没有"删除 / 撤回"接口 ——
@@ -1285,19 +1841,44 @@ Item {
         }
     }
 
+    /*!
+        删除确认（CHAT-02）。两个入口共用这一个弹窗：
+
+        · 选择模式批量删 → singleId = -1，确认后删选中的那批；
+        · 右键菜单删一条 → singleId = 那条消息的 id，确认后只删它。
+    */
     ZDialog {
         id: deleteSelectedDialog
-        title: "删除所选消息"
+
+        /// >0 = 这次只删这一条（右键菜单进来）；-1 = 删选择模式里选中的那批
+        property int singleId: -1
+        readonly property bool single: singleId > 0
+
+        title: single ? "删除这条消息" : "删除所选消息"
         code: "CHAT-02"
         subtitle: "不可恢复"
-        confirmText: "删除 " + page.selectedCount + " 条"
+        confirmText: single ? "删除" : ("删除 " + page.selectedCount + " 条")
         width: 460
-        onConfirmed: page.deleteSelectedMessages()
+        onConfirmed: {
+            if (single)
+                page.deleteMessage(singleId)
+            else
+                page.deleteSelectedMessages()
+
+            // ZDialog 的确认按钮点完会自己 accept()；这里再显式关一次是兜底：
+            // 删除会让消息模型整段重建，万一那一拍把按钮的回调吃掉（观察到过），
+            // 弹窗就会停在屏幕上，看着像"没生效"。
+            deleteSelectedDialog.close()
+        }
+        // 关掉就清掉单条目标：下次从「选择模式」进来不会误删上一条右键的
+        onClosed: deleteSelectedDialog.singleId = -1
 
         Text {
             width: parent.width
             wrapMode: Text.Wrap
-            text: "将从本机删除选中的 " + page.selectedCount + " 条聊天记录。"
+            text: deleteSelectedDialog.single
+                  ? "将从本机删除这条聊天记录。"
+                  : "将从本机删除选中的 " + page.selectedCount + " 条聊天记录。"
             font: Theme.fontBody
             color: Theme.ink
         }
@@ -1358,6 +1939,11 @@ Item {
             ContactController.handleFriendRequest(requestId, state)
         }
 
+        // 删除好友：两段确认已经在弹窗里做过，这里直接交给控制器发 1027
+        onFriendDeleteRequested: (uid) => {
+            ContactController.removeFriend(uid)
+        }
+
         // 保存本人资料：服务端没有这个接口，先如实说明（接口就绪后换成控制器调用）
         onProfileSaveRequested: (name, sex, desc) => {
             console.log("[chat] 待接入的资料保存请求:", name, sex, desc)
@@ -1370,11 +1956,118 @@ Item {
         }
     }
 
+    /*
+     * 消息右键菜单：复制 / 删除 / （将来的）添加到表情包。
+     *
+     * Popup 的 x/y 是相对本页根节点的；右键坐标由气泡 mapToItem 换算过来，
+     * 两边同一套坐标系，所以这里直接摆就行。
+     */
+    ChatMessageMenu {
+        id: messageMenu
+
+        /// 当前右键的那一条（复制 / 删除都按它来）
+        property string messageId: ""
+
+        onCopyRequested: {
+            page.copyToClipboard(messageText)
+            page.flashNotice("已复制这条消息")
+            close()
+        }
+
+        onDeleteRequested: {
+            const row_id = Number(messageMenu.messageId)
+            messageMenu.close()
+            if (row_id <= 0)
+                return
+
+            // 先弹确认（复用批量删除那个 CHAT-02），确认后才真的删
+            deleteSelectedDialog.singleId = row_id
+            deleteSelectedDialog.open()
+        }
+    }
+
+    /*
+     * 剪贴板帮手：QML 没有直接写剪贴板的接口，最省事的做法是让一个
+     * 隐藏的 TextEdit 选中全文再 copy() —— 不必为一行复制去改 C++。
+     */
+    TextEdit {
+        id: clipboardHelper
+        visible: false
+        width: 1
+        height: 1
+    }
+
+    /// 页面级轻提示的计时器（见 flashNotice）
+    Timer {
+        id: noticeTimer
+        interval: 1600
+        onTriggered: toast.opacity = 0
+    }
+
     /// 仅自动化用：MYCHAT_OPENDLG=sendfriend 时补的第二次「加好友」点击
     Timer {
         id: doubleSendTimer
         interval: 1500
         onTriggered: userInfoDialog.primaryAction()
+    }
+
+    /// 仅自动化用：MYCHAT_OPENDLG=peerinfo[:uid] 时，等好友列表/会话就位后再开资料卡
+    Timer {
+        id: peerInfoTimer
+        property string targetUid: ""
+        interval: 1500
+        onTriggered: page.openChatPeerInfo(targetUid)
+    }
+
+    /*
+     * 仅自动化用：MYCHAT_OPENDLG=chatscroll:<contentY>。
+     *
+     * 必须延后执行 —— 挂起动作在"消息列表第一次非空"时就会触发，那一刻历史
+     * 往往还没灌完，紧接着 activeConversationChanged / syncFriends 又会把
+     * followTail 重置成 true 并滚到底，等于白滚。等这一串都落地了再滚。
+     */
+    Timer {
+        id: autoScrollTimer
+        property real targetY: 0
+        interval: 1200
+        onTriggered: {
+            messageView.followTail = false
+            messageView.contentY = autoScrollTimer.targetY
+            console.log("[chat] 自动化：消息列表滚到", messageView.contentY,
+                        "contentHeight =", messageView.contentHeight,
+                        "followTail =", messageView.followTail)
+        }
+    }
+
+    /*
+     * 仅自动化用：MYCHAT_OPENDLG=chatmenudel / chatmenudelok。
+     *
+     * 这台机器的鼠标注入时好时坏（锁屏 / 别的进程抢前台时按下会被吞），
+     * 没法稳定地点右键菜单，所以这里直接调用菜单信号的发射函数 ——
+     * 走的是**和真实点击完全一样**的处理函数，验证
+     * 「菜单删除 → 复用批量删除的确认弹窗 → 确认后只删这一条」。
+     */
+    Timer {
+        id: autoMenuTimer
+        property string targetAction: ""
+        interval: 900
+        repeat: false
+        onTriggered: {
+            messageMenu.deleteRequested()
+            if (autoMenuTimer.targetAction === "chatmenudelok")
+                autoConfirmTimer.restart()
+        }
+    }
+
+    /*! 仅自动化用：menuok 流程里替用户点一下确认弹窗的「删除」 */
+    Timer {
+        id: autoConfirmTimer
+        interval: 1400
+        repeat: false
+        onTriggered: {
+            deleteSelectedDialog.confirmed()
+            deleteSelectedDialog.accept()
+        }
     }
 
     /*!
@@ -1399,9 +2092,50 @@ Item {
 
         \a user 可直接传 searchResults / applyList 里的 modelData。
         \a request 传 applyList 里的那一项时，弹窗切成「申请详情」形态
-        （只展示那条申请，不再提供「加好友」）；不传则自动去申请列表里找
-        有没有跟这个人的往来记录。
+        （只展示那条申请，不再提供「加好友」）；不传则**只有对方还有待处理的申请时**
+        才自动切过去。已处理的历史申请（比如好友那条「已接受」）不再顶掉资料卡 ——
+        否则从会话点头像会弹成「我的申请」。
     */
+    /*!
+        打开某条消息的右键菜单（气泡的 contextMenuRequested 转进来）。
+
+        @param msgId 消息 id
+        @param text  正文（复制用）
+        @param x / y 相对本页根节点的落点（气泡那边已经 map 过）
+
+        贴着窗口右/下边缘右键时把菜单往回收一点，别让它跑出画面。
+    */
+    function openMessageMenu(msgId, text, x, y) {
+        messageMenu.messageId = String(msgId)
+        messageMenu.messageText = text
+        messageMenu.x = Math.max(4, Math.min(x, page.width - messageMenu.width - 4))
+        messageMenu.y = Math.max(4, Math.min(y, page.height - messageMenu.height - 4))
+        messageMenu.open()
+    }
+
+    /*! 写剪贴板（具体理由见 clipboardHelper 那段注释） */
+    function copyToClipboard(text) {
+        if (text.length === 0)
+            return
+
+        clipboardHelper.text = text
+        clipboardHelper.selectAll()
+        clipboardHelper.copy()
+    }
+
+    /*!
+        页面级轻提示：浮一个 1.6 秒的 toast（复制成功 / 已删除这类瞬时反馈）。
+
+        为什么不用输入区那行提示（composerNotice）：输入区是底边锚定的，
+        那行文字排在工具栏下面，窗口一矮就被挤出画面 —— 复制成功根本看不见。
+        浮层跟着窗口走，什么时候都看得见。
+    */
+    function flashNotice(text) {
+        toastLabel.text = text
+        toast.opacity = 1
+        noticeTimer.restart()
+    }
+
     function openUserInfo(user, request) {
         // uid 一律当字符串比：服务端是 uint64，QML 里的 number 只有 53 位精度。
         // ⚠ 优先级 peerUid > uid > fromUid：
@@ -1424,9 +2158,13 @@ Item {
         PresenceController.refresh(uid)
         // 搜到自己 / 从申请列表点到自己 → 走可编辑形态，免得给自己发好友申请
         userInfoDialog.isSelf = uid.length > 0 && uid === LoginController.uid
+        // 已经是好友 → 底部给「删除好友」。必须在打开时算一次：
+        // QML 的绑定里"调用函数"不会建立依赖，没法自动跟着好友列表重算
+        userInfoDialog.isFriend = !userInfoDialog.isSelf && ContactController.isFriend(uid)
+        userInfoDialog.deleteArmed = false
 
         const req = request !== undefined && request !== null
-            ? request : page.findRequestFor(uid)
+            ? request : page.findPendingRequestFor(uid)
         userInfoDialog.requestInfo = req
 
         if (req !== null) {
@@ -1438,17 +2176,48 @@ Item {
             else
                 userInfoDialog.showHint("这条申请是我发出的，等待对方处理", false)
         }
+        else if (userInfoDialog.isFriend)
+            userInfoDialog.showHint("已是好友，删除后不可撤销", false)
         else
-            userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
+            // 不再直接镜像 ContactController.tip：那可能是上一次搜索 / 刷新留下的
+            // 无关提示（"共 1 位好友" 之类），显示在资料卡里会让人以为说错了对象
+            userInfoDialog.showHint("", false)
 
         userInfoDialog.open()
     }
 
-    /// 申请列表里跟这个 uid 有关的往来记录（没有就返回 null）
-    function findRequestFor(uid) {
+    /*!
+        申请列表里「我发给这个人的、还在等处理」的那条（没有就返回 null）。
+
+        重发申请后用它定位控制器刚补的那条记录。**不能按 uid 随便取一条**：
+        删好友 → 重新申请时，列表里还留着当年那条「对方发给我、已接受」的旧记录，
+        取错了就会显示成"这条申请已经处理过了（已接受）"，和底部「好友申请已发送」矛盾。
+    */
+    function findOutgoingPendingRequest(uid) {
         const list = ContactController.applyList
         for (let i = 0; i < list.length; ++i) {
-            if (String(list[i].peerUid) === uid)
+            if (String(list[i].peerUid) !== uid)
+                continue
+            if (list[i].received === true)
+                continue
+            if (Number(list[i].state) === 0)
+                return list[i]
+        }
+        return null
+    }
+
+    /*!
+        申请列表里跟这个 uid 有关、且**还在等待处理**的那条（没有就返回 null）。
+
+        为什么资料卡只认"待处理"的申请：成为好友之后，那条「已接受」的历史申请
+        仍然留在 applyList 里。如果按"有往来记录就切申请详情"，从会话点头像
+        （或点「查看资料」）会直接弹成「我的申请」—— 资料卡根本看不到。
+        待处理的申请则相反：这时还没成为好友，切成申请详情才能阻止重复发送。
+    */
+    function findPendingRequestFor(uid) {
+        const list = ContactController.applyList
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].peerUid) === uid && Number(list[i].state) === 0)
                 return list[i]
         }
         return null
@@ -1515,6 +2284,8 @@ Item {
         userInfoDialog.online = true
         userInfoDialog.onlineKnown = true
         userInfoDialog.isSelf = true
+        userInfoDialog.isFriend = false
+        userInfoDialog.deleteArmed = false
         userInfoDialog.requestInfo = null
         userInfoDialog.showHint("本人的性别 / 签名服务端暂不下发，保存接口也尚未提供", false)
         userInfoDialog.open()
@@ -1538,6 +2309,149 @@ Item {
         sectionChat.reloadConversations()
         // 会话条数很少（现在是演示的 4 条）；PresenceController 会串行发，不会把回包搞乱
         page.refreshPresenceOf(list)
+    }
+
+    /*!
+        一条消息 → ListModel 的一行。
+
+        role 名故意不叫 text / state：delegate 的根对象是 ChatBubble，本身就有
+        这两个属性，同名会冲突。转换在 delegate 里做（见 messageView.delegate）。
+    */
+    function messageRow(m) {
+        return {
+            msgId: String(m.id),
+            fromMe: m.fromSelf === true,
+            body: m.text !== undefined ? m.text : "",
+            clock: m.time !== undefined ? m.time : "",
+            delivery: m.state !== undefined ? m.state : "",
+            // 毫秒时间戳：只用来判断"要不要在气泡上面插一条时间标签"
+            tsMs: Number(m.ts !== undefined ? m.ts : 0)
+        }
+    }
+
+    /// 两条消息隔多久以上才插一条时间标签（QQ 的默认节奏是 5 分钟）
+    readonly property int stampGapMs: 5 * 60 * 1000
+
+    /*!
+        一条消息的**默认时间标签**（居中、常显，QQ 那种）。
+
+        规则：第一条 / 跟上一条隔了 5 分钟以上 / 跨天 → 显示；挨着的连续聊天不显示
+        （每条都戳个时间反而看不清）。取不到时间戳（演示数据）就不显示。
+    */
+    function stampFor(index, ts) {
+        if (!ts || ts <= 0)
+            return ""
+
+        if (index === 0)
+            return formatStamp(ts)
+
+        const prev = messageModel.get(index - 1)
+        const prevTs = prev && prev.tsMs ? prev.tsMs : 0
+        if (prevTs > 0 && ts - prevTs < stampGapMs && !isOtherDay(prevTs, ts))
+            return ""
+
+        return formatStamp(ts)
+    }
+
+    /// 两个时间戳是不是同一天
+    function isOtherDay(a, b) {
+        const da = new Date(a)
+        const db = new Date(b)
+        return da.getFullYear() !== db.getFullYear()
+            || da.getMonth() !== db.getMonth()
+            || da.getDate() !== db.getDate()
+    }
+
+    /// 时间戳 → 标签文本：今天只给 HH:mm，更早的带上"昨天 / 月日 / 年月日"
+    function formatStamp(ms) {
+        const when = new Date(ms)
+        const now = new Date()
+        const pad = (v) => (v < 10 ? "0" + v : String(v))
+        const clock = pad(when.getHours()) + ":" + pad(when.getMinutes())
+
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000
+
+        if (ms >= startOfToday)
+            return clock
+        if (ms >= startOfYesterday)
+            return "昨天 " + clock
+        if (when.getFullYear() === now.getFullYear())
+            return (when.getMonth() + 1) + "月" + when.getDate() + "日 " + clock
+        return when.getFullYear() + "年" + (when.getMonth() + 1) + "月"
+            + when.getDate() + "日 " + clock
+    }
+
+    /*!
+        把 ChatController.messages 同步进 messageModel。
+
+        · **纯追加**（同一会话来了新消息 / 刚发出一条）：只 append 新行，并原地更新
+          已有行的状态（sending → sent / failed）。模型不重置，ListView 的 contentY
+          原地不动 —— 正在翻历史的人不会被拽走。
+        · **头部新增**（往上翻页，更早的一页插进来）：现有模型正好是新列表的
+          **后缀**，于是只往头部 insert。重建会把 delegate 全拆了重来，视口当场归零，
+          翻页的人会看到屏幕闪一下再跳回去。
+        · 其他情况（换会话 / 删除 / 清空 / 首次加载历史）：整体重建。
+          重建会丢掉滚动位置，但那几种操作本来就该从头看（换会话后由
+          onActiveConversationChanged 统一滚到底）。
+        @return 这次往**头部**插了几条（0 = 不是翻页）
+    */
+    function syncMessageModel(list) {
+        /*
+         * 先认"头部新增"：现有模型 == 新列表的后缀。
+         * 从后往前插，插完顺序才是 list[0..add-1]。
+         */
+        if (messageModel.count > 0 && messageModel.count < list.length) {
+            const add = list.length - messageModel.count
+            let suffix_same = true
+            for (let i = 0; i < messageModel.count; ++i) {
+                if (String(messageModel.get(i).msgId) !== String(list[i + add].id)) {
+                    suffix_same = false
+                    break
+                }
+            }
+
+            if (suffix_same) {
+                for (let i = add - 1; i >= 0; --i)
+                    messageModel.insert(0, messageRow(list[i]))
+                // 底下那些行的状态也可能刚变（收到回执），顺手原地更新
+                for (let i = messageModel.count - 1; i >= add; --i) {
+                    const state = list[i].state !== undefined ? list[i].state : ""
+                    if (messageModel.get(i).delivery !== state)
+                        messageModel.setProperty(i, "delivery", state)
+                }
+                return add
+            }
+        }
+
+        let prefix_same = messageModel.count <= list.length
+
+        if (prefix_same) {
+            for (let i = 0; i < messageModel.count; ++i) {
+                if (String(messageModel.get(i).msgId) !== String(list[i].id)) {
+                    prefix_same = false
+                    break
+                }
+            }
+        }
+
+        if (prefix_same) {
+            for (let i = 0; i < messageModel.count; ++i) {
+                const state = list[i].state !== undefined ? list[i].state : ""
+                if (messageModel.get(i).delivery !== state)
+                    messageModel.setProperty(i, "delivery", state)
+            }
+            for (let i = messageModel.count; i < list.length; ++i)
+                messageModel.append(messageRow(list[i]))
+            return 0
+        }
+
+        // 整包重建 = 换了会话 / 换了账号：翻页锚点跟着作废
+        messageView._anchorIndex = -1
+        messageModel.clear()
+        for (let i = 0; i < list.length; ++i)
+            messageModel.append(messageRow(list[i]))
+        return 0
     }
 
     /*!
@@ -1595,6 +2509,19 @@ Item {
         page.selectedCount = Object.keys(next).length
     }
 
+    /// 删掉一条（右键菜单确认后调用；只删本机）
+    function deleteMessage(id) {
+        const row_id = Number(id)
+        if (!(row_id > 0))
+            return
+
+        if (ChatController.deleteMessages([row_id]) > 0) {
+            // 控制器已经把条数写进 tip —— 这里用 toast 顶替，别重复报两遍
+            ChatController.clearTip()
+            page.flashNotice("已删除这条消息（仅本机）")
+        }
+    }
+
     /// 删掉选中的那些（只删本机；调用前已经让用户确认过）
     function deleteSelectedMessages() {
         if (page.selectedCount === 0)
@@ -1637,6 +2564,30 @@ Item {
             return
         }
 
+        /*
+         * 自动化：把消息列表滚到指定位置（chatscroll:<contentY>）。
+         * 用来验证"不在底部时收到新消息，视口不能动"。
+         */
+        if (action.startsWith("chatscroll")) {
+            const parts = action.split(":")
+            autoScrollTimer.targetY = parts.length > 1 ? Number(parts[1]) : 0
+            autoScrollTimer.restart()
+            return
+        }
+
+        /*
+         * 自动化：右键菜单的「删除」链路（chatmenudel / chatmenudelok）。
+         * 先真的把菜单弹出来（验证菜单能定位到这条消息），再隔一拍发
+         * deleteRequested —— 等价于用户点了菜单里的「删除」。
+         */
+        if (action === "chatmenudel" || action === "chatmenudelok") {
+            const last = list[list.length - 1]
+            page.openMessageMenu(last.id, last.text, 430, 278)
+            autoMenuTimer.targetAction = action
+            autoMenuTimer.restart()
+            return
+        }
+
         let count = 1
         if (action.startsWith("chatselect")) {
             const parts = action.split(":")
@@ -1653,11 +2604,25 @@ Item {
     }
 
     /// 会话头部点头像 / 点 ◎：打开这个人的资料卡
-    function openChatPeerInfo() {
-        page.openUserInfo({
-            uid: ChatController.activePeerUid,
-            name: ChatController.activePeerName
-        })
+    /// \a uid 可选：不传就是当前活动会话的对方（自动化验证时用得到）
+    function openChatPeerInfo(uid) {
+        const target_uid = uid !== undefined && uid !== null && String(uid).length > 0
+            ? String(uid) : String(ChatController.activePeerUid)
+        if (target_uid.length === 0)
+            return
+
+        const list = ChatController.conversations
+
+        // 会话项里带着完整资料（备注 / 头像 / 签名 / 性别）—— 只传 uid+name 的话
+        // 资料卡会少备注，而会话列表显示的正是"备注优先"的名字，对不上。
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].uid) === target_uid) {
+                page.openUserInfo(list[i])
+                return
+            }
+        }
+
+        page.openUserInfo({uid: target_uid, name: ChatController.activePeerName})
     }
 
     /*!
@@ -1756,10 +2721,24 @@ Item {
             return
         } else if (app.autoDialog.startsWith("session")) {
             // 自动化验证：切到「会话」分区并可选地打开某个会话（session:<uid>）
+            // 还能用「|」串联一个挂起动作：session:<uid>|chatmenudel
             page.section = 0
-            const parts = app.autoDialog.split(":")
+            const chain = app.autoDialog.split("|")
+            const parts = chain[0].split(":")
             if (parts.length > 1 && parts[1].length > 0)
                 ChatController.openConversation(parts[1], parts[1])
+            if (chain.length > 1 && chain[1].length > 0) {
+                page.pendingChatAction = chain[1]
+                page.tryPendingChatAction()
+            }
+            return
+        } else if (app.autoDialog.startsWith("peerinfo")) {
+            // 自动化验证：打开当前会话好友的资料卡（等好友列表/会话就位再点）
+            // 支持 peerinfo:<uid> 指定某个人
+            page.section = 0
+            const parts = app.autoDialog.split(":")
+            peerInfoTimer.targetUid = parts.length > 1 ? parts[1] : ""
+            peerInfoTimer.restart()
             return
         } else if (app.autoDialog === "applylist") {
             // 只看申请列表本身（不弹资料卡）：验证方向标签与对面 uid 的显示
@@ -1777,7 +2756,10 @@ Item {
             return
         } else if (app.autoDialog.startsWith("chatselect")
                    || app.autoDialog === "chatdelete"
-                   || app.autoDialog === "chatwipe") {
+                   || app.autoDialog === "chatwipe"
+                   || app.autoDialog === "chatmenudel"
+                   || app.autoDialog === "chatmenudelok"
+                   || app.autoDialog.startsWith("chatscroll")) {
             /*
              * 自动化验证：选择 / 删除 / 清空。
              *
@@ -1838,34 +2820,51 @@ Item {
             page.refreshPresenceOf(list)
         }
 
+        /*!
+            发消息被服务端判成「不是好友」（1014 error = 1022）。
+
+            最常见的原因是**对方把我删了** —— 服务端不推送这种变化，只能在发消息时
+            撞上。顺手静默刷新好友列表（不覆盖那条"发送失败"提示），列表随之收敛。
+        */
+        function onPeerIsNotFriend(peerUid) {
+            ContactController.refreshFriendListSilently()
+        }
+
         function onMessagesChanged() {
             /*
-             * 新消息一律滚到底？**现在不能这么干了** —— 拉取接通以后，别人发来的
-             * 消息会真的出现在列表里；用户翻历史时被一条新消息拽回底部是最烦人的。
+             * 模型已经在 syncMessageModel() 里做增量同步了（整包 QVariantList 直接当
+             * model 会被 QML 当成模型重置，contentY 归 0 —— 那正是"来消息就跳回最顶部"
+             * 的根源）。这里只决定**要不要把视口跟到最新**：
              *
-             * 规则：
-             *   · 自己发的：一定看得见（输入框那边也会先把跟随打开）；
-             *   · 别人发的：只有本来就在底部（followTail）才跟，否则原地不动，
+             *   · 先量"追加之前人是不是就在底部"：追加本身会让离底距离变大，
+             *     追加之后再量一定判成"不在底部"，跟随就永远失效；
+             *   · 自己发的：一定看得见；
+             *   · 别人发的：人在底部才跟，翻着历史就原地不动，
              *     未读角标由控制器加（见 ChatController::onChatMessages）。
-             *
-             * 注意 messages 是整包 QVariantList，追加一条会让 QML 侧当作模型重置，
-             * ListView 会把内容位置甩回顶部 —— 所以判断"是不是本来在底部"已经没用了，
-             * 得靠 followTail 这个随用户滚动维护的标志。
              */
             const list = ChatController.messages
             const last = list.length > 0 ? list[list.length - 1] : null
             const mine = last !== null && last.fromSelf === true
+            const wasAtBottom = messageView.atBottom()
+            // 翻页后判断"这一页排进来了没有"，靠的是内容总高有没有长
+            const chBefore = messageView.contentHeight
+
+            const added = page.syncMessageModel(list)
 
             // 自动化：等历史到位后执行挂起的选择 / 删除 / 清空（必须放在下面的
             // "不跟随时直接 return" 之前，否则翻着历史就永远轮不到它）
             page.tryPendingChatAction()
 
-            if (!mine && !messageView.followTail)
+            if (added > 0) {
+                // 往上翻页：把视口钉回原来那条消息，**绝不**跟到最新
+                messageView.restoreAnchor(added, chBefore)
+                return
+            }
+
+            if (!mine && !wasAtBottom)
                 return
 
-            messageView.followTail = true
-            messageView.holdUserIntent()
-            Qt.callLater(messageView.scrollToTail)
+            messageView.pinToBottom()
         }
 
         function onActiveConversationChanged() {
@@ -1883,8 +2882,7 @@ Item {
             if (ChatController.hasActiveConversation)
                 PresenceController.refresh(ChatController.activePeerUid)
             // 换会话一律从最新的看起
-            messageView.followTail = true
-            Qt.callLater(messageView.scrollToTail)
+            messageView.pinToBottom()
 
             // MYCHAT_SENDMSG：开屏时列表还是空的，自动发送只能等会话开出来再补
             if (page.pendingAutoMessage)
@@ -1907,6 +2905,10 @@ Item {
             page.tryPendingAuth()
             page.refreshPresenceOf(ContactController.applyList)
             page.syncDialogRequest()
+
+            // 正停在「好友申请」分区：列表一变（比如刷新拉到了新申请）就算已经看过
+            if (page.section === 2)
+                ContactController.markApplyListRead()
         }
 
         // 搜索结果出来后顺带问一下各自在不在线（人数很少，一问一个）
@@ -1931,12 +2933,15 @@ Item {
             ContactController 成功时已经往本地补了一条「已发出」记录，所以这里一定找得到。
             切过去之后主按钮就是禁用的「申请已发送」，同一个弹窗里连点也不会再发 ——
             光靠按钮文案不够，得让状态真的变掉。
+
+            ⚠ 必须按「我发出的 + 待处理」定位：同一个人的历史申请（比如当年他发给我、
+              我已接受的那条）还在列表里，按 uid 随便取一条会显示成「已经处理过了」。
         */
         function onFriendRequestSent(ok, error) {
             if (!ok || !userInfoDialog.visible)
                 return
 
-            const req = page.findRequestFor(userInfoDialog.userId)
+            const req = page.findOutgoingPendingRequest(userInfoDialog.userId)
             userInfoDialog.requestInfo = req
             // nick（备注）只有服务端回包/本地回声里有 —— 打开弹窗那一刻还没有，
             // 不补这一句的话，用户刚填的备注在这一屏里看不到。
@@ -1969,6 +2974,19 @@ Item {
 
             userInfoDialog.requestInfo = page.findRequestById(requestId)
             userInfoDialog.showHint(ContactController.tip, ContactController.tipIsError)
+        }
+
+        /*!
+            删除好友结束：成功就把资料卡关掉（人已经不在好友列表里了）。
+
+            失败时提示已经通过 onTipChanged 镜像进弹窗，这里只保证弹窗还开着。
+        */
+        function onFriendDeleteFinished(ok, error, uid) {
+            if (!ok)
+                return
+
+            if (userInfoDialog.visible && userInfoDialog.userId === uid)
+                userInfoDialog.close()
         }
     }
 }
