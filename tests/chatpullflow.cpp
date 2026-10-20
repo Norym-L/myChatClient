@@ -168,10 +168,11 @@ int main(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     mychat::log::init();
 
-    // 本地库指到临时目录：自检不该往真实用户的 %APPDATA% 里写东西
+    // 本地库指到 exe 旁边的隔离目录：自检不该往真实用户的 %APPDATA% 里写东西。
+    // 不用 %TEMP% —— 受限环境里那里写不进去，会让"落库"这一步莫名失败。
     const QString data_dir =
-        QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-        .filePath(QStringLiteral("mychat-pull-test"));
+        QDir(QCoreApplication::applicationDirPath())
+        .filePath(QStringLiteral("test-data/mychat-pull-test"));
     QDir(data_dir).removeRecursively();
     qputenv("MYCHAT_DATA_DIR", data_dir.toUtf8());
 

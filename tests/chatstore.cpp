@@ -54,8 +54,13 @@ void check(const bool ok, const QString& what)
 
 QString tempDir()
 {
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-        .filePath(QStringLiteral("mychat-store-test"));
+    /*
+     * 放在 exe 旁边而不是 %TEMP%：受限环境（沙箱 / 只读临时目录）里
+     * %TEMP% 下的写入会静默失败，表现成"打开本地库"直接报错 ——
+     * 看起来像 ChatStore 坏了，其实是环境不让写。构建目录一定可写。
+     */
+    return QDir(QCoreApplication::applicationDirPath())
+        .filePath(QStringLiteral("test-data/mychat-store-test"));
 }
 
 

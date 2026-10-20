@@ -30,3 +30,8 @@ CMakeUserPresets.json
 /.workbuddy/
 # 本地聊天记录（exe 目录下的便携数据目录，含 SQLite 库与 -wal/-shm）
 /data/
+
+# ── 意外目录 ──────────────────────────────────────────────────────────
+# 某个没展开 %SystemDrive% 环境变量的进程把 Windows 组件缓存写到了仓库根
+# （976KB 的 cversions.*.db）。不是项目内容，别提交。
+/%SystemDrive%/
