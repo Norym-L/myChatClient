@@ -491,6 +491,11 @@ int main(int argc, char* argv[])
                          {
                              // 控制器的槽先跑（它已经发出 1023），这里只推进后续步骤
                              step_timer.start(kStepTimeoutMs);
+
+                             // 登录会让控制器 openStore()：换账号时它会清掉 m_conversations /
+                             // m_history / m_active_uid，登录前 openConversation 的会话到这儿就没了，
+                             // messages() 会一直读到空列表 —— 所以「当前会话」要在登录之后重新指定。
+                             chat.openConversation(QString::fromLatin1(kPeerUid), QStringLiteral("peer"));
                          });
 
     // 每收到一批消息就核对控制器的落地结果（控制器先于本 lambda 处理完）
