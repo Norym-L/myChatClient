@@ -124,6 +124,9 @@ Item {
 
     /// MYCHAT_AUTHAPPLY=accept|refuse 时挂起的「接受 / 拒绝」动作（"1" / "2"）
     property string pendingAuthAction: ""
+    /// 资料卡已经打开、但还没点下去的那次「接受 / 拒绝」（等控制器不忙了再补）
+    property string pendingAuthRequestId: ""
+    property int pendingAuthState: 0
 
     /// MYCHAT_SENDMSG 挂起的自动发送：会话还没被打开时先记下来，等选好会话再发
     property bool pendingAutoMessage: false
@@ -737,6 +740,15 @@ Item {
                                     /// 用户正在拖滚动条：这期间的位置变化不算"用户上滚"
                                     property bool _barScrolling: false
 
+                                    /// 正在把自己摁到底：这期间的 contentY 变化不算"用户离开底部"
+                                    property bool _snapping: false
+
+                                    /// snapToBottom 补帧次数（新气泡的高度可能晚一帧才算进 Column）
+                                    property int _snapTries: 0
+
+                                    /// 上一次记下的 contentY：用来分辨"用户在滚"和"布局自己动了零点几像素"
+                                    property real _lastContentY: 0
+
                                     /// 往上翻页的闸门：一页没落定之前不再拉下一页
                                     property bool _paging: false
 
@@ -891,18 +903,32 @@ Item {
                                     }
 
                                     /*
-                                     * 摁到底。Column 的高度是实数，一次赋值就到 ——
-                                     * 不用再像 ListView 那样每 8ms 重试直到收敛。
+                                     * 摁到底。Column 的高度是实数，通常一次赋值就到；
+                                     * 但新气泡的高度会晚一帧才落定，所以 snapToBottom 里
+                                     * 留了最多 8 帧的补量（不是 ListView 那种无限追帧）。
                                      */
                                     function pinToBottom() {
                                         followTail = true
                                         // 先报"在底部"：人正被带到最新一条，这段时间的消息该算已读
                                         ChatController.chatAtBottom = true
+                                        _snapTries = 0
                                         Qt.callLater(snapToBottom)
                                     }
 
                                     function snapToBottom() {
+                                        // 这次位移是我们自己造成的：不能让 onContentYChanged 把它
+                                        // 当成"用户离开了底部"，否则 followTail 会被误关掉
+                                        _snapping = true
                                         contentY = maxContentY()
+                                        _snapping = false
+                                        _lastContentY = contentY
+
+                                        // 新气泡的高度常常晚一帧才算进 Column，这一拍量到的
+                                        // maxContentY 会短一条 —— 补几帧，和 applyRestore 同理
+                                        if (!atBottom() && followTail && !_barScrolling && _snapTries < 8) {
+                                            ++_snapTries
+                                            snapTimer.restart()
+                                        }
                                     }
 
                                     // 翻页后摆视口：等下一帧再量（Column 这一拍还没排完版）
@@ -910,6 +936,13 @@ Item {
                                         id: restoreTimer
                                         interval: 16
                                         onTriggered: messageView.applyRestore()
+                                    }
+
+                                    // 补摁到底：内容高度/位置晚一帧才落定时，下一帧再量一次
+                                    Timer {
+                                        id: snapTimer
+                                        interval: 16
+                                        onTriggered: messageView.snapToBottom()
                                     }
 
                                     // 翻页兜底：400ms 内视口还没摆回去也解锁，
@@ -931,15 +964,31 @@ Item {
                                     }
 
                                     onContentYChanged: {
+                                        // 记下这一步走了多远，再更新基准（提前做，
+                                        // 免得下面几个 return 让基准过期）
+                                        const delta = contentY - _lastContentY
+                                        _lastContentY = contentY
+
                                         // 人在看哪里就报给控制器（决定收到的消息算不算已读）
                                         syncReadState()
 
                                         // 翻到顶了 → 拉更早的一页（拖滚动条到顶也算）
                                         maybeLoadOlder()
 
-                                        // 用户正在拖滚动条：位置变化不代表"用户想停在这"
-                                        if (_barScrolling)
+                                        // 用户正在拖滚动条 / 我们正把自己摁到底：
+                                        // 这些位置变化不代表"用户想停在这"
+                                        if (_barScrolling || _snapping)
                                             return
+
+                                        /*
+                                         * 内容一长高，Flickable 会把 contentY 自己抹平零点几像素
+                                         * （实测 499.25 → 499）。这不是用户在滚 —— 当成"离底"
+                                         * 会把 followTail 关掉，随后那一下补帧就被守卫拦下，
+                                         * 新消息永远停在屏幕外面。所以只认真正的一步位移。
+                                         */
+                                        if (Math.abs(delta) < 1)
+                                            return
+
                                         followTail = atBottom()
                                     }
 
@@ -2683,13 +2732,36 @@ Item {
             const state = Number(pendingAuthAction)
             pendingAuthAction = ""
             page.openUserInfo(item, item)
-            // 弹窗刚拿到 requestInfo，canAuth 要下一拍才算得出来
-            Qt.callLater(() => userInfoDialog.authRequest(state))
+            // 打开资料卡那一拍，页面可能正忙（onApplyListChanged 里紧跟着的
+            // markApplyListRead 会把控制器置忙），这一下点不动 —— 记下来等到
+            // busy 落回 false 再补点，否则这个自动化钩子永远静默失败。
+            page.pendingAuthRequestId = String(item.id)
+            page.pendingAuthState = state
+            Qt.callLater(page.commitPendingAuth)
             return
         }
 
         pendingAuthAction = ""
         console.warn("[chat] 申请列表里没有「收到 + 待处理」的条目，MYCHAT_AUTHAPPLY 跳过")
+    }
+
+    /*!
+        tryPendingAuth 打开资料卡后，真正替用户点「接受 / 拒绝」。
+
+        弹窗刚拿到 requestInfo，canAuth 要下一拍才算得出来；而控制器这时多半正忙
+        （onApplyListChanged 里紧跟着 markApplyListRead 会置忙）。忙就等
+        onBusyChanged 再补 —— 只调一次的话这个钩子会静默失效。
+    */
+    function commitPendingAuth() {
+        if (pendingAuthRequestId === "")
+            return
+        if (ContactController.busy || !userInfoDialog.hasRequest)
+            return
+        if (String(userInfoDialog.requestInfo.id) !== pendingAuthRequestId)
+            return
+        const state = pendingAuthState
+        pendingAuthRequestId = ""
+        userInfoDialog.authRequest(state)
     }
 
     /*
@@ -2898,6 +2970,7 @@ Item {
             page.tryPendingFriendSend()
             page.tryPendingApplyOpen()
             page.tryPendingAuth()
+            page.commitPendingAuth()
         }
 
         function onApplyListChanged() {
