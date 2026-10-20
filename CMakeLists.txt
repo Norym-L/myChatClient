@@ -233,6 +233,16 @@ qt_add_executable(qtClientAccountSwitchTest
 
 target_link_libraries(qtClientAccountSwitchTest PRIVATE qtclient_core)
 
+# ── 账号卡片自检（需要真实服务端 + 两个账号）──────────────────────────
+# 两个账号先后登录 → 卡片列表 2 条 → 点卡片免密进入 → 篡改 token 期望 1012
+# （只清凭据、卡片保留）→ 退出登录只清当前账号 → 旧单账号结构自动迁移。
+# 存储走 MYCHAT_SESSION_FILE，不碰用户真实的 session.ini。
+qt_add_executable(qtClientAccountPickerTest
+        tests/accountpicker.cpp
+)
+
+target_link_libraries(qtClientAccountPickerTest PRIVATE qtclient_core)
+
 # 这几个都是控制台程序：必须保留控制台窗口，否则 printf / stderr 的输出看不到
 if (WIN32)
     set_target_properties(qtClientLoginTest PROPERTIES WIN32_EXECUTABLE FALSE)
@@ -245,6 +255,7 @@ if (WIN32)
     set_target_properties(qtClientChatStoreTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientFriendDeleteTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientAccountSwitchTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientAccountPickerTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

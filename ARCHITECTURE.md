@@ -66,6 +66,10 @@ ZmdUI 组件库（终末地工业机能风）。
   演示数据只在 `MYCHAT_DEMO=1` 时注入（用于版式自检）
 - ✅ **本地聊天记录**（SQLite）：按 uid 分库、收发先落库再 ACK、未读/已读/发送状态持久化、
   `server_id` 唯一索引兜住 PEL 重投、重启后会话与历史自动回填
+- ✅ **自动登录 / 多账号卡片**：登录成功后把凭据写进 `session.ini` 的 `[Accounts]`；
+  登录页顶部一排账号卡（左右滑动、单击选中、双击免密进入）。单账号时启动直接进，
+  多账号时停在选卡页。token 失效只清凭据、卡片保留
+  （自检：`qtClientAccountPickerTest`）
 - ✅ **删除 / 清空聊天记录**（只影响本机）：会话头「…」→ 选择消息（批量删）/ 清空会话，
   两个操作都有确认弹窗；服务端没有删除接口，对方不受影响
 - ✅ 八套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
@@ -74,7 +78,6 @@ ZmdUI 组件库（终末地工业机能风）。
 
 - **服务端历史**：`XACKDEL` 确认即删，跨设备翻不到旧消息（只有本机 SQLite 里有）
 - **群聊**：服务端 `is_to_group` 恒为 false
-- 会话持久化（目前关掉进程就要重新登录）
 
 ---
 
@@ -254,8 +257,40 @@ GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] 
 
 ### 4.4 SessionManager
 
-保存 `uid` / `name` / `token`，提供 `label()` 生成 `"UID 666672 · agentnjqi"`
-这样的显示串。目前只在登录成功后写入， **尚未持久化到磁盘**。
+内存里保存**当前会话**（`uid` / `name` / `token` / `host` / `port`），
+提供 `label()` 生成 `"UID 666672 · agentnjqi"` 这样的显示串。
+
+**落盘的是账号列表而不是单个会话**：`QStandardPaths::AppConfigLocation/session.ini`
+（Windows 上是 `%APPDATA%/LocalLow/MyChat/MyChat/session.ini`）：
+
+```ini
+[Session]
+lastUid=1001                  ; 登录页默认选中它
+[Accounts]
+1001\token=...                ; 每个账号一份凭据
+1001\host=127.0.0.1
+1001\port=8091
+1001\lastLoginMs=...
+```
+
+依据：服务端 token 是**不带 TTL** 的 `redisSet(USER_TOKEN_PREFIX + uid)`，一直有效到
+下一次 `/user_login` 覆盖；`1001` 只校验 `{uid, token}`；而 Redis 键**按 uid 分开**，
+所以同一台机器可以同时记住多个账号、各自免密进入（登录页那排卡片就是它）。
+
+生命周期：
+| 时机 | 动作 |
+|---|---|
+| 聊天服登录成功 | `save()` 写入/更新该账号 + `lastUid`，清掉 `skipAuto` |
+| 启动 | 上次主动退出 → 停在登录页；单账号默认自动进；**多账号 → 停在登录页选卡** |
+| 点卡片 | 第一次选中，第二次（或双击）`loginWithAccount(uid)` 免密进入 |
+| `1012` / `1011` | `dropToken(uid)`：删凭据、**卡片保留**（改输密码） |
+| 连接失败（服务端没起） | 只提示，**不动**凭据 |
+| 用户退出登录 | **保留凭据**（点卡片还能进）+ 记 `skipAuto`（下次启动不自动登） |
+| 卡片「移除」 | `forgetAccount(uid)`：连凭据一起删，这才是"忘记这个号" |
+| 旧版单账号记录 | `migrateLegacy()` 自动搬进 `[Accounts]`，用一次不重登 |
+
+> 退出登录的语义：**断开连接 + 下次启动停在登录页**，但账号还记着 ——
+> 回来点一下卡片就进去，不用再输密码。要彻底忘掉用卡片上的「移除」。`MYCHAT_SESSION_FILE=<path>` 可改存储位置（自检程序靠它隔离）。
 
 ### 4.5 logger
 

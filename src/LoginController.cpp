@@ -1,6 +1,9 @@
 #include "LoginController.h"
 
+#include <QDateTime>
 #include <QJsonObject>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include "AccountValidator.h"
 #include "ChatSocket.h"
@@ -62,6 +65,9 @@ void LoginController::login(const QString& account, const QString& password)
     if (m_busy)
         return;
 
+    // 用户手输密码 = 这一轮不是"用存下来的 token"，失败时不该清凭据
+    m_saved_login = false;
+
     // ── 1) 本地校验 ──
     QString err = CheckAccount(account);
     if (!err.isEmpty())
@@ -110,6 +116,26 @@ void LoginController::logout()
 
     m_uid = 0;
     m_token.clear();
+    m_host.clear();
+    m_port = 0;
+    m_saved_login = false;
+
+    /*
+     * 主动退出 = 断开连接 + 回登录页，**凭据留着**。
+     *
+     * 这样退出后点一下卡片就能直接回去（密码不用再输一遍）—— 退出登录的
+     * 意思是"我现在不想连着"，不是"把这台机器记住的号忘掉"。真要忘，
+     * 卡片上的「移除」才是那个动作（forgetAccount 连凭据一起删）。
+     *
+     * 代价是单账号时关掉程序再打开还会自动登录。这是有意的：QQ / 微信都是
+     * 这个语义，而"彻底不再自动登"由「移除」兜底。
+     *
+     * 凭据本身被服务端作废（1012 / 1011）时由 onChatLoginFailed 负责清掉，
+     * 那条路径不动，否则点卡片会一直撞同一堵墙。
+     */
+    // 但下次启动别再自己登进去：退出就是退出，重新进要用户点一下卡片
+    mychat::SessionManager::instance().setSkipAutoLogin(true);
+    emit accountsChanged();
 
     m_user_label.clear();
     emit userLabelChanged();
@@ -118,6 +144,170 @@ void LoginController::logout()
     setLinkError(QString());
 
     MCLOG_INFO() << "[login] 已退出登录";
+}
+
+QVariantList LoginController::accounts() const
+{
+    auto& session = mychat::SessionManager::instance();
+    const std::uint64_t last_uid = session.lastUid();
+
+    QVariantList list;
+    for (const mychat::SessionManager::Account& account: session.accounts())
+    {
+        QVariantMap item;
+        item.insert(QStringLiteral("uid"), QString::number(account.uid));
+        item.insert(QStringLiteral("name"), account.name);
+        item.insert(QStringLiteral("hasToken"), account.hasToken());
+        item.insert(QStringLiteral("isLast"), account.uid == last_uid);
+        item.insert(QStringLiteral("lastText"),
+                    account.last_login_ms > 0
+                        ? QDateTime::fromMSecsSinceEpoch(account.last_login_ms)
+                              .toString(QStringLiteral("MM-dd HH:mm"))
+                        : QString());
+        list.append(item);
+    }
+    return list;
+}
+
+void LoginController::selectAccount(const QString& uid)
+{
+    if (m_selected_uid == uid)
+        return;
+
+    m_selected_uid = uid;
+    emit selectedUidChanged();
+}
+
+bool LoginController::loginWithAccount(const QString& uid)
+{
+    if (m_busy)
+        return false;
+
+    bool uid_ok = false;
+    const std::uint64_t target = uid.toULongLong(&uid_ok);
+    if (!uid_ok || target == 0)
+        return false;
+
+    auto& session = mychat::SessionManager::instance();
+    session.clear();
+    if (!session.loadAccount(target))
+    {
+        /*
+         * 卡片还在但这个号没有可用凭据（退出过登录 / token 被顶掉）。
+         * 只切选中，让 QML 把账号填进输入框、引导输密码 —— 这里不算失败，
+         * 所以不打 tip（用户点卡片时看到一句红字只会莫名其妙）。
+         */
+        selectAccount(uid);
+        return false;
+    }
+
+    m_uid = session.uid();
+    m_token = session.token();
+    m_host = session.host();
+    m_port = session.port();
+    m_saved_login = true;
+    selectAccount(QString::number(m_uid));
+
+    setBusy(true);
+    setTip(tr("正在进入…"));
+
+    MCLOG_INFO() << "[login] 用存下的凭据进入: uid =" << m_uid
+        << "host =" << m_host << "port =" << m_port;
+
+    mychat::ChatSocket::instance().connectToServer(m_host, m_port);
+    return true;
+}
+
+void LoginController::forgetAccount(const QString& uid)
+{
+    bool uid_ok = false;
+    const std::uint64_t target = uid.toULongLong(&uid_ok);
+    if (!uid_ok || target == 0)
+        return;
+
+    mychat::SessionManager::instance().forgetAccount(target);
+    if (m_selected_uid == uid)
+        selectAccount(QString());
+    emit accountsChanged();
+
+    MCLOG_INFO() << "[login] 用户移除了账号卡片:" << uid;
+}
+
+bool LoginController::tryAutoLogin()
+{
+    if (m_busy)
+        return false;
+
+    auto& session = mychat::SessionManager::instance();
+    // 先清内存再读盘：上一次会话可能停在半路（比如登录失败后重试），
+    // 残留的 uid/token 不能参与这一轮。
+    session.clear();
+
+    const QList<mychat::SessionManager::Account> list = session.accounts();
+    if (list.isEmpty())
+        return false;
+
+    const bool forced = qEnvironmentVariableIsSet("MYCHAT_AUTOLOGIN_SAVED");
+
+    /*
+     * 上次是用户主动退出的 → 停在登录页，别自作主张登回去。
+     *
+     * 凭据没删（点卡片照样免密进），只是"开机自动进"这件事要用户点头。
+     */
+    if (session.skipAutoLogin() && !forced)
+    {
+        const std::uint64_t last = session.lastUid();
+        const std::uint64_t pick = last != 0 ? last : list.first().uid;
+        session.loadAccount(pick);
+        selectAccount(QString::number(pick));
+        MCLOG_INFO() << "[login] 上次是主动退出，停在登录页，默认选中" << pick;
+        return false;
+    }
+
+    /*
+     * 多账号时**不自动进**：登录页那排卡片就是给用户选的，直接跳进聊天页
+     * 等于把入口藏起来了。
+     *
+     * MYCHAT_AUTOLOGIN_SAVED=1 无视这条规则 —— 离屏验证要的是"自动登录本身"
+     * 走通，而不是"多账号就停下来"。
+     */
+    if (list.size() > 1 && !forced)
+    {
+        const std::uint64_t last = session.lastUid();
+        const std::uint64_t pick = last != 0 ? last : list.first().uid;
+        session.loadAccount(pick);
+        selectAccount(QString::number(pick));
+        MCLOG_INFO() << "[login]" << list.size() << "个账号，停在登录页选卡，默认选中" << pick;
+        return false;
+    }
+
+    // 单账号：和以前一样直接进（前提是它还有免密凭据）
+    const std::uint64_t last = session.lastUid();
+    const std::uint64_t target = last != 0 ? last : list.first().uid;
+    if (!session.loadAccount(target))
+    {
+        // 卡片还在但 token 被清过（比如上次点了退出登录）→ 停在登录页等输密码
+        selectAccount(QString::number(target));
+        return false;
+    }
+
+    m_uid = session.uid();
+    m_token = session.token();
+    m_host = session.host();
+    m_port = session.port();
+    m_saved_login = true;
+    selectAccount(QString::number(m_uid));
+
+    setBusy(true);
+    setTip(tr("正在恢复上次登录…"));
+
+    MCLOG_INFO() << "[login] 自动登录: uid =" << m_uid
+        << "host =" << m_host << "port =" << m_port;
+
+    // 直接连存下来的地址：拿不到新地址（那要走 HTTP，需要密码），只能信上次的这个。
+    // 连不上就走 onSocketConnectFailed —— 那种情况**不删**凭据（可能只是服务端没起）。
+    mychat::ChatSocket::instance().connectToServer(m_host, m_port);
+    return true;
 }
 
 void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
@@ -170,6 +360,9 @@ void LoginController::onHttpLoginDone(const bool ok, const QJsonObject& resp)
 
     m_uid = *uid;
     m_token = token;
+    m_host = host;
+    m_port = port;
+    mychat::SessionManager::instance().setEndpoint(host, port);
 
     MCLOG_INFO() << "[login] HTTP 登录成功: uid =" << *uid
         << "host =" << host << "port =" << port;
@@ -199,6 +392,20 @@ void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QStrin
     auto& session = mychat::SessionManager::instance();
     session.update(uid, name, token);
 
+    /*
+     * 走到这里 token 已经过服务端校验，是"确定能用"的凭据 —— 现在才落盘。
+     *
+     * 自动登录成功时这一句是幂等的（盘上本来就是这份数据），重写一遍没有副作用；
+     * 手动登录成功时则是把新 token / 新地址写进去（每次 /user_login 都会换 token，
+     * 旧的那份从这一刻起就作废了）。
+     */
+    m_saved_login = false;
+    session.save();
+    // 登录成功 = "退出登录"那条禁令作废，下次启动恢复正常自动登录
+    session.setSkipAutoLogin(false);
+    // 卡片上的"上次登录"时间 / 排序 / 是否免密都变了，通知登录页刷新
+    emit accountsChanged();
+
     m_user_label = session.label();
     emit userLabelChanged();
 
@@ -214,6 +421,29 @@ void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QStrin
 void LoginController::onChatLoginFailed(const int error)
 {
     MCLOG_WARN() << "[login] 聊天服登录失败, error =" << error;
+
+    /*
+     * 用存下来的 token 进不去，只有两种情况是"凭据本身作废"：
+     *   · 1012 token 与 StatusServer 记录不一致（在别处登录把它顶掉了）；
+     *   · 1011 StatusServer 里根本没有这个 uid 的 token（Redis 被清 / 过期）。
+     * 这两种留着凭据也连不上，删掉（卡片保留）免得下次再撞一次。
+     *
+     * 其它错误（1002 调 StatusServer 失败、1013 Redis 不可用）是服务端一时的
+     * 问题，凭据还是好的 —— 清了反而要用户重输密码。
+     */
+    if (m_saved_login && (error == 1011 || error == 1012))
+    {
+        const std::uint64_t uid = mychat::SessionManager::instance().uid();
+        m_saved_login = false;
+        mychat::SessionManager::instance().dropToken(uid);
+        emit accountsChanged();
+
+        setTip(tr("登录状态已失效，请重新登录"), true);
+        setBusy(false);
+        emit loginFailed(tr("登录状态已失效，请重新登录"));
+        return;
+    }
+
     fail(mychat::protocol::errorToTip(error));
 }
 
@@ -241,6 +471,14 @@ void LoginController::setLinkError(const QString& text)
 
 void LoginController::fail(const QString& reason)
 {
+    /*
+     * 用存下来的 token 却连不上服务器（端口变了 / 服务端没起）：
+     * **不删凭据** —— 这是服务端的事，凭据本身可能还是好的，
+     * 删了等于让用户因为别人重启服务而重输一次密码。
+     * 只把标志清掉，提示照常给。
+     */
+    m_saved_login = false;
+
     setTip(reason, true);
     setBusy(false);
     emit loginFailed(reason);

@@ -43,6 +43,14 @@ Window {
     property string startPage: "Login"
 
     /**
+     * 自动化：登录页的账号卡片操作（MYCHAT_PICKER）。
+     *
+     * 取值 `select:<uid>` / `enter:<uid>`，由 main.cpp 从环境变量注入。
+     * 卡片是点击驱动的，离屏抓图点不了鼠标 —— 没有这个开关就只能靠人眼看。
+     */
+    property string autoPick: ""
+
+    /**
      * 自动搜索关键字（自动化验证用）。配合 MYCHAT_AUTOLOGIN + MYCHAT_SMOKE：
      * 登录成功进入聊天页后，自动切到「联系人」分区并发起一次搜索，
      * 用于无头验证搜索结果列表（尤其是多结果）的渲染。
@@ -96,6 +104,7 @@ Window {
     Component {
         id: loginPageComponent
         LoginPage {
+            autoPick: app.autoPick
             onRegisterRequested: pageLoader.sourceComponent = registerPageComponent
             onResetRequested: pageLoader.sourceComponent = resetPageComponent
         }

@@ -24,6 +24,7 @@
 
         <!-- ── 自建组件（ZmdUI 缺失、按同一设计语言补的）──────────────── -->
         <file alias="components/ZAvatar.qml">../qml/components/ZAvatar.qml</file>
+        <file alias="components/AccountCard.qml">../qml/components/AccountCard.qml</file>
         <file alias="components/ConversationRow.qml">../qml/components/ConversationRow.qml</file>
         <file alias="components/ChatBubble.qml">../qml/components/ChatBubble.qml</file>
         <file alias="components/ChatMessageMenu.qml">../qml/components/ChatMessageMenu.qml</file>

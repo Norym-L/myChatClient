@@ -187,6 +187,18 @@ int main(int argc, char* argv[])
         root->setProperty("autoDialog", auto_dialog);
     }
 
+    // 开发 / 自动化用：MYCHAT_PICKER=<select:uid|enter:uid>
+    // 在登录页替用户点一下账号卡片：select 只选中（验证单击接线），
+    // enter 走免密进入（验证双击 → loginWithAccount → 切聊天页整条链路）。
+    // 卡片是 QML 点击驱动的，离屏抓图给不了鼠标事件，只能让它自己点。
+    const QString auto_pick = qEnvironmentVariable("MYCHAT_PICKER");
+    if (!auto_pick.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_PICKER 已设置，自动操作账号卡片:" << auto_pick;
+        root->setProperty("autoPick", auto_pick);
+    }
+
+
     // 开发 / 自动化用：MYCHAT_SENDMSG=<文本>
     // 进聊天页后替用户发一条消息（走的是真实的输入框 → 控制器 → 本地回显链路）。
     // 用来无头验证"发出去的消息出现在气泡里、并且状态走完 sending → sent（不挂失败小字）"。
@@ -229,6 +241,37 @@ int main(int argc, char* argv[])
         {
             MCLOG_WARN() << "[app] MYCHAT_AUTOLOGIN 格式应为 uid:password";
         }
+    }
+    else if (qEnvironmentVariableIsSet("MYCHAT_AUTOLOGIN_SAVED")
+             || (qEnvironmentVariableIsSet("MYCHAT_PICKER")
+                 // 带动作（select:uid / enter:uid）时不要预选：那种场景是替用户点卡片，
+                 // tryAutoLogin 先抢着选中/登录会打乱验证
+                 && !qEnvironmentVariable("MYCHAT_PICKER").contains(QLatin1Char(':')))
+             || (qEnvironmentVariable("MYCHAT_PAGE").isEmpty()
+                 && qEnvironmentVariable("MYCHAT_SMOKE").isEmpty()))
+    {
+        /*
+         * 正常启动：拿上次成功登录留下的 {uid, token, host, port} 直接连聊天服。
+         *
+         * 必须等 QML 加载完再发起 —— main.qml 的 Connections 要先连上
+         * loginSucceeded，否则自动登录成功时没人接那个信号，窗口停在登录页。
+         *
+         * 只在"没有任何自动化开关"时走这条路：
+         *   · MYCHAT_AUTOLOGIN 已经指定了账号，不能被盘上的旧账号顶掉；
+         *   · MYCHAT_PAGE / MYCHAT_SMOKE 是要抓某个页面的图，自动跳页就拍不到了。
+         *
+         * MYCHAT_AUTOLOGIN_SAVED=1 是给"自动登录本身"做离屏验证用的强制开关：
+         * 要同时截图，就必然会设 MYCHAT_SMOKE，没有它这条链路根本没法抓图。
+         * MYCHAT_PICKER=1 同理，用来把登录页的账号卡片条渲染出来 —— 有多个账号时
+         * tryAutoLogin() 只会选中上次那个、不会跳页，正好停在要拍的那一屏。
+         */
+        QTimer::singleShot(0, &login_controller, [&login_controller]()
+                           {
+                               if (login_controller.tryAutoLogin())
+                               {
+                                   MCLOG_INFO() << "[app] 已发起自动登录";
+                               }
+                           });
     }
 
     // ── 无头截图自检：MYCHAT_SMOKE=<输出 png 路径> 时抓一张图后退出 ─────

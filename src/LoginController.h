@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantList>
 
 #include <cstdint>
 
@@ -47,6 +48,21 @@ class LoginController : public QObject
      */
     Q_PROPERTY(QString linkError READ linkError NOTIFY linkErrorChanged)
 
+    /**
+     * 本机记住的账号卡片列表（登录页那排可左右滑动的卡）。
+     *
+     * 每项：`{ uid, name, hasToken, lastText, isLast }`
+     *   · `hasToken`  true = 有免密凭据，点「进入」就能进；
+     *   · `lastText`  上次登录时间（"10-20 23:31"），没登录过是空串；
+     *   · `isLast`    是不是上次用的那个（卡片上打「上次」标记）。
+     *
+     * 只在登录页活着的时候用，但由控制器提供 —— QML 不该自己去读 session.ini。
+     */
+    Q_PROPERTY(QVariantList accounts READ accounts NOTIFY accountsChanged)
+
+    /// 当前在卡片条里选中的 uid（空串 = 没有选中，走"新账号"表单）
+    Q_PROPERTY(QString selectedUid READ selectedUid NOTIFY selectedUidChanged)
+
 public:
     explicit LoginController(QObject* parent = nullptr);
 
@@ -55,6 +71,8 @@ public:
     [[nodiscard]] bool busy() const { return m_busy; }
     [[nodiscard]] QString userLabel() const { return m_user_label; }
     [[nodiscard]] QString linkError() const { return m_link_error; }
+    [[nodiscard]] QVariantList accounts() const;
+    [[nodiscard]] QString selectedUid() const { return m_selected_uid; }
 
     /**
      * 当前 uid / 昵称，直接取自 SessionManager。
@@ -76,6 +94,41 @@ public:
     /// 发起登录（本地校验 → HTTP → 连接 ChatServer → TCP 登录握手）
     Q_INVOKABLE void login(const QString& account, const QString& password);
 
+    /**
+     * 自动登录：用上次成功登录后存下的 `{uid, token, host, port}` 直接连聊天服。
+     *
+     * 跳过 HTTP（不需要密码）—— `1001` 握手只校验 uid + token，而服务端的 token
+     * 是不带 TTL 的 Redis 键，一直有效到下一次 `/user_login` 覆盖。
+     *
+     * @return 磁盘上有完整记录、已经发起连接时 true（结果仍然走 loginSucceeded /
+     *         loginFailed）；没有记录、或当前正忙时 false（调用方什么都不用做）。
+     *
+     * 失败时会把磁盘记录一起清掉：token 被顶、聊天服换了端口、服务端没起，
+     * 这几种情况重试都是白搭，留着只会让下次启动再卡一遍。
+     */
+    Q_INVOKABLE bool tryAutoLogin();
+
+    /**
+     * 在账号卡片条里选中某个账号（只切高亮，不发请求）。
+     *
+     * QML 会在选中的同时把 uid 填进账号输入框 —— 用户选完还能改，改的就是
+     * "用另一个号登录"，不会被卡片绑死。
+     */
+    Q_INVOKABLE void selectAccount(const QString& uid);
+
+    /**
+     * 用某个账号存下的 token 免密进入（卡片上的「进入」）。
+     *
+     * @return 已经发起连接时 true；该账号没有可用凭据（或正忙）时 false，
+     *         调用方应退回密码登录。
+     *
+     * 失败时只清**这个账号的 token**，卡片保留 —— 用户还能用密码登同一个号。
+     */
+    Q_INVOKABLE bool loginWithAccount(const QString& uid);
+
+    /// 从卡片列表里彻底移除某个账号（连凭据一起）
+    Q_INVOKABLE void forgetAccount(const QString& uid);
+
     /// 退出登录：断开与 ChatServer 的连接并清空会话（不清空 tip，方便页面提示）
     Q_INVOKABLE void logout();
 
@@ -86,6 +139,8 @@ public:
     void busyChanged();
     void userLabelChanged();
     void linkErrorChanged();
+    void accountsChanged();
+    void selectedUidChanged();
     /// 本地校验失败，field 为 "account" 或 "password"
     void validationFailed(const QString& field);
     /// 全链路登录成功（已与 ChatServer 完成握手）
@@ -127,4 +182,19 @@ private:
     // HTTP 登录响应拿到、随后用于 TCP 登录帧的凭据
     std::uint64_t m_uid = 0;
     QString m_token;
+
+    /**
+     * 这一轮登录用的是「存下来的 token」（true）还是用户手输密码（false）。
+     *
+     * 失败出口靠它决定两件事：要不要把这个账号的免密凭据删掉（token 被顶掉 →
+     * 留着也连不上），以及提示文案要不要换成"登录状态已失效"。
+     */
+    bool m_saved_login = false;
+
+    /// 卡片条里选中的账号（空串 = 走"新账号"表单）
+    QString m_selected_uid;
+
+    // 聊天服地址：HTTP 登录回包里拿到，登录成功后与 token 一起落盘
+    QString m_host;
+    std::uint16_t m_port = 0;
 };
