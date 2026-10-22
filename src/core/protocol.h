@@ -77,6 +77,10 @@ namespace mychat::protocol
         AckChatMessageRsp,    // 1026
         DelFriendReq,         // 1027 —— 删除好友（服务端 2026-10-19 新增）
         DelFriendRsp,         // 1028 —— 删除结果，回显 uid
+        SetFriendRemarkReq,   // 1029 —— 设置好友备注（服务端 2026-10-21 新增）
+        SetFriendRemarkRsp,   // 1030 —— 备注结果，原样回显 id
+        ChangeUserInfoReq,    // 1031 —— 编辑本人资料（服务端 2026-10-21 新增）
+        ChangeUserInfoRsp,    // 1032 —— 编辑结果，原样回显 id
     };
 
     /**
@@ -112,6 +116,15 @@ namespace mychat::protocol
      * 客户端的策略是"拉 10 条 → 确认这 10 条"，正好一批，不用分批。
      */
     inline constexpr int MAX_CHAT_MESSAGES_PER_BATCH = 10;
+
+    /**
+     * 好友备注的最大长度（字符）。
+     *
+     * 服务端文档没约定上限（由 `user_friend.remark` 的列宽决定）。客户端在发送前
+     * 与界面输入框都按这个数卡住 —— 否则超长会被 MySQL 截断或直接报 1013，
+     * 用户只会看到一句"数据库不可用"。
+     */
+    inline constexpr int MAX_FRIEND_REMARK_LEN = 64;
 
     /**
      * 拉取回包（1024）里的一条消息。
@@ -195,9 +208,10 @@ namespace mychat::protocol
         /**
          * 不是好友关系（服务端 2026-10-19 新增 `NOT_FRIEND`）。
          *
-         * 两个出处：
+         * 三个出处：
          *   · 发消息（1013）的好友校验没过 —— 消息**不会**写进对方离线流；
-         *   · 删好友（1027）时双方本来就不是好友。
+         *   · 删好友（1027）时双方本来就不是好友；
+         *   · 设置好友备注（1029）时对方不是好友，或者试图给自己设置备注。
          *
          * ⚠ 这个数值和「新消息推送」的 message_id 1022 撞号，但那是两套独立枚举
          *   （错误码 vs 消息编号），别混用。

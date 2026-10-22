@@ -40,6 +40,17 @@ class LoginController : public QObject
     Q_PROPERTY(QString name READ name NOTIFY userLabelChanged)
 
     /**
+     * 本人的签名 / 性别（**本次会话的缓存**，不是服务端查询结果）。
+     *
+     * 服务端没有"查自己资料"的接口：登录回包只带 uid + 昵称。所以这两个值
+     * 只能来自本次登录期间的编辑（1031 成功回填）—— 重启后就回到空 / 2，
+     * 直到用户再改一次。留成属性是为了「我的资料」弹窗能显示刚改过的值，
+     * 而不是每次打开都回到"服务端暂不下发"的空态。
+     */
+    Q_PROPERTY(QString selfDesc READ selfDesc NOTIFY selfProfileChanged)
+    Q_PROPERTY(int selfSex READ selfSex NOTIFY selfProfileChanged)
+
+    /**
      * 最近一次链路异常的原因（空串 = 链路正常）。
      *
      * 聊天页据此显示一条提示条：连接断了以后 `ChatSocket` 只会静默丢弃后续请求，
@@ -83,6 +94,8 @@ public:
      */
     [[nodiscard]] QString uid() const;
     [[nodiscard]] QString name() const;
+    [[nodiscard]] QString selfDesc() const { return m_self_desc; }
+    [[nodiscard]] int selfSex() const { return m_self_sex; }
 
     /// 校验账号：返回空串表示通过，否则是给用户看的错误提示。
     /// 无状态所以是 static；注意 Q_INVOKABLE 对 static 函数无效（QML 访问不到），
@@ -132,12 +145,25 @@ public:
     /// 退出登录：断开与 ChatServer 的连接并清空会话（不清空 tip，方便页面提示）
     Q_INVOKABLE void logout();
 
+    /**
+     * 编辑本人资料（1031 / 1032）。
+     *
+     * 服务端允许只传想改的字段，但编辑表单一次提交三项，所以这里全发 ——
+     * 只改签名时原昵称也要带上，否则空串会被当成"把昵称改成空"写进库。
+     * 头像（`icon`）不发：服务端没有上传通道，发了只会覆盖已有地址。
+     *
+     * 成功后昵称会同步进 SessionManager 并落盘（账号卡片显示的就是它），
+     * 签名 / 性别缓存到本对象，供「我的资料」弹窗回显（服务端没有查自己的接口）。
+     */
+    Q_INVOKABLE void changeUserInfo(const QString& name, const QString& desc, int sex);
+
     signals :
 
     void tipChanged();
     void tipIsErrorChanged();
     void busyChanged();
     void userLabelChanged();
+    void selfProfileChanged();
     void linkErrorChanged();
     void accountsChanged();
     void selectedUidChanged();
@@ -152,6 +178,15 @@ public:
      * 自检程序只能干等到超时，一次失败要 20 秒才出结果。
      */
     void loginFailed(const QString& reason);
+
+    /**
+     * 编辑本人资料结束（1031 / 1032）。
+     *
+     * ok=false 时 error：1011（会话未登录 / MySQL 里没有这个 uid）、
+     * 1013（读不到用户缓存或数据库失败）、5（本地等回包超时）。
+     * 本地校验失败（昵称为空）不走这里 —— 那种情况只发 validationFailed。
+     */
+    void userInfoChangeFinished(bool ok, int error);
 
 private:
     /// 设置提示文案；is_error 决定 QML 里的显示颜色
@@ -171,11 +206,17 @@ private:
     void onChatLoginSucceeded(std::uint64_t uid, const QString& name, const QString& token);
     void onChatLoginFailed(int error);
     void onLinkError(const QString& reason);
+    /// 编辑资料回包（1032）
+    void onUserInfoChangeResult(bool ok, int error, const QString& name,
+                                const QString& desc, int sex);
 
     QString m_tip;
     bool m_tip_is_error = false;
     bool m_busy = false;
     QString m_user_label;
+    /// 本次会话里改过的签名 / 性别（服务端没有"查自己"的接口，只能本地留）
+    QString m_self_desc;
+    int m_self_sex = 2;
     /// 最近一次链路异常原因；空串表示链路正常
     QString m_link_error;
 

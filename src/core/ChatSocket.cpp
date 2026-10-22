@@ -17,6 +17,11 @@ namespace mychat
 {
     namespace
     {
+        /**
+         * 好友备注的最大长度：与协议层的常量一致（界面输入框也用它）。
+         */
+        constexpr int kMaxRemarkLength = protocol::MAX_FRIEND_REMARK_LEN;
+
         /// message_id -> 名称，仅用于日志
         const char* messageIdName(const std::uint16_t id)
         {
@@ -78,6 +83,14 @@ namespace mychat
                 return "DelFriendReq";
             case protocol::MessageId::DelFriendRsp:
                 return "DelFriendRsp";
+            case protocol::MessageId::SetFriendRemarkReq:
+                return "SetFriendRemarkReq";
+            case protocol::MessageId::SetFriendRemarkRsp:
+                return "SetFriendRemarkRsp";
+            case protocol::MessageId::ChangeUserInfoReq:
+                return "ChangeUserInfoReq";
+            case protocol::MessageId::ChangeUserInfoRsp:
+                return "ChangeUserInfoRsp";
             }
             return "Unknown";
         }
@@ -364,6 +377,115 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
                             emit friendDeleteResult(
                                 false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
                                 target);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::setFriendRemark(const QString& friendUid, const QString& remark)
+    {
+        const QString target = friendUid.trimmed();
+
+        if (!isConnected())
+            return false;
+
+        if (target.isEmpty())
+        {
+            qWarning() << "[chat] 设置备注的好友 uid 为空，请求被丢弃";
+            return false;
+        }
+
+        /*
+         * 备注长度：服务端文档没约定上限（字段长度由 `user_friend.remark` 决定），
+         * 超长会被 MySQL 截断或直接报 1013 —— 那时界面只会说"数据库不可用"，
+         * 完全指不到真正的原因。这里先卡在 64 个字符（和界面输入框一致）。
+         */
+        if (remark.size() > kMaxRemarkLength)
+        {
+            qWarning() << "[chat] 好友备注过长，请求被丢弃, 长度 =" << remark.size();
+            return false;
+        }
+
+        if (!m_remark_uid_in_flight.isEmpty())
+        {
+            // 1030 没有可用的请求序号（id 是任意类型、服务端只回显），串行才不会错配
+            qWarning() << "[chat] 上一个备注请求还没回包，本次丢弃:" << target;
+            return false;
+        }
+
+        QJsonObject body;
+        // id 只是"回显给客户端"的标记，服务端不解析、也不用于业务；这里给个短编号便于抓包
+        body.insert(QStringLiteral("id"), QStringLiteral("r-") + target);
+        body.insert(QStringLiteral("friend_uid"), target);
+        body.insert(QStringLiteral("remark"), remark);
+
+        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkReq), body))
+            return false;
+
+        m_remark_uid_in_flight = target;
+        m_remark_value_in_flight = remark;
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkRsp),
+                    [this]()
+                        {
+                            const QString uid = m_remark_uid_in_flight;
+                            const QString value = m_remark_value_in_flight;
+                            m_remark_uid_in_flight.clear();
+                            m_remark_value_in_flight.clear();
+                            emit friendRemarkResult(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                uid, value);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::changeUserInfo(const QString& name, const QString& desc, int sex)
+    {
+        const QString new_name = name.trimmed();
+
+        if (!isConnected())
+            return false;
+
+        if (new_name.isEmpty())
+        {
+            qWarning() << "[chat] 昵称为空，编辑资料请求被丢弃";
+            return false;
+        }
+
+        if (m_profile_in_flight)
+        {
+            qWarning() << "[chat] 上一个编辑资料请求还没回包，本次丢弃";
+            return false;
+        }
+
+        // 服务端的 Sex 枚举是 0 男 / 1 女 / 2 未知，其它值一律按未知发
+        const int safe_sex = (sex == 0 || sex == 1) ? sex : 2;
+
+        QJsonObject body;
+        body.insert(QStringLiteral("id"), QStringLiteral("u-") + new_name.left(16));
+        body.insert(QStringLiteral("name"), new_name);
+        body.insert(QStringLiteral("desc"), desc);
+        body.insert(QStringLiteral("sex"), safe_sex);
+
+        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoReq), body))
+            return false;
+
+        m_profile_in_flight = true;
+        m_profile_name_in_flight = new_name;
+        m_profile_desc_in_flight = desc;
+        m_profile_sex_in_flight = safe_sex;
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoRsp),
+                    [this]()
+                        {
+                            const QString timeout_name = m_profile_name_in_flight;
+                            const QString timeout_desc = m_profile_desc_in_flight;
+                            const int timeout_sex = m_profile_sex_in_flight;
+                            m_profile_in_flight = false;
+                            m_profile_name_in_flight.clear();
+                            m_profile_desc_in_flight.clear();
+                            emit userInfoChangeResult(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                timeout_name, timeout_desc, timeout_sex);
                         });
         return true;
     }
@@ -704,6 +826,12 @@ void ChatSocket::reset()
         m_auth_state_in_flight = 0;
         // 删除好友同理：不清的话重连后会一直卡在"上一个还没回包"，再也删不了人
         m_del_friend_in_flight.clear();
+        // 设置备注 / 编辑资料：同一个道理，重连后必须放行
+        m_remark_uid_in_flight.clear();
+        m_remark_value_in_flight.clear();
+        m_profile_in_flight = false;
+        m_profile_name_in_flight.clear();
+        m_profile_desc_in_flight.clear();
 
         /*
          * 消息队列同理：连接都没了，排队中的消息不可能再发出去。
@@ -878,6 +1006,12 @@ void ChatSocket::reset()
             break;
         case protocol::MessageId::DelFriendRsp:
             handleDelFriendResponse(body);
+            break;
+        case protocol::MessageId::SetFriendRemarkRsp:
+            handleSetFriendRemarkResponse(body);
+            break;
+        case protocol::MessageId::ChangeUserInfoRsp:
+            handleChangeUserInfoResponse(body);
             break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
@@ -1109,6 +1243,87 @@ void ChatSocket::reset()
 
         qInfo() << "[chat] 已删除好友, uid =" << uid;
         emit friendDeleteResult(true, error, uid);
+    }
+
+    void ChatSocket::handleSetFriendRemarkResponse(const QByteArray& body)
+    {
+        /*
+         * 1030：{"error":0, "id":"r-10002"}
+         *
+         * 只有 error 与回显的 id —— 没有好友 uid、也没有新备注。所以成功时要用的
+         * "改的是谁、改成了什么"只能从请求侧记下的那份取（串行发送，一定是同一发）。
+         */
+        const QString uid = m_remark_uid_in_flight;
+        const QString remark = m_remark_value_in_flight;
+        m_remark_uid_in_flight.clear();
+        m_remark_value_in_flight.clear();
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 设置备注回包解析失败:" << parse_error.errorString();
+            emit friendRemarkResult(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                    uid, remark);
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        /*
+         * 缺 `error` 一律按失败处理（服务端 Redis 异常时确实可能只回 id）。
+         * 这里用 JsonError 当缺省值 —— 它至少会让界面说"失败"，而不是静默当成功。
+         */
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 设置好友备注失败, uid =" << uid << "error =" << error;
+            emit friendRemarkResult(false, error, uid, remark);
+            return;
+        }
+
+        qInfo() << "[chat] 已设置好友备注, uid =" << uid << "长度 =" << remark.size();
+        emit friendRemarkResult(true, error, uid, remark);
+    }
+
+    void ChatSocket::handleChangeUserInfoResponse(const QByteArray& body)
+    {
+        /*
+         * 1032：{"error":0, "id":"u-xxx"}
+         *
+         * 与 1030 同构：只有 error + 回显 id，提交了什么值得从请求侧取回。
+         */
+        const QString name = m_profile_name_in_flight;
+        const QString desc = m_profile_desc_in_flight;
+        const int sex = m_profile_sex_in_flight;
+        m_profile_in_flight = false;
+        m_profile_name_in_flight.clear();
+        m_profile_desc_in_flight.clear();
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 编辑资料回包解析失败:" << parse_error.errorString();
+            emit userInfoChangeResult(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                      name, desc, sex);
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(protocol::ErrorCode::JsonError));
+
+        if (error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 编辑资料失败, error =" << error;
+            emit userInfoChangeResult(false, error, name, desc, sex);
+            return;
+        }
+
+        qInfo() << "[chat] 资料已更新, 新昵称 =" << name;
+        emit userInfoChangeResult(true, error, name, desc, sex);
     }
 
     void ChatSocket::handleNotifyAddFriendRequest(const QByteArray& body)

@@ -224,6 +224,16 @@ qt_add_executable(qtClientFriendDeleteTest
 
 target_link_libraries(qtClientFriendDeleteTest PRIVATE qtclient_core)
 
+# ── 好友备注 / 编辑资料自检（自带假 ChatServer，不需要服务端）────────
+# 服务端 2026-10-21 新增 1029/1030（设置备注）与 1031/1032（编辑资料）：
+# 请求体形状、成功后好友列表 / 昵称的即时同步、1022 与 1011 两条失败分支。
+# 真实服务端上改备注会污染测试账号，改昵称还会影响其它自检的断言。
+qt_add_executable(qtClientProfileEditTest
+        tests/profileedit.cpp
+)
+
+target_link_libraries(qtClientProfileEditTest PRIVATE qtclient_core)
+
 # ── 账号切换自检（需要真实服务端 + 两个账号）──────────────────────────
 # 同一进程「登录 A → 退出 → 登录 B」，验证不会残留 A 的会话
 # （否则 B 的列表里会出现一条 peer_uid == B 的"自己和自己聊天"）。

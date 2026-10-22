@@ -170,6 +170,18 @@ public:
      */
     Q_INVOKABLE void removeFriend(const QString& uid);
 
+    /**
+     * 设置好友备注（1029 / 1030）。
+     *
+     * 备注是**单向**的：只改「我给对方起的名字」，对方无感知。传空串即清空备注。
+     * 服务端成功后**不推送、也不回带新备注**，所以成功后本地就地更新 friendList
+     * （nick + displayName）→ friendListChanged → 会话列表跟着改名，不用等下一次 1020。
+     *
+     * @param uid    好友 uid（必须是好友；非好友服务端回 1022）
+     * @param remark 新备注；空串 = 清空
+     */
+    Q_INVOKABLE void setFriendRemark(const QString& uid, const QString& remark);
+
     /// 清空当前搜索结果（比如用户改了关键字）
     Q_INVOKABLE void clearSearchResult();
 
@@ -192,6 +204,14 @@ signals:
      * 5（本地等回包超时）等。
      */
     void friendDeleteFinished(bool ok, int error, const QString& uid);
+
+    /**
+     * 设置好友备注结束（1029 / 1030）。
+     *
+     * ok=false 时 error：1022（不是好友 / 给自己设置）、1020（uid 非法）、
+     * 1013（数据库不可用）、5（本地等回包超时）。
+     */
+    void friendRemarkSetFinished(bool ok, int error, const QString& uid);
 
     /// 搜索结束；found=false 时 error 是服务端错误码（未找到通常是 1014）
     void searchFinished(bool found, int error);
@@ -232,6 +252,7 @@ private:
     void onFriendRequestList(const QList<mychat::protocol::FriendRequest>& requests, int error);
     void onFriendList(const QList<mychat::protocol::FriendInfo>& friends, int error);
     void onFriendDeleteResult(bool ok, int error, const QString& uid);
+    void onFriendRemarkResult(bool ok, int error, const QString& uid, const QString& remark);
     void onAuthFriendResult(bool ok, int error, std::uint64_t requestId, int state);
     void onFriendRequestHandled(std::uint64_t requestId, int state);
 

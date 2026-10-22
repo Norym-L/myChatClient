@@ -110,6 +110,12 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 ├── qml/                       QML 页面
 │   ├── main.qml                窗口壳 + 路由容器
 │   ├── pages/                  LoginPage / RegisterPage / ResetPasswordPage / ChatPage
+│   │   └── chat/               ChatPage 拆出来的三个分区 + 消息列表
+│   │       ├── ConversationPane.qml  会话列表（244px 左栏）
+│   │       ├── ChatPane.qml          右栏：会话头 / 输入区 / 选择模式 / 消息操作
+│   │       ├── MessageListView.qml   气泡 / 时间标签 / 滚动条 / 翻页（Flickable + Column）
+│   │       ├── ContactsPane.qml      联系人：好友列表 + 搜索用户
+│   │       └── ApplyPane.qml         好友申请列表
 │   └── components/             自建组件（ZmdUI 缺失、按同一设计语言补的）
 │       ├── ZAvatar.qml            首字母头像 + 真实头像 + 状态点
 │       ├── ConversationRow.qml    会话列表的一行（头像 / 摘要 / 未读 / 选中态）
@@ -122,7 +128,8 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── autologin.cpp            登录 → qtClientLoginTest
 │   ├── registerflow.cpp         注册 → qtClientRegisterTest
 │   ├── resetflow.cpp            重置密码 → qtClientResetTest
-│   └── contactflow.cpp          好友链路 → qtClientContactTest
+│   ├── contactflow.cpp          好友链路 → qtClientContactTest
+│   └── profileedit.cpp          好友备注 + 编辑资料（1029-1032）→ qtClientProfileEditTest
 ├── tools/README.md            无头自检（抓图）用法
 ├── third_party/ZmdUI/         vendor 的组件库（升级时整目录替换，勿改其中文件）
 │
@@ -527,6 +534,11 @@ ChatPage  ──logoutRequested──▶ LoginPage
 | `RegisterPage`      | 同上                                                                                                                                                         |
 | `ResetPasswordPage` | 同上                                                                                                                                                         |
 | `ChatPage`          | `ZSideBar`、`ZPanel`、`ZTextField`、`ZButton`、`ZSectionTitle`、`ZTag`、`ZIconButton`、`ZGridBackground` + 自建 `ZAvatar` / `ConversationRow` / `ChatBubble` |
+| `chat/ConversationPane` | `ZTextField`、`ZIconButton` + 自建 `ConversationRow` |
+| `chat/ChatPane`     | `ZButton`、`ZIconButton`、`ZTag`、`ZTextField`、`ZChatInput`、`ZDialog`、`ChatScrollBar` + 自建 `MessageListView` / `ChatBubble` |
+| `chat/MessageListView` | `ChatBubble` + 自建 `ChatScrollBar` |
+| `chat/ContactsPane` | `ZSectionTitle`、`ZTextField`、`ZButton`、`ZTag` + 自建 `ZAvatar` / `ConversationRow` |
+| `chat/ApplyPane`    | `ZSectionTitle`、`ZButton`、`ZTag` + 自建 `ZAvatar` |
 
 用到的 Theme 令牌：`bg` `surface` `ink` `inkSoft` `muted` `accent` `danger` `lineSoft`
 `gridLine` `gridLineMajor` `fontBody` `fontStrong` `fontMonoMd` `fontMonoSm` `spacingSm`

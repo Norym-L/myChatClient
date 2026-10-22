@@ -62,6 +62,8 @@ ContactController::ContactController(QObject* parent)
             this, &ContactController::onFriendList);
     connect(&socket, &mychat::ChatSocket::friendDeleteResult,
             this, &ContactController::onFriendDeleteResult);
+    connect(&socket, &mychat::ChatSocket::friendRemarkResult,
+            this, &ContactController::onFriendRemarkResult);
 
     // 申请列表一变就重算红点：新申请进来会亮，接受/拒绝后又自己灭掉
     connect(this, &ContactController::applyListChanged,
@@ -387,6 +389,56 @@ void ContactController::removeFriend(const QString& uid)
     {
         // setBusy(false) 放最后：busyChanged 会让订阅方立刻进入下一步
         setTip(QStringLiteral("删除好友请求发送失败"), true);
+        setBusy(false);
+    }
+}
+
+void ContactController::setFriendRemark(const QString& uid, const QString& remark)
+{
+    const QString target = uid.trimmed();
+    // 备注去掉首尾空白：服务端原样落库，用户多半也不希望名字前后带空格
+    const QString value = remark.trimmed();
+
+    if (target.isEmpty())
+    {
+        emit validationFailed(QStringLiteral("uid"));
+        return;
+    }
+
+    if (m_busy)
+    {
+        setTip(QStringLiteral("正在处理上一个请求，请稍后再试"), true);
+        return;
+    }
+
+    if (selfUid() == 0 || !mychat::ChatSocket::instance().isLoggedIn())
+    {
+        setTip(QStringLiteral("未连接到聊天服务器，请先登录"), true);
+        return;
+    }
+
+    // 非好友 → 服务端回 1022，白跑一趟；界面上也只在好友态给这个入口
+    if (!isFriend(target))
+    {
+        setTip(QStringLiteral("你们还不是好友"), true);
+        return;
+    }
+
+    // 长度在本地先卡：超长时 socket 会拒发，界面上会显示成"请求发送失败"，指错方向
+    if (value.size() > mychat::protocol::MAX_FRIEND_REMARK_LEN)
+    {
+        setTip(QStringLiteral("备注最多 %1 个字符")
+                   .arg(mychat::protocol::MAX_FRIEND_REMARK_LEN), true);
+        return;
+    }
+
+    setBusy(true);
+    setTip(value.isEmpty() ? QStringLiteral("正在清空备注…") : QStringLiteral("正在保存备注…"));
+
+    if (!mychat::ChatSocket::instance().setFriendRemark(target, value))
+    {
+        // 与 removeFriend 同一条规矩：setBusy(false) 放最后
+        setTip(QStringLiteral("备注保存请求发送失败"), true);
         setBusy(false);
     }
 }
@@ -747,6 +799,61 @@ void ContactController::onFriendDeleteResult(const bool ok, const int error, con
     MCLOG_INFO() << "[contact] 已删除好友, uid =" << uid << "剩余好友" << list.size() << "位";
 
     emit friendDeleteFinished(true, kSuccess, uid);
+
+    setBusy(false);
+}
+
+void ContactController::onFriendRemarkResult(const bool ok, const int error,
+                                             const QString& uid, const QString& remark)
+{
+    if (!ok)
+    {
+        setTip(mychat::protocol::errorToTip(error), true);
+        emit friendRemarkSetFinished(false, error, uid);
+        // 与删除好友同一条规矩：busyChanged 会让订阅方立刻进入下一步，放最后
+        setBusy(false);
+        return;
+    }
+
+    /*
+     * 就地改，不等下一次 1020。
+     *
+     * 服务端文档说"成功后客户端需重新拉取好友列表才能看到新备注"——那是服务端
+     * 不推送的事实，不是客户端必须照做的理由：这次请求的 uid 与 remark 都在手上，
+     * 本地改完再 emit，会话列表（main.cpp 里 friendListChanged → syncFriends）
+     * 立刻跟着改名，用户看不到任何延迟。
+     */
+    QVariantList list;
+    list.reserve(m_friend_list.size());
+    bool found = false;
+
+    for (const QVariant& entry: m_friend_list)
+    {
+        QVariantMap item = entry.toMap();
+        if (item.value(QStringLiteral("uid")).toString() == uid)
+        {
+            item.insert(QStringLiteral("nick"), remark);
+            // displayName 的算法必须与 onFriendList 里一致：备注优先，其次昵称
+            const QString name = item.value(QStringLiteral("name")).toString();
+            item.insert(QStringLiteral("displayName"), remark.isEmpty() ? name : remark);
+            found = true;
+        }
+        list.append(item);
+    }
+
+    if (!found)
+        qWarning() << "[contact] 备注保存成功，但好友列表里找不到这一条:" << uid;
+
+    m_friend_list = list;
+    emit friendListChanged();
+
+    setTip(remark.isEmpty()
+               ? QStringLiteral("已清除备注")
+               : QStringLiteral("备注已改为「%1」").arg(remark));
+
+    MCLOG_INFO() << "[contact] 好友备注已更新, uid =" << uid << "备注长度 =" << remark.size();
+
+    emit friendRemarkSetFinished(true, kSuccess, uid);
 
     setBusy(false);
 }

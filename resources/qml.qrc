@@ -19,6 +19,11 @@
         <file alias="pages/LoginPage.qml">../qml/pages/LoginPage.qml</file>
         <file alias="pages/RegisterPage.qml">../qml/pages/RegisterPage.qml</file>
         <file alias="pages/ResetPasswordPage.qml">../qml/pages/ResetPasswordPage.qml</file>
+        <file alias="pages/chat/ApplyPane.qml">../qml/pages/chat/ApplyPane.qml</file>
+        <file alias="pages/chat/ConversationPane.qml">../qml/pages/chat/ConversationPane.qml</file>
+        <file alias="pages/chat/ContactsPane.qml">../qml/pages/chat/ContactsPane.qml</file>
+        <file alias="pages/chat/ChatPane.qml">../qml/pages/chat/ChatPane.qml</file>
+        <file alias="pages/chat/MessageListView.qml">../qml/pages/chat/MessageListView.qml</file>
 
         <file alias="dialog/UserInfoDialog.qml">../qml/dialog/UserInfoDialog.qml</file>
 

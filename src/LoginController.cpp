@@ -34,6 +34,8 @@ LoginController::LoginController(QObject* parent)
             this, &LoginController::onChatLoginFailed);
     connect(&socket, &mychat::ChatSocket::linkError,
             this, &LoginController::onLinkError);
+    connect(&socket, &mychat::ChatSocket::userInfoChangeResult,
+            this, &LoginController::onUserInfoChangeResult);
 }
 
 QString LoginController::CheckAccount(const QString& text)
@@ -106,6 +108,91 @@ void LoginController::login(const QString& account, const QString& password)
     mychat::HttpClient::instance().post(
         mychat::protocol::reqPath(mychat::protocol::ReqId::LoginUser), body,
         [this](const bool ok, const QJsonObject& resp) { onHttpLoginDone(ok, resp); });
+}
+
+void LoginController::changeUserInfo(const QString& name, const QString& desc, const int sex)
+{
+    if (m_busy)
+        return;
+
+    auto& socket = mychat::ChatSocket::instance();
+    if (!socket.isLoggedIn())
+    {
+        setTip(QStringLiteral("未连接到聊天服务器，请重新登录后再试"), true);
+        emit userInfoChangeFinished(false, static_cast<int>(ErrorCode::NetworkError));
+        return;
+    }
+
+    /*
+     * 昵称沿用注册时的同一套规则（2~16 位、不含空白与 @）。
+     * 服务端对 1031 完全不做校验 —— 空串会被原样写进库，之后好友列表里
+     * 这个人就没有名字了，所以这一关必须客户端自己守。
+     */
+    const QString new_name = name.trimmed();
+    const QString name_error = AccountValidator::checkNickname(new_name);
+    if (!name_error.isEmpty())
+    {
+        setTip(name_error, true);
+        emit validationFailed(QStringLiteral("name"));
+        return;
+    }
+
+    // 签名长度没有服务端约束，但太长会把资料卡撑变形；与备注同量级即可
+    const QString new_desc = desc.trimmed();
+    if (new_desc.size() > mychat::protocol::MAX_FRIEND_REMARK_LEN * 2)
+    {
+        setTip(QStringLiteral("个性签名最多 %1 个字符")
+                   .arg(mychat::protocol::MAX_FRIEND_REMARK_LEN * 2), true);
+        emit validationFailed(QStringLiteral("desc"));
+        return;
+    }
+
+    setBusy(true);
+    setTip(QStringLiteral("正在保存资料…"));
+
+    if (!socket.changeUserInfo(new_name, new_desc, sex))
+    {
+        // 与其它控制器同一条规矩：setBusy(false) 放最后
+        setTip(QStringLiteral("资料保存请求发送失败"), true);
+        setBusy(false);
+    }
+}
+
+void LoginController::onUserInfoChangeResult(const bool ok, const int error, const QString& name,
+                                              const QString& desc, const int sex)
+{
+    if (!ok)
+    {
+        setTip(mychat::protocol::errorToTip(error), true);
+        emit userInfoChangeFinished(false, error);
+        setBusy(false);
+        return;
+    }
+
+    auto& session = mychat::SessionManager::instance();
+
+    /*
+     * 昵称同步进 SessionManager 并落盘：账号卡片上显示的就是它，下次自动登录
+     * 也从这里读。token 原样带过去 —— update() 只改 uid / name / token 三项。
+     */
+    session.update(session.uid(), name, session.token());
+    if (!session.save())
+        qWarning() << "[login] 资料已改，但昵称没能写进本地凭据文件";
+
+    m_self_desc = desc;
+    m_self_sex = (sex == 0 || sex == 1) ? sex : 2;
+    emit selfProfileChanged();
+
+    m_user_label = session.label();
+    emit userLabelChanged();
+    emit accountsChanged();
+
+    setTip(QStringLiteral("资料已保存"));
+    setBusy(false);
+
+    MCLOG_INFO() << "[login] 资料已更新, 新昵称 =" << name;
+
+    emit userInfoChangeFinished(true, kSuccess);
 }
 
 void LoginController::logout()
@@ -405,6 +492,14 @@ void LoginController::onChatLoginSucceeded(const std::uint64_t uid, const QStrin
     session.setSkipAutoLogin(false);
     // 卡片上的"上次登录"时间 / 排序 / 是否免密都变了，通知登录页刷新
     emit accountsChanged();
+
+    // 换账号 / 重新登录：上一轮编辑过的签名和性别不能带过来（服务端也不回发）
+    if (!m_self_desc.isEmpty() || m_self_sex != 2)
+    {
+        m_self_desc.clear();
+        m_self_sex = 2;
+        emit selfProfileChanged();
+    }
 
     m_user_label = session.label();
     emit userLabelChanged();

@@ -13,8 +13,11 @@ import "../components"
         验证信息和备注就在弹窗里填，点「加好友」把
         friendRequestRequested(uid, verifyInfo, remark) 抛给页面，
         由页面转给 ContactController。
+        **已经是好友时**多出一行可编辑的「备注」（1029 / 1030：
+        friendRemarkRequested(uid, remark)，空串＝清空）和「删除好友」。
     \li \b 我的资料（isSelf = true）：\b 点击头像进入编辑态（昵称 / 签名 / 性别），
-        底部按钮变成「保存」。头像上传接口已预留 —— avatarUploadRequested()。
+        底部按钮变成「保存」→ profileSaveRequested（1031 / 1032）。
+        头像上传服务端还没有 —— avatarUploadRequested() 只做提示。
     \li \b 已有申请的详情（requestInfo 非空）：从「好友申请」列表进来时用。
         这时弹窗**只展示那条申请**（方向 / 状态 / 验证信息），
         并且**不再提供「加好友」** —— 申请都已经发出去（或收到了）还让人再点一次，
@@ -24,7 +27,7 @@ import "../components"
 
     本文件保持「展示组件」定位：数据靠 property 流入、动作靠 signal 流出，
     busy / hint 两个状态由页面写入，**不直接读写任何控制器**。
-    等技术那边补上「修改资料 / 上传头像」接口，页面接住对应信号即可，这里不用再动。
+    保存成功后由页面调 applyProfile() / applyRemark() 把结果写回来。
 
     \note 底栏为什么不用 ZDialog 自带的：它固定渲染「取消 + 确认」两个按钮，
           而且确认键点完必定 accept() 关窗 —— 但这里「编辑资料」点完不能关窗，
@@ -147,6 +150,16 @@ ZDialog {
     */
     property string remark: ""
 
+    /*!
+        正在改好友备注（**已是好友**时才有的形态）。
+
+        与上面的 `remark` 不是一回事：那个是「加好友申请」随申请发出去的备注，
+        这个是「已经是好友了，改我给对方起的名字」（1029 / 1030）。
+    */
+    property bool remarkEditing: false
+    /// 备注输入框的草稿（点「保存」时随信号抛给页面）
+    property string remarkDraft: ""
+
     // ══════════════════════════════════════════════════════════════
     //  动作出口
     // ══════════════════════════════════════════════════════════════
@@ -161,8 +174,11 @@ ZDialog {
     */
     signal friendAuthRequested(string requestId, int state)
 
-    /// 请求保存本人资料。服务端暂无该接口，页面先给如实提示
+    /// 请求保存本人资料。服务端 1031/1032 已实现，页面转给 LoginController
     signal profileSaveRequested(string name, int sex, string desc)
+
+    /// 请求设置好友备注（页面 → ContactController.setFriendRemark）
+    signal friendRemarkRequested(string uid, string remark)
 
     /*!
         预留：请求上传 / 更换头像。
@@ -203,6 +219,8 @@ ZDialog {
         dialog.hintIsError = false
         dialog.verifyInfo = ""
         dialog.remark = ""
+        dialog.remarkEditing = false
+        dialog.remarkDraft = ""
         dialog.requestInfo = null
         // TextField 的 text 是单向写入的（见下面 onTextChanged），得手动清
         verifyEdit.text = ""
@@ -371,6 +389,84 @@ ZDialog {
                             lineHeight: 1.3
                         }
                     }
+                }
+            }
+        }
+
+        // ── ②b 好友备注（可编辑，仅「已经是好友」时）──────────────
+        /*
+         * 为什么单独一块而不是塞进 infoRows()：字段表是 Repeater + 纯文本，
+         * 加按钮会把「展示数据」和「交互控件」混在同一个 model 里。
+         * 这里保持和字段表同样的行高 / 标签列宽，视觉上仍是同一张表。
+         */
+        Column {
+            id: remarkBlock
+            width: parent.width
+            visible: !dialog.isSelf && !dialog.hasRequest && dialog.isFriend && !dialog.editing
+            spacing: Theme.spacingSm
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1
+                color: Theme.lineSoft
+            }
+
+            Row {
+                width: parent.width
+                spacing: Theme.spacingMd
+
+                Text {
+                    width: dialog.labelWidth
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "备注"
+                    font: Theme.fontLabel
+                    color: Theme.muted
+                }
+
+                Text {
+                    width: parent.width - dialog.labelWidth - remarkEditBtn.width
+                             - parent.spacing * 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: dialog.nickName.length > 0 ? dialog.nickName : "未设置"
+                    font: Theme.fontBody
+                    color: dialog.nickName.length > 0 ? Theme.inkSoft : Theme.muted
+                    elide: Text.ElideRight
+                }
+
+                ZButton {
+                    id: remarkEditBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: dialog.remarkEditing ? "取消" : "修改"
+                    variant: Theme.Variant.Secondary
+                    enabled: !dialog.busy
+                    onClicked: dialog.remarkEditing ? dialog.cancelRemarkEdit()
+                                                    : dialog.beginEditRemark()
+                }
+            }
+
+            Row {
+                width: parent.width
+                spacing: Theme.spacingSm
+                visible: dialog.remarkEditing
+
+                ZTextField {
+                    id: remarkField
+                    width: parent.width - remarkSaveBtn.width - parent.spacing
+                    label: "新备注"
+                    unit: "REMARK"
+                    placeholderText: "留空表示清除备注（最多 64 字）"
+                    enabled: !dialog.busy
+                    onAccepted: dialog.submitRemark()
+                }
+
+                ZButton {
+                    id: remarkSaveBtn
+                    anchors.bottom: remarkField.bottom
+                    text: dialog.busy ? "保存中…" : "保存"
+                    variant: Theme.Variant.Primary
+                    enabled: !dialog.busy
+                    onClicked: dialog.submitRemark()
                 }
             }
         }
@@ -653,13 +749,15 @@ ZDialog {
         }
 
         /*
-         * 备注只在**有值**时才占一行。
+         * 备注只在**申请详情**里占一行。
          *
          * 服务端只给"我发出的申请"填这个字段（申请人自己给对面起的名字），
          * 收到的申请那侧恒为空 —— 空着还占一行"备注 —"，会被误读成
          * "这里本该有东西但丢了"，而且很容易和上面的「验证信息」看成同一个格子。
+         *
+         * 已经是好友的时候不走这里：那一行要带「修改」按钮（见下面的 remarkBlock）。
          */
-        if (!dialog.isSelf && dialog.nickName.length > 0)
+        if (!dialog.isSelf && dialog.hasRequest && dialog.nickName.length > 0)
             rows.push({label: "备注", value: dialog.nickName})
         rows.push({label: "性别", value: dialog.sexText()})
         rows.push({label: "签名", value: dialog.desc})
@@ -788,10 +886,76 @@ ZDialog {
             dialog.showHint("", false)
     }
 
+    /*!
+        开始改备注：把当前备注灌进输入框（单向赋值，不建立绑定）。
+
+        只有「已经是好友的别人」才有这个动作 —— 非好友服务端会回 1022，
+        申请详情里改的是申请记录上的备注，不是 `user_friend.remark`。
+    */
+    function beginEditRemark() {
+        if (!dialog.isFriend || dialog.isSelf || dialog.hasRequest || dialog.busy)
+            return
+
+        dialog.remarkDraft = dialog.nickName
+        remarkField.text = dialog.nickName
+        dialog.remarkEditing = true
+        // 每个账号的备注都只对自己可见，第一次点的人多半会担心对方看到
+        dialog.showHint("备注只对自己可见，对方不会收到任何提示", false)
+    }
+
+    function cancelRemarkEdit() {
+        dialog.remarkEditing = false
+        dialog.remarkDraft = ""
+        dialog.showHint("", false)
+    }
+
+    /*!
+        提交备注（1029）。只抛信号，网络与结果提示都在页面 / 控制器那侧。
+        空串是有意义的输入 —— 表示清空备注。
+    */
+    function submitRemark() {
+        if (dialog.busy || !dialog.isFriend || !dialog.remarkEditing)
+            return
+
+        const next = String(remarkField.text).trim()
+        if (next.length > 64) {
+            dialog.showHint("备注最多 64 个字符", true)
+            return
+        }
+
+        dialog.remarkDraft = next
+        dialog.friendRemarkRequested(dialog.userId, next)
+    }
+
+    /// 页面在 1030 成功后调用：定稿备注并退出编辑态
+    function applyRemark(remark) {
+        dialog.nickName = remark
+        dialog.remarkEditing = false
+        dialog.remarkDraft = ""
+        dialog.showHint(remark.length > 0 ? "备注已更新" : "已清除备注", false)
+    }
+
+    /// 页面在 1032 成功后调用：把新值写回展示数据并退出编辑态
+    function applyProfile(name, sex, desc) {
+        dialog.userName = name
+        dialog.sex = sex
+        dialog.desc = desc
+        dialog.editing = false
+        dialog.showHint("资料已保存", false)
+    }
+
     function submitProfile() {
         if (dialog.busy || !dialog.isSelf)
             return
-        dialog.profileSaveRequested(nameEdit.text.trim(), dialog.editSex, descEdit.text.trim())
+
+        // 服务端不校验昵称，空串会被原样写进库（好友列表里这个人就没名字了）
+        const name = String(nameEdit.text).trim()
+        if (name.length === 0) {
+            dialog.showHint("昵称不能为空", true)
+            return
+        }
+
+        dialog.profileSaveRequested(name, dialog.editSex, String(descEdit.text).trim())
     }
 
     /// 预留接口：请求上传头像。只抛信号，提示由页面给（页面才知道接口有没有接上）

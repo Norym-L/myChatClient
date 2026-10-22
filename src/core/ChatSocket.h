@@ -110,6 +110,35 @@ namespace mychat
         bool delFriend(const QString& uid);
 
         /**
+         * 设置好友备注（message_id = SetFriendRemarkReq 1029）。
+         *
+         * 请求体 `{ "id": "<本地编号>", "friend_uid": "<好友 uid>", "remark": "<备注>" }`。
+         * 服务端把 `id` **原样回显**（不解析），备注是**单向**的：只改「我给对方起的名字」，
+         * 对方无感知。`remark` 传空串即清空备注。
+         *
+         * ⚠ 服务端成功后**不会主动推送**，好友列表要自己刷（1020）才能看到新备注；
+         *   本方法把请求侧的 uid / remark 一路带回信号，控制器可以就地更新列表。
+         *
+         * @return true  = 已发出（结果看 \l friendRemarkResult）
+         *         false = 没发（未连接 / 参数非法 / 上一个备注请求还没回包）
+         */
+        bool setFriendRemark(const QString& friendUid, const QString& remark);
+
+        /**
+         * 编辑本人资料（message_id = ChangeUserInfoReq 1031）。
+         *
+         * 请求体 `{ "id": "...", "name": "...", "desc": "...", "sex": 0|1|2 }`。
+         * 协议里**所有字段都可选**（缺失 = 不修改）；这里按"编辑表单一次提交"的语义
+         * 三项都发 —— 想只改签名就把原昵称一起带上，否则会被当成空串写进库。
+         *
+         * `icon`（头像）故意不发：服务端没有头像上传通道，发了只会把已有地址覆盖成空。
+         *
+         * @return true  = 已发出（结果看 \l userInfoChangeResult）
+         *         false = 没发（未连接 / name 为空 / 上一个资料请求还没回包）
+         */
+        bool changeUserInfo(const QString& name, const QString& desc, int sex);
+
+        /**
          * 心跳（message_id = HeartBeatReq）。
          *
          * 登录成功后由内部定时器按 HEARTBEAT_INTERVAL_MS 自动发送，外部一般不用调。
@@ -216,6 +245,28 @@ namespace mychat
          *              本地超时 = \l RequestTimeout
          */
         void friendDeleteResult(bool ok, int error, const QString& uid);
+
+        /**
+         * 设置好友备注的结果（1029 → 1030）。
+         *
+         * @param ok     error == 0
+         * @param error  1022 = 对方不是好友 / 给自己设置备注；1020 = uid 非法；
+         *               1013 = 数据库不可用；本地超时 = \l RequestTimeout
+         * @param uid    请求里那个好友 uid（回包不回显它，只有 `id`）
+         * @param remark 请求里那条新备注（成功时控制器用它就地更新好友列表）
+         */
+        void friendRemarkResult(bool ok, int error, const QString& uid, const QString& remark);
+
+        /**
+         * 编辑本人资料的结果（1031 → 1032）。
+         *
+         * @param ok    error == 0：Redis 与 MySQL 都已更新
+         * @param error 1011 = 会话未登录 / MySQL 里没有这个 uid；1013 = 读不到用户缓存
+         *              或数据库失败；本地超时 = \l RequestTimeout
+         * @param name / desc / sex 请求里提交的值（回包只回显 id）
+         */
+        void userInfoChangeResult(bool ok, int error, const QString& name,
+                                  const QString& desc, int sex);
 
         /**
          * 服务端**主动推送**「有人申请加你为好友」（message_id = 1009 NotifyAddFriendReq）。
@@ -351,6 +402,10 @@ namespace mychat
         void handleFriendList(const QByteArray& body);
         /// 删除好友回包（1028，回显 uid）
         void handleDelFriendResponse(const QByteArray& body);
+        /// 设置好友备注回包（1030，只回 error + id）
+        void handleSetFriendRemarkResponse(const QByteArray& body);
+        /// 编辑本人资料回包（1032，只回 error + id）
+        void handleChangeUserInfoResponse(const QByteArray& body);
         /// 服务端主动推送：只有 request id，没有回包可发
         void handleNotifyAddFriendRequest(const QByteArray& body);
         /// 处理好友申请的回包（1011，只有 error）
@@ -433,6 +488,24 @@ namespace mychat
          * 同一时刻只允许一个删除在飞（界面一次只能点一个按钮）。
          */
         QString m_del_friend_in_flight;
+
+        /*
+         * 「设置好友备注」的回包（1030）只带 error 与回显的 id —— 协议里的 id 是
+         * 任意类型、服务端不做解析，拿它当请求序号要自己维护一套生成/比对逻辑。
+         * 界面同一时刻只能改一个备注，串行就够：在飞时直接拒第二条，回包里
+         * 用请求侧记下的这份数据补全信号。
+         */
+        QString m_remark_uid_in_flight;
+        QString m_remark_value_in_flight;
+
+        /*
+         * 「编辑本人资料」（1032）同理：回包只有 error + id。
+         * 一次只允许一个在飞 —— 编辑表单只有一个「保存」按钮。
+         */
+        bool m_profile_in_flight = false;
+        QString m_profile_name_in_flight;
+        QString m_profile_desc_in_flight;
+        int m_profile_sex_in_flight = 2;
 
         /// 一条待发的聊天消息（1013）
         struct OutgoingText
