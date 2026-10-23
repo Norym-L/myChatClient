@@ -62,6 +62,8 @@ Item {
 
     /// 请求打开当前会话对方的资料卡（弹窗由 ChatPage 持有）
     signal peerInfoRequested(string uid)
+    /// 请求打开群成员面板（只对群会话有意义，弹窗由 ChatPage 持有）
+    signal groupMembersRequested(string gid)
 
     /*!
         视口是不是停在最新一条上。
@@ -170,18 +172,26 @@ Item {
                         width: parent.width
                         elide: Text.ElideRight
                         /*
-                         * 未知就明说"状态未知" —— 只有真查到在线才写"在线"。
-                         * （弹窗和列表里都是这条规矩：未知 ≠ 离线）
+                         * 群聊的头两行是"群名 + 群号/人数"，单聊是"昵称 + UID/在线"。
                          *
-                         * ⚠ 第二个参数不是为了用，是为了**建立依赖**：
+                         * 群成员数来自 GroupController.memberList —— 只有打开过
+                         * 成员面板才拉得到（服务端没有"群列表 + 人数"这种批量接口）。
+                         * 没拉到时显示"群聊"，不要编一个 0 人。
+                         *
+                         * ⚠ 单聊里的第二个参数不是为了用，是为了**建立依赖**：
                          *   PresenceController.hasState(uid) 这种函数调用在 QML 眼里
                          *   是个黑盒，查到了新状态也不会重算绑定 —— 表现就是
                          *   日志里明明回了 offline，界面一直停在"状态未知"。
                          *   把 online 这个属性当参数传进去，依赖才挂得上。
                          */
-                        text: "UID " + ChatController.activePeerUid + "  ·  "
-                            + pane.peerStateText(ChatController.activePeerUid,
-                                PresenceController.online)
+                        text: ChatController.activeIsGroup
+                              ? "群号 " + ChatController.activeGroupId + "  ·  "
+                                + (GroupController.gid === ChatController.activeGroupId
+                                   ? (GroupController.memberCount + " 人")
+                                   : "群聊")
+                              : ("UID " + ChatController.activePeerUid + "  ·  "
+                                 + pane.peerStateText(ChatController.activePeerUid,
+                                     PresenceController.online))
                         font: Theme.fontMonoSm
                         color: Theme.muted
                     }
@@ -204,11 +214,25 @@ Item {
                     visible: ChatController.activePeerIsDemo
                 }
 
+                ZTag {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "GROUP"
+                    tone: Theme.Tone.Muted
+                    uppercase: false
+                    visible: ChatController.activeIsGroup
+                }
+
                 ZIconButton {
                     anchors.verticalCenter: parent.verticalCenter
                     glyph: "◎"
-                    tooltip: "查看资料"
-                    onClicked: pane.peerInfoRequested(String(ChatController.activePeerUid))
+                    // 群没有"个人资料"，这一个按钮对群来说是成员面板
+                    tooltip: ChatController.activeIsGroup ? "查看群成员" : "查看资料"
+                    onClicked: {
+                        if (ChatController.activeIsGroup)
+                            pane.groupMembersRequested(ChatController.activeGroupId)
+                        else
+                            pane.peerInfoRequested(String(ChatController.activePeerUid))
+                    }
                 }
 
                 ZIconButton {
@@ -338,6 +362,10 @@ Item {
             ZChatInput {
                 id: chatInput
                 width: parent.width
+
+                // 群聊 / 单聊在标题条上区分一下（服务端没有"正在输入"之类的状态）
+                headerText: ChatController.activeIsGroup ? "GROUP / COMPOSER"
+                                                         : "MESSAGE / COMPOSER"
 
                 // 输入框里不放提示语：快捷键说明也是噪音，
                 // 空着更干净（placeholderText 默认是"输入消息…"，这里盖掉）
@@ -506,7 +534,8 @@ Item {
             if (pane.selecting && ChatController.activePeerUid !== pane.selectionPeerUid)
                 pane.exitSelection()
 
-            if (ChatController.hasActiveConversation)
+            // 群没有"在线"状态：activePeerUid 是 g<gid>，查了也只会拿到 1020
+            if (ChatController.hasActiveConversation && !ChatController.activeIsGroup)
                 PresenceController.refresh(ChatController.activePeerUid)
             // 换会话一律从最新的看起
             messageList.pinToBottom()

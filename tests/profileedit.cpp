@@ -169,7 +169,7 @@ private:
     QByteArray m_buffer;
 };
 
-/// 校验 1029 请求体：id / friend_uid / remark 三个字段，uid 与 remark 都必须是字符串
+/// 校验 1029 请求体：msgid / friend_uid / remark，uid 与 remark 都必须是字符串
 QString checkRemarkBody(const QByteArray& body, const QString& expect_uid,
                         const QString& expect_remark)
 {
@@ -178,10 +178,16 @@ QString checkRemarkBody(const QByteArray& body, const QString& expect_uid,
         return QStringLiteral("1029 请求体不是合法 JSON 对象: %1").arg(QString::fromUtf8(body));
 
     const QStringList keys = object.keys();
-    if (keys.size() != 3 || !keys.contains(QStringLiteral("id"))
+    if (keys.size() != 3 || !keys.contains(QStringLiteral("msgid"))
         || !keys.contains(QStringLiteral("friend_uid"))
         || !keys.contains(QStringLiteral("remark")))
-        return QStringLiteral("1029 请求体应当只有 id / friend_uid / remark: %1")
+        return QStringLiteral("1029 请求体应当只有 msgid / friend_uid / remark: %1")
+            .arg(QString::fromUtf8(body));
+
+    // 2026-10-22 起统一用 msgid（服务端不再认单独的 id）；它必须非空，否则回包认不回来
+    const QString msgid = object.value(QStringLiteral("msgid")).toString();
+    if (!object.value(QStringLiteral("msgid")).isString() || !msgid.startsWith(QLatin1String("r-")))
+        return QStringLiteral("1029 的 msgid 必须是非空字符串且以 r- 开头: %1")
             .arg(QString::fromUtf8(body));
 
     if (!object.value(QStringLiteral("friend_uid")).isString())
@@ -214,9 +220,9 @@ QString checkChangeInfoBody(const QByteArray& body, const QString& expect_name, 
         return QStringLiteral("1031 不应带 icon（服务端没有头像通道，空值会覆盖原地址）: %1")
             .arg(QString::fromUtf8(body));
 
-    if (!keys.contains(QStringLiteral("id")) || !keys.contains(QStringLiteral("name"))
+    if (!keys.contains(QStringLiteral("msgid")) || !keys.contains(QStringLiteral("name"))
         || !keys.contains(QStringLiteral("desc")) || !keys.contains(QStringLiteral("sex")))
-        return QStringLiteral("1031 缺字段（需要 id/name/desc/sex）: %1")
+        return QStringLiteral("1031 缺字段（需要 msgid/name/desc/sex）: %1")
             .arg(QString::fromUtf8(body));
 
     if (!object.value(QStringLiteral("name")).isString())
@@ -305,6 +311,15 @@ int main(int argc, char* argv[])
     int remark_frames = 0;
     int info_frames = 0;
 
+    /*
+     * 回包必须回显请求里的 msgid —— 客户端从 2026-10-22 起按它精确认领，
+     * 不回显就会退回 FIFO 兜底，这条测试也就测不到真实链路了。
+     */
+    const auto reply_msgid = [](const QByteArray& raw_body)
+    {
+        return parseObject(raw_body).value(QStringLiteral("msgid")).toString();
+    };
+
     server.onFrame = [&](const std::uint16_t id, const QByteArray& body)
         {
             if (id == kLoginReq)
@@ -352,8 +367,8 @@ int main(int argc, char* argv[])
                         fail(err);
 
                     server.reply(kSetRemarkRsp,
-                                 QStringLiteral(R"({"error":0,"id":"r-%1"})")
-                                 .arg(QString::fromLatin1(kFriendA)).toUtf8());
+                                 QStringLiteral(R"({"error":0,"msgid":"%1"})")
+                                 .arg(reply_msgid(body)).toUtf8());
                     return;
                 }
 
@@ -361,8 +376,8 @@ int main(int argc, char* argv[])
                 {
                     // 服务端认为"不是好友"（Redis 缓存与 MySQL 不一致时也会这样）
                     server.reply(kSetRemarkRsp,
-                                 QStringLiteral(R"({"error":1022,"id":"r-%1"})")
-                                 .arg(QString::fromLatin1(kFriendB)).toUtf8());
+                                 QStringLiteral(R"({"error":1022,"msgid":"%1"})")
+                                 .arg(reply_msgid(body)).toUtf8());
                     return;
                 }
 
@@ -374,8 +389,8 @@ int main(int argc, char* argv[])
                     fail(err);
 
                 server.reply(kSetRemarkRsp,
-                             QStringLiteral(R"({"error":0,"id":"r-%1"})")
-                             .arg(QString::fromLatin1(kFriendA)).toUtf8());
+                             QStringLiteral(R"({"error":0,"msgid":"%1"})")
+                             .arg(reply_msgid(body)).toUtf8());
                 return;
             }
 
@@ -391,12 +406,16 @@ int main(int argc, char* argv[])
                     else
                         fail(err);
 
-                    server.reply(kChangeInfoRsp, QByteArrayLiteral(R"({"error":0,"id":"u-1"})"));
+                    server.reply(kChangeInfoRsp,
+                                 QStringLiteral(R"({"error":0,"msgid":"%1"})")
+                                 .arg(reply_msgid(body)).toUtf8());
                     return;
                 }
 
                 // 第二次：存储过程回 -1（uid 不存在）→ 1011
-                server.reply(kChangeInfoRsp, QByteArrayLiteral(R"({"error":1011,"id":"u-2"})"));
+                server.reply(kChangeInfoRsp,
+                             QStringLiteral(R"({"error":1011,"msgid":"%1"})")
+                             .arg(reply_msgid(body)).toUtf8());
             }
         };
 

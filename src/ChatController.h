@@ -16,10 +16,26 @@ class QTimer;
 /**
  * ChatController —— 会话 / 消息控制器（QML 与 core 之间的唯一入口）
  *
- * 服务端现状（`GateServer/docs/api-chat.md` + 2026-10-18 晚的三个提交）：
+ * 服务端现状（`GateServer/docs/api-chat.md` + `api-group.md`，2026-10-23 基线 `df647ad`）：
  *   发送 1013/1014、推送 1022、拉取 1023/1024（**PEL 优先重投**）、确认 1025/1026
  *   （`XACKDEL`）都已实现；**所有 handler 都会校验登录态**（未登录回 1011）。
- *   历史记录与群聊未实现。
+ *   历史记录仍未实现；**群聊已实现**（1033–1042 由 GroupController 管，
+ *   群消息复用 1013/1024，本类负责把它落进 `g<gid>` 会话）。
+ *
+ * ── 群聊在会话层的三条约定 ─────────────────────────────────────────
+ *   1. 群会话键是 **`g<gid>`**：群号和用户 uid 都是数字、来自两张表，可能撞号；
+ *   2. 群名**只存在本机**（服务端没有群资料查询接口），丢了就显示「群 <gid>」；
+ *   3. 服务端会把群消息也写进**发送者自己**的离线流 → 拉到自己的回显要丢弃，
+ *      但仍然要 ACK（否则 PEL 会一直重投）；
+ *   4. 群操作（建群 / 拉人 / 踢人 / 解散）会写一条 **from_uid = "1"** 的系统消息
+ *      （`api-group.md` §9.5，没有独立类型标记，客户端就按这个保留 uid 识别）：
+ *      消息项带 `system = true`，界面渲染成居中灰字提示，不当普通气泡；
+ *      同时 emit groupSystemMessage(gid, body)，让成员列表在拉人 / 踢人后强刷。
+ *
+ *   被踢 / 解散后服务端不再校验成员关系，但本机不会删聊天记录：群会话留着，
+ *   系统提示就在里面；用户再发消息会收到 1022，界面照常提示"不在群里"。
+ *   主动解散时本地先移除会话 —— 服务端随后推来的「该群聊已解散」不能把它复活
+ *   （`m_removed_gids` 挡住）。
  *
  * ── 收消息链路（先拉后确认，at-least-once）─────────────────────────
  *   1022 推送（只有"你有新消息"，不含内容）
@@ -29,6 +45,8 @@ class QTimer;
  *     → 发 1025 确认（一次 ≤10 个 id）→ 服务端 XACKDEL 删除
  *   登录成功后也会主动拉一次：离线期间的消息**不会**补推 1022，
  *   而且 PEL 里上次没确认的也会在这一步被重投回来。
+ *   另外登录后每 **30s** 还会兜底拉一次（断线停）：服务端推送链路静默失效时，
+ *   客户端仍能在一个周期内看到新消息，不会表现成"重登才恢复"。
  *
  *   ⚠ 服务端先读 PEL（已投递未确认），PEL 为空才读新消息。未确认的消息会
  *     反复重投，所以**去重是必须的**（`m_seen_message_ids`）；确认失败也不要紧，
@@ -75,6 +93,17 @@ class ChatController : public QObject
     Q_PROPERTY(QString activePeerName READ activePeerName NOTIFY activeConversationChanged)
     /// 当前会话是不是演示数据（MYCHAT_DEMO=1 造出来的那条）—— 界面据此决定要不要挂 DEMO 标签
     Q_PROPERTY(bool activePeerIsDemo READ activePeerIsDemo NOTIFY activeConversationChanged)
+
+    /**
+     * 当前会话是不是**群聊**。
+     *
+     * 群会话和单聊共用同一套 `conversations` / `messages` / 本地库，区别只在
+     * 会话项的 `kind` 字段。界面靠这个属性切换"输入区占位符 / 头部信息 / 成员面板入口"，
+     * 不用自己去解析 uid 前缀（群会话的 uid 是 `g<gid>`，见实现文件的说明）。
+     */
+    Q_PROPERTY(bool activeIsGroup READ activeIsGroup NOTIFY activeConversationChanged)
+    /// 当前群号（纯数字串）；单聊时为空
+    Q_PROPERTY(QString activeGroupId READ activeGroupId NOTIFY activeConversationChanged)
 
     /**
      * 窗口在不在前台（main.qml 把 Window.active 绑进来）。
@@ -125,6 +154,8 @@ public:
     [[nodiscard]] QString activePeerUid() const { return m_active_uid; }
     [[nodiscard]] QString activePeerName() const { return m_active_name; }
     [[nodiscard]] bool activePeerIsDemo() const { return m_active_is_demo; }
+    [[nodiscard]] bool activeIsGroup() const { return m_active_is_group; }
+    [[nodiscard]] QString activeGroupId() const { return m_active_gid; }
 
     [[nodiscard]] QString tip() const { return m_tip; }
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
@@ -160,6 +191,30 @@ public:
      * @param friends 每项至少含 uid / name，可选 nick / displayName / icon / desc / sex
      */
     Q_INVOKABLE void syncFriends(const QVariantList& friends);
+
+    /**
+     * 登记一个群（建群成功后 / 收到这个群的第一条消息时）。
+     *
+     * 会话键是 **`g<gid>`**（如 `g20001`）—— 群 id 与用户 uid 都是数字，
+     * 来自两张表、可能撞号，不加前缀会把群消息落进同号的用户会话里。
+     *
+     * 群名只能本地存：服务端**没有群资料查询接口**，`api-group.md` §11.8。
+     * 没有名字时界面显示「群 <gid>」，不要让会话行空着。
+     *
+     * @param gid  群号（纯数字串）
+     * @param name 群名（可空）
+     * @param role 我在群里的角色（2 群主 / 1 管理员 / 0 成员）；建群时传 2，
+     *             从消息里发现群时不知道，传 0
+     */
+    Q_INVOKABLE void registerGroup(const QString& gid, const QString& name, int role = 0);
+
+    /**
+     * 解散 / 被移出后删掉本地群会话（含本地库里的会话行与群资料）。
+     *
+     * ⚠ 只删**会话与群资料**，聊天记录保留 —— 和服务端"解散不清理任何客户端记录"
+     *   的行为对齐；用户想彻底清掉可以走「清空聊天记录」。
+     */
+    Q_INVOKABLE void removeGroupConversation(const QString& gid);
 
     /// 关掉当前会话（回到"未选择"空态）
     Q_INVOKABLE void closeConversation();
@@ -236,6 +291,18 @@ public:
      */
     void peerIsNotFriend(const QString& peerUid);
 
+    /**
+     * 收到群操作的系统消息（服务端 `from_uid = "1"`，`api-group.md` §9.5）。
+     *
+     * 服务端**不推送**成员变化，只在群操作后写一条系统消息；界面靠它知道
+     * 「邀请了 N 个好友 / 踢出了 uid / 该群聊已解散」，并顺带强刷成员列表。
+     *
+     * @param gid  群号
+     * @param body 系统消息正文（建群「群聊 <gid> 已创建」、拉人「邀请了 N 个好友」、
+     *             踢人「踢出了 <uid>」、解散「该群聊已解散」）
+     */
+    void groupSystemMessage(const QString& gid, const QString& body);
+
 private:
     /// 1013 的结果（由 ChatSocket 的 textMessageResult 转入；回执按 msg_id 认领）
     void onTextMessageResult(bool ok, int error, const QString& msgId,
@@ -247,7 +314,7 @@ private:
     /**
      * 发一次 1023。
      *
-     * 条数取 `min(待拉取计数, 10)`；计数为 0（登录后主动拉）就拉满 10 条。
+     * 条数取 `min(待拉取计数, 10)`；计数为 0（登录后主动拉 / 30s 兜底拉）就拉满 10 条。
      * 若已有一个拉取在飞，只记下"还想再拉"（\l m_pull_again），等回包后补。
      */
     void requestPull();
@@ -273,6 +340,32 @@ private:
 
     /// 会话不存在就建一条空会话（收到陌生人消息时用；服务端不校验好友关系）
     void ensureConversation(const QString& peerUid);
+
+    // ── 群会话的键约定 ────────────────────────────────────────────────
+    //  群 id 与用户 uid 都是数字，来自两张表、可能撞号（群 20001 vs 用户 20001）。
+    //  所以群会话在**内存与本地库**里统一用 `g<gid>` 作键，界面上显示的仍然是
+    //  `gid` 本身。三个小工具放这里，避免各处手拼前缀拼错。
+    static QString groupKey(const QString& gid) { return QStringLiteral("g") + gid; }
+    static bool isGroupKey(const QString& key) { return key.startsWith(QLatin1Char('g')); }
+    static QString groupIdOfKey(const QString& key)
+    {
+        return isGroupKey(key) ? key.mid(1) : QString();
+    }
+
+    /// 群会话不存在就建一条（群名取本地库 / 没有就叫「群 <gid>」）
+    void ensureGroupConversation(const QString& gid, const QString& name = QString());
+
+    /// 登录成功的 uid（字符串）。群消息要靠它认"这条是不是我自己发的回显"
+    QString m_self_uid;
+
+    /**
+     * 某个 uid 的显示名（好友备注优先，其次昵称，最后 uid）。
+     *
+     * 群聊里每条气泡的发送者不同，QML 需要"这条是谁说的"——
+     * 名字在 C++ 算好塞进消息项（`senderName`），QML 只负责显示。
+     * 群昵称（1042 的 `nick_g`）在 GroupController 手里，QML 会优先用那个。
+     */
+    [[nodiscard]] QString senderNameFor(const QString& uid) const;
 
     /// 把会话置顶并更新摘要（真实链路里收到消息也该走这一步）
     void touchConversation(const QString& peerUid, const QString& last_text, const QString& last_time);
@@ -305,6 +398,14 @@ private:
     /// 已经从本地库加载过历史的会话（空历史也算，避免每次点开都查一遍）
     QSet<QString> m_history_loaded;
 
+    /**
+     * uid -> 显示名（好友备注优先）。
+     *
+     * 只用于**群聊气泡的发送者名字**：单聊每条都是同一个人，界面用会话名就行。
+     * 由 syncFriends 维护；群昵称在 GroupController 那边，QML 优先用群昵称。
+     */
+    QHash<QString, QString> m_friend_names;
+
     /// 每个会话还有没有更早的历史：首次加载没读满一页就说明到头了
     QHash<QString, bool> m_history_has_more;
     bool m_history_loading = false;
@@ -316,6 +417,18 @@ private:
     QString m_active_name;
     /// 当前会话是不是演示数据（openConversation 时按会话表里的 demo 字段算）
     bool m_active_is_demo = false;
+    /// 当前会话是不是群聊 / 群号（openConversation 时按会话表里的 kind / gid 算）
+    bool m_active_is_group = false;
+    QString m_active_gid;
+
+    /**
+     * 本机已主动移除的群（解散 / 被移出后由界面调 removeGroupConversation）。
+     *
+     * 服务端解散群时**先写系统消息、再 DEL**（api-group.md §7），所以客户端可能
+     * 在会话已删掉之后才拉到「该群聊已解散」—— 不加这道闸会把会话重新建出来。
+     * 只记内存：重启后服务端不会再给已解散的群写消息，没必要持久化。
+     */
+    QSet<QString> m_removed_gids;
 
     /**
      * 已经发出去、还没等到回执的消息，**按 msg_id 索引**。
@@ -340,6 +453,16 @@ private:
      *   · 否则等 2s，期间没有新推送就拉。
      */
     QTimer* m_pull_timer = nullptr;
+
+    /**
+     * 兜底拉取定时器：登录后每 **30s** 主动发一次 1023（不依赖 1022）。
+     *
+     * 推送链路静默失效时（1022 丢了、服务端在线状态与会话映射不一致等），
+     * 只靠推送触发拉取会"能发不能收"；这层保底让最坏情况也只晚一个周期。
+     * 断线停、重登启；主动退出登录不发 linkError，下次 tick 见未登录会自停。
+     * 周期可用 `MYCHAT_FALLBACK_PULL_MS` 覆盖（自检用）。
+     */
+    QTimer* m_fallback_pull_timer = nullptr;
     /// 距离上次拉取，又收到了多少条 1022
     int m_pull_hint = 0;
     /// 拉取在飞时又想来一次 → 等回包后补，别丢

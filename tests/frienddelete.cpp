@@ -170,8 +170,19 @@ QString checkDelFriendBody(const QByteArray& body, const QString& expect_uid)
         return QStringLiteral("1027 请求体不是合法 JSON 对象: %1").arg(QString::fromUtf8(body));
 
     const QJsonObject object = document.object();
-    if (object.keys() != QStringList{QStringLiteral("uid")})
-        return QStringLiteral("1027 请求体应当只有 uid 一个字段: %1")
+
+    /*
+     * 2026-10-22 起所有请求都带客户端请求编号 `msgid`（ChatSocket::sendJsonWithId 统一注入），
+     * 所以合法字段是 `uid` + `msgid` 两个 —— 这里一并守住，免得哪天 msgid 被漏掉。
+     */
+    const QStringList keys = object.keys();
+    if (keys.size() != 2 || !keys.contains(QStringLiteral("uid"))
+        || !keys.contains(QStringLiteral("msgid")))
+        return QStringLiteral("1027 请求体应当是 uid + msgid: %1")
+            .arg(QString::fromUtf8(body));
+
+    if (!object.value(QStringLiteral("msgid")).toString().startsWith(QLatin1String("r-")))
+        return QStringLiteral("1027 的 msgid 必须是以 r- 开头的字符串: %1")
             .arg(QString::fromUtf8(body));
 
     if (!object.value(QStringLiteral("uid")).isString())
@@ -424,17 +435,28 @@ int main(int argc, char* argv[])
                 {
                     const QString err = checkDelFriendBody(body, QString::fromLatin1(kFriendA));
                     if (err.isEmpty())
-                        writeLine(stdout, QStringLiteral("[OK] 1027 请求体只有 uid，且是字符串"));
+                        writeLine(stdout, QStringLiteral("[OK] 1027 请求体是 uid + msgid，且都是字符串"));
                     else
                         fail(err);
 
+                    /*
+                     * 第一次回包**回显 msgid**（真实服务端 2026-10-22 起的行为），
+                     * 验证按编号精确认领这条主路径。
+                     */
+                    const QString req_msgid = QJsonDocument::fromJson(body)
+                                                  .object()
+                                                  .value(QStringLiteral("msgid"))
+                                                  .toString();
                     server.reply(kDelFriendRsp,
-                                 QStringLiteral(R"({"error":0,"uid":"%1"})")
-                                 .arg(QString::fromLatin1(kFriendA)).toUtf8());
+                                 QStringLiteral(R"({"error":0,"msgid":"%1","uid":"%2"})")
+                                 .arg(req_msgid, QString::fromLatin1(kFriendA)).toUtf8());
                     return;
                 }
 
-                // 第二次：模拟"服务端认为关系不存在"
+                /*
+                 * 第二次：模拟"服务端认为关系不存在" **且回包不带 msgid**
+                 * （老服务端 / 回显缺失）—— 验证仍能按同型号 FIFO 兜底认领。
+                 */
                 server.reply(kDelFriendRsp,
                              QStringLiteral(R"({"error":1022,"uid":"%1"})")
                              .arg(QString::fromLatin1(kFriendB)).toUtf8());

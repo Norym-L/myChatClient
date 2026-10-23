@@ -80,6 +80,13 @@ Window {
      */
     property string autoAuth: ""
 
+    /**
+     * 自动建群（自动化验证用）：`<群名>:<uid1,uid2>`，成员可省略。
+     * 进聊天页后走真实的 1033 → 1035 链路建群，用来无头验证群会话 / 群消息。
+     * 由 main.cpp 从环境变量 MYCHAT_GROUPCREATE 注入，正常启动时为空。
+     */
+    property string autoGroup: ""
+
     Loader {
         id: pageLoader
         anchors.fill: parent

@@ -32,6 +32,22 @@ void PresenceController::refresh(const QString& uid)
     if (uid.isEmpty())
         return;
 
+    /*
+     * 只认纯数字 uid。
+     *
+     * 群会话在客户端里的键是 `g<gid>`（见 ChatController::groupKey），
+     * 而"群在不在线"本来就不是个概念 —— 拿去查会被服务端判成 1020（参数非法），
+     * 日志里还会留下一条 uid = 0 的假警告。挡在这一层比每个 QML 调用点
+     * 都记得判断一次可靠。
+     */
+    bool be_numeric = false;
+    uid.toULongLong(&be_numeric);
+    if (!be_numeric)
+    {
+        qDebug() << "[presence] 不是用户 uid，跳过在线查询:" << uid;
+        return;
+    }
+
     if (!mychat::ChatSocket::instance().isLoggedIn())
     {
         // 登录链路还没走完（或已断开），问了也没人回 —— 静默返回，不刷警告

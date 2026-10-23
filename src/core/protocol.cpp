@@ -94,6 +94,19 @@ namespace mychat::protocol
         case ErrorCode::NotFriend:
             // 发消息时会被拼成「消息发送失败：你们还不是好友」
             return QObject::tr("你们还不是好友");
+        case ErrorCode::GroupIdInvalid:
+            return QObject::tr("群不存在或群号无效");
+        case ErrorCode::NoPower:
+            /*
+             * 服务端这一码有四个出处（api-group.md §5.2/§6.2/§7.2/§8.2）：
+             * 不是群主 / 管理员、不是群主、不在群内、以及**群成员集合丢了**
+             * （Redis 被清空时连真实成员也会被判成"不在群内"）。
+             * 文案别写成"你没有权限"，否则用户会以为是自己的操作问题。
+             */
+            return QObject::tr("权限不足（不是群成员，或没有该操作权限）");
+        case ErrorCode::GroupFulled:
+            // 服务端目前**不会**返回它（群满落到 1013），先留着给人话
+            return QObject::tr("群成员已满");
         case ErrorCode::JsonError:
             return QObject::tr("服务器返回数据解析失败");
         case ErrorCode::NetworkError:
@@ -335,8 +348,8 @@ namespace mychat::protocol
         /*
          * ⚠ `count` 是**字符串**（服务端 `std::to_string(messages.size())`），
          *   与 1021 的 count 一致；文档 §10.1 表格里写成 number 是错的。
-         *   这里只当日志：真正相信的是 msgs 数组长度（群聊消息会被服务端跳过，
-         *   count 可能大于实际条数）。
+         *   这里只当日志：真正相信的是 msgs 数组长度 —— 字段不完整的那几条
+         *   会在下面被跳过，count 可能大于实际能用的条数。
          */
         qDebug() << "[protocol] 拉取回包 count 字段:" << object.value(QStringLiteral("count"));
         // 没有消息时服务端**不写** msgs 字段（不是空数组）→ toArray() 得到空数组，正好走空态
@@ -353,6 +366,18 @@ namespace mychat::protocol
             message.id = entry.value(QStringLiteral("id")).toString();
             message.fromUid = parseUid(entry.value(QStringLiteral("from_uid"))).value_or(0);
             message.body = entry.value(QStringLiteral("body")).toString();
+
+            /*
+             * 群消息标记（2026-10-23 起）。`group` 是**布尔**（服务端
+             * `value["group"] = message.is_to_group`），单聊也显式给 false。
+             */
+            message.group = entry.value(QStringLiteral("group")).toBool(false);
+            /*
+             * `group_id` 只在群消息里出现，而且是**字符串**（`std::to_string`）。
+             * 升级前写入的群消息没有这个字段 —— 那时客户端拿不到群 id，
+             * 只能当成"无法归属的群消息"跳过（仍然要 ACK，否则一直重投）。
+             */
+            message.groupId = entry.value(QStringLiteral("group_id")).toString();
 
             /*
              * `type` 文档写的是 number，但服务端的历史习惯是把数字 to_string 之后再发
@@ -375,5 +400,87 @@ namespace mychat::protocol
         }
 
         return list;
+    }
+
+    QList<GroupMember> parseGroupMembers(const QJsonObject& object)
+    {
+        QList<GroupMember> list;
+
+        const int error = object.value(QStringLiteral("error"))
+                                .toInt(static_cast<int>(ErrorCode::JsonError));
+        if (error != static_cast<int>(ErrorCode::Success))
+        {
+            qWarning() << "[protocol] 获取群成员失败, error =" << error;
+            return list;
+        }
+
+        /*
+         * 没有成员时服务端**不写** mb_infos（§8.2），toArray() 得到空数组，正好走空态。
+         * ⚠ 这里的 uid 是**字符串**，role 是**数字** —— 服务端直接
+         *   `value["uid"] = std::to_string(uid)` / `value["role"] = role`。
+         */
+        const QJsonArray items = object.value(QStringLiteral("mb_infos")).toArray();
+        list.reserve(items.size());
+
+        for (const QJsonValue& item: items)
+        {
+            if (!item.isObject())
+                continue;
+
+            const QJsonObject entry = item.toObject();
+            const auto uid = parseUid(entry.value(QStringLiteral("uid")));
+            if (!uid.has_value() || *uid == 0)
+                continue;
+
+            GroupMember member;
+            member.uid = *uid;
+            member.nickG = entry.value(QStringLiteral("nick_g")).toString();
+            member.role = entry.value(QStringLiteral("role")).toInt(0);
+
+            /*
+             * join_at 是**毫秒时间戳字符串**。解析不出就当 0（界面显示"未知"），
+             * 不要用当前时间兜底 —— 那会让排序 / 显示凭空多出一个假时间。
+             */
+            const QString join_text = entry.value(QStringLiteral("join_at")).toString();
+            bool join_ok = false;
+            const qint64 join_ms = join_text.toLongLong(&join_ok);
+            member.joinAtMs = join_ok ? join_ms : 0;
+
+            list.append(member);
+        }
+
+        return list;
+    }
+
+    GroupInfo parseGroupInfo(const QJsonObject& object)
+    {
+        GroupInfo info;
+
+        /*
+         * 1044 的字段全是"服务端拼出来的"：owner_uid 是字符串，maxMb / mbCnt
+         * 也是字符串（std::to_string），createAt 是毫秒时间戳字符串。
+         * 解析失败不报错，按 0 / 空串走 —— 界面显示"未知"，不编造假值。
+         */
+        info.name = object.value(QStringLiteral("name")).toString();
+        info.avatar = object.value(QStringLiteral("avatar")).toString();
+        info.ownerUid = object.value(QStringLiteral("owner_uid")).toString();
+        info.announcement = object.value(QStringLiteral("announcement")).toString();
+
+        bool ok = false;
+        const QString max_text = object.value(QStringLiteral("maxMb")).toString();
+        const int max_members = max_text.toInt(&ok);
+        info.maxMembers = ok ? max_members : 0;
+
+        const QString count_text = object.value(QStringLiteral("mbCnt")).toString();
+        const int member_count = count_text.toInt(&ok);
+        info.memberCount = ok ? member_count : 0;
+
+        const QString create_text = object.value(QStringLiteral("createAt")).toString();
+        const qint64 create_ms = create_text.toLongLong(&ok);
+        info.createdAtMs = ok ? create_ms : 0;
+
+        // 群名是唯一必填字段：没有 name 基本可以断定不是一份完整的 1044
+        info.valid = !info.name.isEmpty();
+        return info;
     }
 } // namespace mychat::protocol

@@ -11,7 +11,7 @@ MyChat 桌面客户端。当前分支 `refactor/zmd-ui-qml` 正在把 UI 层从 
 | 已完成                                        | 未完成                           |
 |-----------------------------------------------|----------------------------------|
 | 认证三页：登录 / 注册 / 重置密码，含路由切换  | 历史消息（服务端无接口）         |
-| 登录链路（HTTP → TCP 握手 → 切页）+ 免密自动登录 | 群聊（服务端未实现）          |
+| 登录链路（HTTP → TCP 握手 → 切页）+ 免密自动登录 | 群列表 / 退群（服务端未实现） |
 | 注册与重置密码链路（邮箱验证码）              | 图片 / 文件消息（服务端无上传通道） |
 | 聊天主页：侧栏（会话 / 联系人 / 好友申请）    |                                  |
 | 好友链路：搜索用户 / 发申请 / 申请列表        |                                  |
@@ -25,8 +25,10 @@ MyChat 桌面客户端。当前分支 `refactor/zmd-ui-qml` 正在把 UI 层从 
 | 发消息（1013/1014，msg_id 回执配对）          |                                  |
 | 收消息（1022 推送 → 1023 拉取 → 1025 确认）   | 服务端历史（确认即删）           |
 | 本地聊天记录（SQLite，按账号分库）            |                                  |
+| 群聊：建群 / 拉人 / 踢人 / 解散 / 成员（1033–1042）+ 群消息 + 系统消息（`from_uid=1`） | 服务端无群列表 / 退群 / 资料变更推送 |
+| 群资料：获取 / 修改群名与公告（1043–1046）   | 头像上传（服务端无通道）         |
 | core：协议 / 网络 / 存储 / 会话 / 日志        |                                  |
-| 十二套无 GUI 的链路自检程序                   |                                  |
+| 十七套无 GUI 的链路自检程序                   |                                  |
 
 ## 技术栈
 
@@ -80,8 +82,27 @@ qtClientRegisterTest <email> <nickname> <password> [verifyCode]
 qtClientResetTest    <uid> <email> <newPassword> <verifyCode>
 qtClientContactTest  <uidA> <passwordA> <uidB> <passwordB>   # 两段式：A 搜 B 加好友 → B 查申请列表
 
+# 自带假服务器、不需要后端的自检（直接跑，无参数）
+qtClientFriendDeleteTest    # 1027/1028 删除好友
+qtClientProfileEditTest     # 1029-1032 备注 / 编辑资料
+qtClientGroupTest           # 1033-1042 群管理 + 群消息 + from_uid=1 系统消息（字段名 / group 布尔 / 群会话键）
+qtClientGroupInfoTest       # 1043-1046 群资料获取 / 修改（可选字段语义、缺 error 按失败、保存后重拉）
+qtClientMsgIdDropTest       # 请求编号 msgid + 被丢弃请求的识别（约 5s）
+qtClientChatStoreTest       # 本地 SQLite 记录
+
+# 群聊探针（真实服务端，扮演另一个群成员）
+python tools/probe-group.py <uid> <password> pull [count]
+python tools/probe-group.py <uid> <password> send <gid> "文本"
+python tools/probe-group.py <uid> <password> members <gid>
+
+# 压测（直连 ChatServer，不经 GateServer 转发）
+python tools/bench-chat.py --port 8090
+
 # 启动 GUI 并自动登录
 MYCHAT_AUTOLOGIN=<uid>:<password> ./qtClient.exe
+
+# 自动化建群（登录后走真实的 1033 → 1035；成员可省略）
+MYCHAT_GROUPCREATE="自检群:666673,666674" ./qtClient.exe
 
 # 无头渲染一帧并抓图（用于自动化视觉验证）
 MYCHAT_SMOKE=<输出png> ./qtClient.exe

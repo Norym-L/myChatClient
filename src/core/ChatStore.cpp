@@ -15,7 +15,8 @@
 namespace
 {
 /// schema 版本（`PRAGMA user_version`）。加字段 / 改表时 +1，并在 ensureSchema 里补迁移。
-constexpr int kSchemaVersion = 1;
+///   v1 → v2：conversations 加 kind（user / group）+ 新表 groups（2026-10-23 群聊）
+constexpr int kSchemaVersion = 2;
 
 /// 进程被杀时还在飞的消息，读回来一律算失败 —— 回执早就没了，别让它永远转圈
 constexpr char kStateSending[] = "sending";
@@ -185,14 +186,44 @@ bool ChatStore::ensureSchema()
          */
         R"(CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_server
                ON messages(server_id) WHERE server_id <> '')",
+        /*
+         * kind：'user' 单聊 / 'group' 群聊。
+         * 老库（v1）没有这一列，靠下面 ensureSchema 里的 ALTER 补上；
+         * 默认值给 'user' —— 历史会话全是单聊，这个默认值是对的。
+         */
         R"(CREATE TABLE IF NOT EXISTS conversations(
                peer_uid   TEXT PRIMARY KEY,
                last_text  TEXT,
                last_time  TEXT,
                last_ms    INTEGER NOT NULL DEFAULT 0,
                unread     INTEGER NOT NULL DEFAULT 0,
-               updated_ms INTEGER NOT NULL DEFAULT 0))",
+               updated_ms INTEGER NOT NULL DEFAULT 0,
+               kind       TEXT DEFAULT 'user'))",
+        /*
+         * 群资料：服务端没有查询接口，本地这份是唯一来源。
+         * 用 gid 做主键（纯数字字符串），与 conversations.peer_uid 的 `g<gid>` 不同 ——
+         * 那张表混着两种会话，这张只存群。
+         */
+        R"(CREATE TABLE IF NOT EXISTS groups(
+               gid          TEXT PRIMARY KEY,
+               name         TEXT,
+               icon         TEXT,
+               announcement TEXT,
+               role         INTEGER NOT NULL DEFAULT 0,
+               updated_ms   INTEGER NOT NULL DEFAULT 0))",
     };
+
+    /*
+     * 先读版本再建表：老库的 conversations 已经存在，`CREATE TABLE IF NOT EXISTS`
+     * 不会补列，必须靠下面的 ALTER。新库（version = 0）建表语句里已经带 kind，
+     * 再 ALTER 会报 duplicate column —— 所以两件事的顺序不能反。
+     */
+    int version = 0;
+    {
+        QSqlQuery version_query(m_db);
+        if (version_query.exec(QStringLiteral("PRAGMA user_version")) && version_query.next())
+            version = version_query.value(0).toInt();
+    }
 
     QSqlQuery query(m_db);
     for (const char* statement: statements)
@@ -204,17 +235,40 @@ bool ChatStore::ensureSchema()
         }
     }
 
-    QSqlQuery version_query(m_db);
-    if (version_query.exec(QStringLiteral("PRAGMA user_version")) && version_query.next())
+    // v1 → v2：conversations 补 kind 列（幂等判断放在前面，重复执行不会报错）
+    if (version >= 1 && version < 2 && !hasColumn(QStringLiteral("conversations"),
+                                                 QStringLiteral("kind")))
     {
-        const int version = version_query.value(0).toInt();
-        if (version < kSchemaVersion)
+        if (!query.exec(QStringLiteral(
+                "ALTER TABLE conversations ADD COLUMN kind TEXT DEFAULT 'user'")))
         {
-            // 目前只有 v1；以后加字段时在这里按 version 逐级迁移
-            version_query.exec(QStringLiteral("PRAGMA user_version=%1").arg(kSchemaVersion));
+            qCritical() << "[store] 迁移 v1 → v2 失败:" << query.lastError().text();
+            return false;
         }
+        qInfo() << "[store] 本地库已迁移到 v2（conversations.kind）";
+    }
+
+    if (version < kSchemaVersion)
+    {
+        if (!query.exec(QStringLiteral("PRAGMA user_version=%1").arg(kSchemaVersion)))
+            qWarning() << "[store] 写 schema 版本失败:" << query.lastError().text();
     }
     return true;
+}
+
+bool ChatStore::hasColumn(const QString& table, const QString& column) const
+{
+    QSqlQuery query(m_db);
+    // 表名不能用占位符绑定（SQLite 的 PRAGMA 不接受参数），这里拼的常量由本文件控制
+    if (!query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table)))
+        return false;
+
+    while (query.next())
+    {
+        if (query.value(1).toString().compare(column, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    return false;
 }
 
 QList<ChatStore::Conversation> ChatStore::conversations(const int limit) const
@@ -225,7 +279,7 @@ QList<ChatStore::Conversation> ChatStore::conversations(const int limit) const
 
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "SELECT peer_uid, last_text, last_time, last_ms, unread, updated_ms"
+        "SELECT peer_uid, last_text, last_time, last_ms, unread, updated_ms, kind"
         " FROM conversations ORDER BY updated_ms DESC LIMIT ?"));
     query.addBindValue(limit);
     if (!query.exec())
@@ -243,6 +297,10 @@ QList<ChatStore::Conversation> ChatStore::conversations(const int limit) const
         row.lastMs = query.value(3).toLongLong();
         row.unread = query.value(4).toInt();
         row.updatedMs = query.value(5).toLongLong();
+        // 老库（v1）没有 kind 列时这里是 NULL；按单聊处理，别让会话凭空消失
+        row.kind = query.value(6).toString();
+        if (row.kind.isEmpty())
+            row.kind = QStringLiteral("user");
         if (!row.peerUid.isEmpty())
             list.append(row);
     }
@@ -256,17 +314,19 @@ bool ChatStore::saveConversation(const Conversation& row)
 
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "INSERT INTO conversations(peer_uid, last_text, last_time, last_ms, unread, updated_ms)"
-        " VALUES(?, ?, ?, ?, ?, ?)"
+        "INSERT INTO conversations(peer_uid, last_text, last_time, last_ms, unread, updated_ms, kind)"
+        " VALUES(?, ?, ?, ?, ?, ?, ?)"
         " ON CONFLICT(peer_uid) DO UPDATE SET"
         "   last_text=excluded.last_text, last_time=excluded.last_time,"
-        "   last_ms=excluded.last_ms, unread=excluded.unread, updated_ms=excluded.updated_ms"));
+        "   last_ms=excluded.last_ms, unread=excluded.unread, updated_ms=excluded.updated_ms,"
+        "   kind=excluded.kind"));
     query.addBindValue(row.peerUid);
     query.addBindValue(row.lastText);
     query.addBindValue(row.lastTime);
     query.addBindValue(row.lastMs);
     query.addBindValue(row.unread);
     query.addBindValue(row.updatedMs == 0 ? QDateTime::currentMSecsSinceEpoch() : row.updatedMs);
+    query.addBindValue(row.kind.isEmpty() ? QStringLiteral("user") : row.kind);
 
     if (!query.exec())
     {
@@ -287,9 +347,75 @@ bool ChatStore::markConversationRead(const QString& peerUid)
     return query.exec();
 }
 
-QList<ChatStore::Message> ChatStore::recentMessages(const QString& peerUid, const int limit) const
+QList<ChatStore::Group> ChatStore::groups() const
 {
-    QList<Message> list;
+    QList<Group> list;
+    if (!isOpen())
+        return list;
+
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral(
+            "SELECT gid, name, icon, announcement, role, updated_ms FROM groups")))
+    {
+        qWarning() << "[store] 读群列表失败:" << query.lastError().text();
+        return list;
+    }
+
+    while (query.next())
+    {
+        Group row;
+        row.gid = query.value(0).toString();
+        row.name = query.value(1).toString();
+        row.icon = query.value(2).toString();
+        row.announcement = query.value(3).toString();
+        row.role = query.value(4).toInt();
+        row.updatedMs = query.value(5).toLongLong();
+        if (!row.gid.isEmpty())
+            list.append(row);
+    }
+    return list;
+}
+
+bool ChatStore::saveGroup(const Group& row)
+{
+    if (!isOpen() || row.gid.isEmpty())
+        return false;
+
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "INSERT INTO groups(gid, name, icon, announcement, role, updated_ms)"
+        " VALUES(?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(gid) DO UPDATE SET"
+        "   name=excluded.name, icon=excluded.icon, announcement=excluded.announcement,"
+        "   role=excluded.role, updated_ms=excluded.updated_ms"));
+    query.addBindValue(row.gid);
+    query.addBindValue(row.name);
+    query.addBindValue(row.icon);
+    query.addBindValue(row.announcement);
+    query.addBindValue(row.role);
+    query.addBindValue(row.updatedMs == 0 ? QDateTime::currentMSecsSinceEpoch() : row.updatedMs);
+
+    if (!query.exec())
+    {
+        qWarning() << "[store] 写群资料失败:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool ChatStore::removeGroup(const QString& gid)
+{
+    if (!isOpen() || gid.isEmpty())
+        return false;
+
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral("DELETE FROM groups WHERE gid=?"));
+    query.addBindValue(gid);
+    return query.exec();
+}
+
+QList<ChatStore::Message> ChatStore::recentMessages(const QString& peerUid, const int limit) const
+{    QList<Message> list;
     if (!isOpen() || peerUid.isEmpty())
         return list;
 

@@ -21,7 +21,11 @@ import "chat"
       · ApplyPane         好友申请列表
 
     ⚠ 能力边界（取决于服务端，不是客户端偷懒）：
-      · **会话列表**：由**好友列表**驱动（1020/1021），每个好友一个会话入口。
+      · **会话列表**：好友（1020/1021）+ **群**（1033 建群 / 收到的群消息里带 group_id，
+        服务端**没有群列表接口**，也不会推送"你被拉进群了"）。
+      · **群聊**：发送 / 接收复用单聊的 1013 / 1022 / 1024，管理动作见
+        GroupController（创建 / 拉人 / 踢人 / 解散 / 成员）。
+        ⚠ 群名只存在本机（服务端没有群资料查询），换设备后显示「群 <gid>」。
       · **发消息**：已实现（1013 / 1014），气泡状态为「发送中 → 已发送 / 发送失败」。
         ⚠ 回执成功只代表"已写入对方离线消息流"，不代表对方已收到。
       · **收消息**：已实现。1022 只是"你有新消息"的信号（不含内容），
@@ -108,6 +112,16 @@ Item {
         // 自动化验证：MYCHAT_OPENDLG 打开资料弹窗（弹窗无头抓图抓不到，得自己弹出来）
         if (app.autoDialog !== "")
             Qt.callLater(page.openAutoDialog)
+
+        // 自动化验证：MYCHAT_GROUPCREATE="群名:uid1,uid2" —— 替用户建一个群。
+        // 延到下一拍：initChat() 刚发了好友列表请求，同一拍里再发群请求没必要挤在一起。
+        if (app.autoGroup.length > 0) {
+            const parts = app.autoGroup.split(":")
+            const groupName = parts[0]
+            const memberUids = (parts.length > 1 && parts[1].length > 0)
+                ? parts[1].split(",") : []
+            Qt.callLater(() => GroupController.createGroup(groupName, memberUids))
+        }
 
         // 自动化验证：MYCHAT_SEARCH 注入的关键字 —— 切到联系人分区发起搜索。
         // ⚠ refreshApplyList 已把控制器置 busy，直接 searchUser 会被静默丢弃
@@ -277,6 +291,7 @@ Item {
                             id: conversationPane
                             height: parent.height
                             onAddFriendRequested: page.section = 1
+                            onCreateGroupRequested: createGroupDialog.openDialog()
                         }
 
                         // ══════ 右：对话区 ══════
@@ -285,6 +300,7 @@ Item {
                             width: parent.width - 244
                             height: parent.height
                             onPeerInfoRequested: (uid) => page.openChatPeerInfo(uid)
+                            onGroupMembersRequested: (gid) => page.openGroupMembers(gid)
                         }
                     }
                 }
@@ -362,6 +378,41 @@ Item {
 
 
 
+
+    /*
+        群聊的两个弹窗。
+
+        和 UserInfoDialog 一样由页面持有：弹窗只认 property / signal，
+        不 import MyChat.Core，所以这里把控制器状态**绑定**进去 ——
+        绑定表达式写在页面里，弹窗自己没有对控制器的依赖。
+    */
+
+    CreateGroupDialog {
+        id: createGroupDialog
+        friends: ContactController.friendList
+        busy: GroupController.busy
+        hint: GroupController.tip
+        onCreateRequested: (name, memberUids) => GroupController.createGroup(name, memberUids)
+    }
+
+    GroupMembersDialog {
+        id: groupMembersDialog
+        friends: ContactController.friendList
+        members: GroupController.memberList
+        groupInfo: GroupController.groupInfo
+        infoLoading: GroupController.infoLoading
+        myRole: GroupController.myRole
+        canManage: GroupController.canManage
+        isOwner: GroupController.isOwner
+        busy: GroupController.busy
+        hint: GroupController.tip
+        onAddMembersRequested: (memberUids) => GroupController.addMembers(
+                                   groupMembersDialog.gid, memberUids)
+        onKickRequested: (uid) => GroupController.kickMember(groupMembersDialog.gid, uid)
+        onDismissRequested: () => GroupController.dismissGroup(groupMembersDialog.gid)
+        onSaveInfoRequested: (name, announcement) => GroupController.changeGroupInfo(
+                                 groupMembersDialog.gid, name, announcement)
+    }
 
     UserInfoDialog {
         id: userInfoDialog
@@ -572,6 +623,10 @@ Item {
     function refreshPresenceOf(list) {
         let key = ""
         for (let i = 0; i < list.length; ++i) {
+            // 群会话的 uid 是 g<gid>，不是用户 uid —— 服务端会回 1020（参数非法），
+            // 把群号当人去查在线没有任何意义
+            if (String(list[i].kind) === "group")
+                continue
             const uid = list[i].peerUid !== undefined ? String(list[i].peerUid)
                 : (list[i].uid !== undefined ? String(list[i].uid) : "")
             key += uid + ","
@@ -581,6 +636,8 @@ Item {
         page.presenceKey = key
 
         for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].kind) === "group")
+                continue
             const uid = list[i].peerUid !== undefined ? String(list[i].peerUid)
                 : (list[i].uid !== undefined ? String(list[i].uid) : "")
             if (uid.length > 0)
@@ -621,6 +678,36 @@ Item {
 
         // 会话条数很少（现在是演示的 4 条）；PresenceController 会串行发，不会把回包搞乱
         page.refreshPresenceOf(list)
+    }
+
+    /*!
+        打开群成员面板（群头部的 ◎，以及自动化入口）。
+
+        群名 / 公告 / 群主这些资料由 GroupController 现拉（1043/1044）——
+        服务端 7338a5c 起才有这个接口；本地的会话名只是缓存，先用来
+        占位（加载期间不至于显示「群 <gid>」）。
+        成员列表由 GroupController 异步拉，弹窗绑的是它的 memberList。
+    */
+    function openGroupMembers(gid) {
+        const target_gid = gid !== undefined && gid !== null && String(gid).length > 0
+            ? String(gid) : String(ChatController.activeGroupId)
+        if (target_gid.length === 0)
+            return
+
+        let name = ""
+        const list = ChatController.conversations
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].kind) === "group" && String(list[i].gid) === target_gid) {
+                name = String(list[i].displayName)
+                break
+            }
+        }
+
+        groupMembersDialog.gid = target_gid
+        groupMembersDialog.groupName = name
+        GroupController.loadMembers(target_gid)
+        GroupController.loadGroupInfo(target_gid)
+        groupMembersDialog.openDialog()
     }
 
     function openChatPeerInfo(uid) {
@@ -708,7 +795,27 @@ Item {
         参数走 main.qml 的 autoDialog（由 main.cpp 从环境变量注入）。
     */
     function openAutoDialog() {
-        if (app.autoDialog === "self" || app.autoDialog === "selfedit") {
+        if (app.autoDialog === "creategroup") {
+            // 自动化验证：新建群聊弹窗（好友多选 + 群名）
+            page.section = 0
+            createGroupDialog.openDialog()
+            return
+        } else if (app.autoDialog === "groupmembers") {
+            // 自动化验证：群成员面板。没有活动群会话时先打开列表里的第一个群
+            page.section = 0
+            if (!ChatController.activeIsGroup) {
+                const list = ChatController.conversations
+                for (let i = 0; i < list.length; ++i) {
+                    if (String(list[i].kind) === "group") {
+                        ChatController.openConversation(String(list[i].uid),
+                            String(list[i].displayName))
+                        break
+                    }
+                }
+            }
+            page.openGroupMembers("")
+            return
+        } else if (app.autoDialog === "self" || app.autoDialog === "selfedit") {
             page.openSelfInfo()
         } else if (app.autoDialog.startsWith("sendfriend")) {
             // 目标 uid 可选：`sendfriend:<uid>`；不给就用一个格式合法但不存在的 uid
@@ -858,6 +965,76 @@ Item {
             ContactController.refreshFriendListSilently()
         }
 
+        /*!
+            切换会话：进群会话时顺手拉一次成员列表。
+
+            目的只有一个 —— 会话头部要显示"N 人"。服务端没有"群列表 + 人数"
+            的批量接口，只能打开时现拉（GroupController 会缓存，同一群不重复请求）。
+        */
+        function onActiveConversationChanged() {
+            if (ChatController.activeIsGroup)
+                GroupController.loadMembers(ChatController.activeGroupId)
+            else
+                GroupController.clearMembers()
+        }
+
+        /*!
+            群操作的系统消息（服务端 from_uid = 1，api-group.md §11.5）。
+
+            服务端不推送成员变化，只在建群 / 拉人 / 踢人 / 解散后写一条系统消息；
+            消息正文本身由 MessageListView 当居中提示渲染，这里额外做一件事：
+            正在看这个群时强刷成员列表，让"N 人"和成员面板跟上别处的操作。
+        */
+        function onGroupSystemMessage(gid, body) {
+            if (String(GroupController.gid) === String(gid))
+                GroupController.loadMembers(gid, true)
+        }
+
+    }
+
+    /*!
+        群聊管理的结果。
+
+        建群成功 → 关弹窗、把群登记进会话列表、直接打开它。
+        解散成功 → 关成员面板、把本地会话摘掉。
+
+        ⚠ `"g" + gid` 这个前缀必须和 ChatController::groupKey 一致 ——
+          会话键是 `g<gid>`（群号和用户 uid 都是数字，不加前缀会撞号）。
+          这是 QML 里唯一需要知道该约定的地方。
+    */
+    Connections {
+        target: GroupController
+
+        function onGroupCreated(ok, error, gid, name) {
+            if (!ok)
+                return // 失败原因通过 GroupController.tip 绑到弹窗的 hint 上
+
+            createGroupDialog.close()
+            // 建群的人一定是群主（服务端创建时把创建者写进 chatgroup_<gid>）
+            ChatController.registerGroup(gid, name, 2)
+            ChatController.openConversation("g" + gid, name)
+            GroupController.loadMembers(gid)
+        }
+
+        function onGroupDismissed(ok, error, gid) {
+            if (!ok)
+                return
+
+            groupMembersDialog.close()
+            ChatController.removeGroupConversation(gid)
+        }
+
+        /*!
+            群资料保存成功（1045/1046）。
+
+            1046 只回 error，新资料由 GroupController 再拉一次 1043；
+            这里只负责把群名写回本地缓存（ChatStore.groups），否则下次
+            离线打开会话显示的还是旧名字。角色沿用成员列表算出来的。
+        */
+        function onGroupInfoSaved(gid, name) {
+            const role = GroupController.myRole >= 0 ? GroupController.myRole : 0
+            ChatController.registerGroup(gid, name, role)
+        }
     }
 
     Connections {

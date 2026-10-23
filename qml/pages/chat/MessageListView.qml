@@ -56,6 +56,38 @@ Item {
     /// 选择模式下点了某条（ChatPane 负责维护选中集合）
     signal toggleRequested(string msgId)
 
+    /*!
+        群成员列表（GroupController.memberList）。
+
+        存成属性而不是在函数里直接调 `GroupController.memberList` ——
+        QML 对"函数调用里的属性访问"不建立依赖，群昵称到了界面不会刷新
+        （和 ChatPane 里 PresenceController 那个坑是同一类）。
+    */
+    property var groupMembers: GroupController.memberList
+
+    /*!
+        气泡上该显示谁的名字。
+
+        · 单聊：整列都是同一个人 → 用会话名，和以前完全一致；
+        · 群聊：每条消息的发送者不同 → 优先**群昵称**（服务端 1042 给的
+          `nick_g`），其次好友备注 / 昵称（ChatController 算好的 senderName），
+          最后退回 uid。
+    */
+    function senderLabel(senderUid, fallback) {
+        if (!ChatController.activeIsGroup)
+            return ChatController.activePeerName
+
+        for (let i = 0; i < groupMembers.length; ++i) {
+            if (String(groupMembers[i].uid) !== senderUid)
+                continue
+            const nick = groupMembers[i].nickG
+            if (nick !== undefined && String(nick).length > 0)
+                return String(nick)
+            break
+        }
+        return fallback.length > 0 ? fallback : senderUid
+    }
+
     /// 把视口摁到最新一条（换会话 / 自己发消息 / 点「新消息 ↓」）
     function pinToBottom() {
         messageView.pinToBottom()
@@ -421,9 +453,27 @@ Flickable {
                 width: msgColumn.width
                 spacing: Theme.spacingXs
 
+                /*
+                 * 群操作的系统消息（服务端 from_uid = 1，api-group.md §9.5）：
+                 * 居中灰字提示 —— 不是某个人的气泡，也没有发送者 / 时间标签。
+                 * 建群、拉人、踢人、解散都走这一种渲染。
+                 */
+                Text {
+                    visible: system === true
+                    width: Math.min(msgColumn.width * 0.82, 520)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: body
+                    font: Theme.fontBody
+                    color: Theme.muted
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    topPadding: Theme.spacingSm
+                    bottomPadding: Theme.spacingSm
+                }
+
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    visible: text.length > 0
+                    visible: system !== true && text.length > 0
                     text: view.stampFor(index, tsMs)
                     font: Theme.fontMonoSm
                     color: Theme.muted
@@ -431,6 +481,7 @@ Flickable {
                 }
 
                 ChatBubble {
+                    visible: system !== true
                     /*
                      * ListModel 的 role 不能叫 text / state ——
                      * 那会和 ChatBubble 自己的同名属性打架。所以
@@ -441,8 +492,12 @@ Flickable {
                     text: body
                     time: clock
                     state: delivery
-                    peerName: ChatController.activePeerName
-                    peerUid: ChatController.activePeerUid
+                    // 群聊里每条消息的发送者不同，名字按 senderUid 解析
+                    peerName: fromMe ? LoginController.name
+                                     : view.senderLabel(senderId, senderText)
+                    peerUid: fromMe ? LoginController.uid
+                                    : (senderId.length > 0 ? senderId
+                                                           : ChatController.activePeerUid)
                     selfName: LoginController.name
                     selfUid: LoginController.uid
 
@@ -481,7 +536,12 @@ function messageRow(m) {
         clock: m.time !== undefined ? m.time : "",
         delivery: m.state !== undefined ? m.state : "",
         // 毫秒时间戳：只用来判断"要不要在气泡上面插一条时间标签"
-        tsMs: Number(m.ts !== undefined ? m.ts : 0)
+        tsMs: Number(m.ts !== undefined ? m.ts : 0),
+        // 发送者：群聊气泡上的名字 / 头像底色按它取（单聊为空，退回会话 uid）
+        senderId: m.senderUid !== undefined ? String(m.senderUid) : "",
+        senderText: m.senderName !== undefined ? String(m.senderName) : "",
+        // 群操作系统消息（from_uid = 1）：走居中提示，不渲染成气泡
+        system: m.system === true
     }
 }
 

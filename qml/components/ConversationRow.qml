@@ -24,6 +24,13 @@ Item {
     property bool selected: false
     /*! 是否在线（未知时传 false —— 未知不等于离线，别点亮） */
     property bool online: false
+    /*!
+        是不是群会话。
+
+        群没有"在线"这个概念：ZAvatar 的在线点必须灭掉，标题旁边挂一个「群」角标，
+        否则群头像上会一直挂一颗"离线"的灰点，看着像掉线了。
+    */
+    property bool isGroup: false
 
     signal clicked()
 
@@ -77,7 +84,8 @@ Item {
             size: 36
             name: root.name
             uid: root.uid
-            online: root.online
+            // 群不显示在线点：服务端也没有"群在线"这回事
+            online: root.online && !root.isGroup
         }
 
         Item {
@@ -92,13 +100,34 @@ Item {
                 height: 20
 
                 Text {
+                    id: titleText
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - timeText.width - Theme.spacingSm
+                        - (groupTag.visible ? groupTag.width + 6 : 0)
                     text: root.name.length > 0 ? root.name : root.uid
                     font: Theme.fontStrong
                     color: root.selected ? Theme.textOnAccent : Theme.ink
                     elide: Text.ElideRight
+                }
+
+                /// 群角标：会话列表里单聊和群混排，不标一下只能靠名字猜
+                Rectangle {
+                    id: groupTag
+                    anchors.left: titleText.right
+                    anchors.leftMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.isGroup
+                    width: 18
+                    height: 14
+                    color: root.selected ? Theme.inkBlock : Theme.subBg
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "群"
+                        font: Theme.fontMonoSm
+                        color: root.selected ? Theme.textOnSub : Theme.textOnSub
+                    }
                 }
 
                 Text {

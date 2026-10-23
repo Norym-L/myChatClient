@@ -26,6 +26,8 @@
         <file alias="pages/chat/MessageListView.qml">../qml/pages/chat/MessageListView.qml</file>
 
         <file alias="dialog/UserInfoDialog.qml">../qml/dialog/UserInfoDialog.qml</file>
+        <file alias="dialog/CreateGroupDialog.qml">../qml/dialog/CreateGroupDialog.qml</file>
+        <file alias="dialog/GroupMembersDialog.qml">../qml/dialog/GroupMembersDialog.qml</file>
 
         <!-- ── 自建组件（ZmdUI 缺失、按同一设计语言补的）──────────────── -->
         <file alias="components/ZAvatar.qml">../qml/components/ZAvatar.qml</file>
@@ -34,6 +36,7 @@
         <file alias="components/ChatBubble.qml">../qml/components/ChatBubble.qml</file>
         <file alias="components/ChatMessageMenu.qml">../qml/components/ChatMessageMenu.qml</file>
         <file alias="components/ChatScrollBar.qml">../qml/components/ChatScrollBar.qml</file>
+        <file alias="components/FriendPicker.qml">../qml/components/FriendPicker.qml</file>
         <file alias="components/NavIcon.qml">../qml/components/NavIcon.qml</file>
         <file alias="components/NavRail.qml">../qml/components/NavRail.qml</file>
         <file alias="components/NavRailButton.qml">../qml/components/NavRailButton.qml</file>

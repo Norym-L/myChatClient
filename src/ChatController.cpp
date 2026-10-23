@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ChatSocket.h"
+#include "SessionManager.h"
 #include "logger.h"
 #include "protocol.h"
 
@@ -48,6 +49,21 @@ constexpr int kPullBacklogDelayMs = 200;
 /// 拉取失败（超时 / 服务端错误）后隔多久重试：消息还在服务端，重试是安全的
 constexpr int kPullRetryDelayMs = 2000;
 
+/**
+ * 兜底拉取周期（毫秒）。
+ *
+ * 正常链路是「1022 推送 → 2s 合并 → 1023 拉取」。但推送本身可能静默失效
+ * （例如 2026-10-23 修掉的服务端竞态：旧连接断开误删新会话映射，在线状态还在、
+ * 1022 却被丢掉），这时客户端不主动拉就永远不知道有新消息。
+ *
+ * 登录后每 30s 主动发一次 1023，保证最坏情况下也只延迟一个周期；
+ * 空闲时只是一次空请求，代价可忽略。断线时停止，重登再启动。
+ */
+constexpr int kFallbackPullIntervalMs = 30 * 1000;
+
+/// 自检用：把兜底周期改短，别让测试真的等 30s（未设置 / 非正数 = 用默认值）
+constexpr const char* kFallbackPullEnv = "MYCHAT_FALLBACK_PULL_MS";
+
 /// 确认失败后隔多久再拉一次（PEL 会把那批消息重投回来，去重后重新确认）
 constexpr int kAckRetryDelayMs = 1000;
 /// 确认连续失败这么多次就不再自动重试（避免对着一个不健康的服务端空转）
@@ -74,6 +90,21 @@ QVariantMap historyItem(const ChatStore::Message& row)
     item.insert(QStringLiteral("state"), row.state);
     // 毫秒时间戳：QML 靠它算"两条消息隔了多久"，决定要不要插一条居中的时间标签
     item.insert(QStringLiteral("ts"), row.createdMs);
+    /*
+     * 发送者 uid：群聊里每条消息的发送者都不同，气泡上的名字 / 头像要按它取
+     * （单聊里它等于对方 uid，界面照旧用会话名，不冲突）。
+     * 以前这里把它丢掉了 —— 单聊看不出问题，群聊就没法分辨谁说的。
+     */
+    item.insert(QStringLiteral("senderUid"), row.fromUid);
+    /*
+     * 群操作系统消息：服务端没有独立类型，只把 from_uid 置为保留的 "1"
+     * （api-group.md §9.5）。历史消息重启后读回来也要按系统消息渲染，
+     * 所以标志在生成消息项时就定下来，不能只依赖收消息那一刻的判断。
+     */
+    const bool system = !row.fromSelf
+        && row.peerUid.startsWith(QLatin1Char('g'))
+        && row.fromUid == QLatin1String("1");
+    item.insert(QStringLiteral("system"), system);
     return item;
 }
 
@@ -115,7 +146,7 @@ QString timeFromStreamId(const QString& id)
 
 QVariantMap makeMessage(const int id, const bool from_self, const QString& text,
                         const QString& time, const QString& state,
-                        const qint64 created_ms = 0)
+                        const qint64 created_ms = 0, const QString& sender_uid = QString())
 {
     QVariantMap item;
     item.insert(QStringLiteral("id"), id);
@@ -125,6 +156,8 @@ QVariantMap makeMessage(const int id, const bool from_self, const QString& text,
     item.insert(QStringLiteral("state"), state);
     // 毫秒时间戳（QML 用来决定"要不要插时间标签"）；演示数据没有真实时间，给 0 表示未知
     item.insert(QStringLiteral("ts"), created_ms);
+    /// 群聊气泡按它取发送者名字（见 historyItem 的说明）
+    item.insert(QStringLiteral("senderUid"), sender_uid);
     return item;
 }
 } // namespace
@@ -160,6 +193,20 @@ ChatController::ChatController(QObject* parent)
     m_pull_timer->setSingleShot(true);
     connect(m_pull_timer, &QTimer::timeout, this, &ChatController::requestPull);
 
+    /*
+     * 兜底拉取：登录后每 30s 主动拉一次，不依赖 1022。
+     *
+     * 推送链路可能静默失效（1022 丢了 / 服务端在线状态与会话映射不一致等），
+     * 只靠"收到推送才拉"就会出现"能发不能收、重登才恢复"。有了这层兜底，
+     * 最坏情况下也只晚一个周期看到消息。断线时停止，重登时再启动。
+     */
+    m_fallback_pull_timer = new QTimer(this);
+    const int fallback_interval = qEnvironmentVariableIntValue(kFallbackPullEnv);
+    m_fallback_pull_timer->setInterval(fallback_interval > 0
+                                           ? fallback_interval
+                                           : kFallbackPullIntervalMs);
+    connect(m_fallback_pull_timer, &QTimer::timeout, this, &ChatController::requestPull);
+
     connect(&socket, &mychat::ChatSocket::messageReceived, this, [this]()
                 {
                     ++m_pull_hint;
@@ -188,10 +235,22 @@ ChatController::ChatController(QObject* parent)
                     m_ack_retry = 0;
                     m_seen_message_ids.clear();
                     m_seen_message_order.clear();
+                    // "本地已移除的群"只对本次登录有效：换账号后同一个 gid
+                    // 可能是另一个人的群，不能继续挡系统消息。
+                    m_removed_gids.clear();
+
+                    // 自己的 uid：群消息要判断"这条是不是我自己发的回显"。
+                    // 存这里而不是每次读 SessionManager —— 测试里没有 LoginController
+                    // 去 update 它，登录后的 uid 只在这一帧里可靠。
+                    m_self_uid = QString::number(uid);
 
                     // 先开本地库：登录后马上要拉的离线消息要能落盘（落库后才 ACK）
                     openStore(uid);
                     requestPull();
+
+                    // 登录成功才开始兜底拉取：未登录时 requestPull 也会直接返回，
+                    // 但没必要让定时器空转（自检里会断言"未登录不发 1023"）。
+                    m_fallback_pull_timer->start();
                 });
 
     /*
@@ -226,6 +285,10 @@ ChatController::ChatController(QObject* parent)
                 {
                     if (m_pull_timer != nullptr)
                         m_pull_timer->stop();
+                    // 断线后 requestPull 本来就会早退，停掉定时器只是别空转；
+                    // 重新登录（loginSucceeded）会再启动。
+                    if (m_fallback_pull_timer != nullptr)
+                        m_fallback_pull_timer->stop();
                     m_pull_hint = 0;
                     m_pull_again = false;
                     m_pull_count = 0;
@@ -286,6 +349,8 @@ void ChatController::openStore(const std::uint64_t uid)
     m_active_uid.clear();
     m_active_name.clear();
     m_active_is_demo = false;
+    m_active_is_group = false;
+    m_active_gid.clear();
     m_sending.clear();
 
     if (uid == 0 || !m_store.open(uid))
@@ -306,10 +371,28 @@ void ChatController::openStore(const std::uint64_t uid)
     /*
      * 回填会话列表：库里存的只是摘要（最后一条 / 未读），显示名等好友列表同步时补。
      * 库按 updated_ms 倒序，这里按同样顺序 append 即可。
+     *
+     * ⚠ 群会话（kind = group）的键在库里就是 `g<gid>`，所以能原样回填；
+     *   群名来自 groups 表 —— 服务端没有群资料查询接口，这是唯一的来源。
      */
+    QHash<QString, ChatStore::Group> groups;
+    for (const ChatStore::Group& group: m_store.groups())
+        groups.insert(group.gid, group);
+
     const QList<ChatStore::Conversation> rows = m_store.conversations();
     for (const ChatStore::Conversation& row: rows)
     {
+        const bool is_group = row.kind == QLatin1String("group");
+        const QString gid = is_group ? groupIdOfKey(row.peerUid) : QString();
+        const ChatStore::Group group = groups.value(gid);
+
+        // 群名：本地有就用；没有（换设备 / 清过库）就显示「群 <gid>」，别空着
+        const QString fallback_name = is_group
+                                          ? (!group.name.isEmpty()
+                                                 ? group.name
+                                                 : QStringLiteral("群 %1").arg(gid))
+                                          : row.peerUid;
+
         const int index = indexOf(row.peerUid);
         if (index >= 0)
         {
@@ -317,19 +400,31 @@ void ChatController::openStore(const std::uint64_t uid)
             item.insert(QStringLiteral("lastText"), row.lastText);
             item.insert(QStringLiteral("lastTime"), row.lastTime);
             item.insert(QStringLiteral("unread"), row.unread);
+            if (is_group)
+            {
+                // 好友同步不会碰群会话，名字 / 角色这里补一次
+                item.insert(QStringLiteral("kind"), QStringLiteral("group"));
+                item.insert(QStringLiteral("gid"), gid);
+                item.insert(QStringLiteral("name"), fallback_name);
+                item.insert(QStringLiteral("displayName"), fallback_name);
+                item.insert(QStringLiteral("icon"), group.icon);
+            }
             m_conversations[index] = item;
             continue;
         }
 
-        // 本地有记录、但当前不在好友列表里（删过好友 / 陌生人发过消息）
+        // 本地有记录、但当前不在好友列表里（删过好友 / 陌生人发过消息 / 群聊）
         QVariantMap item;
         item.insert(QStringLiteral("uid"), row.peerUid);
-        item.insert(QStringLiteral("name"), row.peerUid);
+        item.insert(QStringLiteral("name"), fallback_name);
         item.insert(QStringLiteral("nick"), QString());
-        item.insert(QStringLiteral("displayName"), row.peerUid);
-        item.insert(QStringLiteral("icon"), QString());
+        item.insert(QStringLiteral("displayName"), fallback_name);
+        item.insert(QStringLiteral("icon"), is_group ? group.icon : QString());
         item.insert(QStringLiteral("desc"), QString());
         item.insert(QStringLiteral("sex"), 2);
+        item.insert(QStringLiteral("kind"), is_group ? QStringLiteral("group")
+                                                    : QStringLiteral("user"));
+        item.insert(QStringLiteral("gid"), gid);
         item.insert(QStringLiteral("lastText"), row.lastText);
         item.insert(QStringLiteral("lastTime"), row.lastTime);
         item.insert(QStringLiteral("unread"), row.unread);
@@ -385,7 +480,11 @@ void ChatController::ensureHistoryLoaded(const QString& peerUid)
     QVariantList list;
     list.reserve(rows.size());
     for (const ChatStore::Message& row: rows)
-        list.append(historyItem(row));
+    {
+        QVariantMap item = historyItem(row);
+        item.insert(QStringLiteral("senderName"), senderNameFor(row.fromUid));
+        list.append(item);
+    }
 
     m_history[peerUid] = list;
     qInfo() << "[chat] 从本地库加载" << list.size() << "条历史:" << peerUid;
@@ -429,7 +528,11 @@ int ChatController::loadOlderMessages(const int count)
     QVariantList merged;
     merged.reserve(rows.size() + current.size());
     for (const ChatStore::Message& row: rows)
-        merged.append(historyItem(row));
+    {
+        QVariantMap item = historyItem(row);
+        item.insert(QStringLiteral("senderName"), senderNameFor(row.fromUid));
+        merged.append(item);
+    }
     merged.append(current);
 
     m_history[peer] = merged;
@@ -577,6 +680,10 @@ void ChatController::persistConversation(const QString& peerUid)
     row.lastTime = item.value(QStringLiteral("lastTime")).toString();
     row.unread = item.value(QStringLiteral("unread")).toInt();
     row.updatedMs = QDateTime::currentMSecsSinceEpoch();
+    // 群会话的键是 g<gid>，重启后要靠 kind 才能把它还原成群 —— 必须一起写
+    row.kind = item.value(QStringLiteral("kind")).toString();
+    if (row.kind.isEmpty())
+        row.kind = QStringLiteral("user");
     m_store.saveConversation(row);
 }
 
@@ -669,6 +776,22 @@ void ChatController::openConversation(const QString& peerUid, const QString& pee
     if (peerUid.isEmpty())
         return;
 
+    /*
+     * 群键（`g<gid>`）但会话表里还没有这一条：先补一个占位会话。
+     *
+     * 两种来源：自动化先打开、以及"消息还在路上"。不补的话下面算出来的
+     * kind 是空 → m_active_is_group = false → 发消息会按**单聊**发到群号上，
+     * 服务端回 1022，用户看到的是"你们还不是好友"。
+     */
+    if (isGroupKey(peerUid) && indexOf(peerUid) < 0)
+    {
+        const QString gid = groupIdOfKey(peerUid);
+        // 调用方可能把会话键 / 群号当名字传进来（自动化就是这么干的），
+        // 那不是群名 —— 交给 ensureGroupConversation 用「群 <gid>」兜底
+        const QString hint = (peerName == peerUid || peerName == gid) ? QString() : peerName;
+        ensureGroupConversation(gid, hint);
+    }
+
     const bool changed = (peerUid != m_active_uid);
     m_active_uid = peerUid;
     m_active_name = peerName;
@@ -678,6 +801,23 @@ void ChatController::openConversation(const QString& peerUid, const QString& pee
     m_active_is_demo = index >= 0 && m_conversations.at(index).toMap()
                                                     .value(QStringLiteral("demo"))
                                                     .toBool();
+
+    /*
+     * 群会话：键是 `g<gid>`，界面上的群号要去掉前缀。
+     * 这里不信任调用方传进来的 name —— QML 传的可能是旧名字（会话刚被改名），
+     * 以会话表里的为准。
+     */
+    m_active_is_group = index >= 0 && m_conversations.at(index).toMap()
+                                                .value(QStringLiteral("kind"))
+                                                .toString() == QLatin1String("group");
+    m_active_gid = m_active_is_group ? groupIdOfKey(peerUid) : QString();
+    if (m_active_is_group && index >= 0)
+    {
+        const QString display = m_conversations.at(index).toMap()
+                                    .value(QStringLiteral("displayName")).toString();
+        if (!display.isEmpty())
+            m_active_name = display;
+    }
 
     // 历史在本地库里，第一次点开时懒加载（演示会话没有库，直接跳过）
     ensureHistoryLoaded(peerUid);
@@ -706,6 +846,11 @@ void ChatController::syncFriends(const QVariantList& friends)
      */
     QSet<QString> friend_uids;
     QHash<QString, QVariantMap> friend_fields;
+    /*
+     * 好友名缓存：群聊气泡的发送者名字靠它（服务端 1042 只给群昵称和 uid，
+     * 没有账号昵称）。每次同步整体重建 —— 好友删了名字也该消失。
+     */
+    m_friend_names.clear();
     for (const QVariant& entry: friends)
     {
         const QVariantMap f = entry.toMap();
@@ -715,6 +860,10 @@ void ChatController::syncFriends(const QVariantList& friends)
 
         friend_uids.insert(uid);
         friend_fields.insert(uid, f);
+
+        const QString display = f.value(QStringLiteral("displayName")).toString();
+        const QString name = f.value(QStringLiteral("name")).toString();
+        m_friend_names.insert(uid, display.isEmpty() ? name : display);
     }
 
     QVariantList next;
@@ -730,12 +879,22 @@ void ChatController::syncFriends(const QVariantList& friends)
 
         const bool is_demo = conv.value(QStringLiteral("demo")).toBool();
         const bool is_friend = friend_uids.contains(uid);
+        /*
+         * 群会话：**永远保留**。
+         *
+         * 群不在好友列表里（那是另一个域），而且刚建好、还没人说话的群摘要就是空的 ——
+         * 按下面那条"非好友 + 无摘要 = 空壳"的规则会被直接删掉，
+         * 表现就是"建完群，列表里什么都没有"。
+         */
+        const bool is_group = conv.value(QStringLiteral("kind")).toString()
+                              == QLatin1String("group");
 
-        // 既不是好友、也没有任何聊天记录 → 只可能是"删掉的好友留下的空壳"
-        if (!is_demo && !is_friend && conv.value(QStringLiteral("lastText")).toString().isEmpty())
+        // 既不是好友、也不是群、也没有任何聊天记录 → 只可能是"删掉的好友留下的空壳"
+        if (!is_demo && !is_group && !is_friend
+            && conv.value(QStringLiteral("lastText")).toString().isEmpty())
             continue;
 
-        if (is_friend)
+        if (is_friend && !is_group)
         {
             const QVariantMap f = friend_fields.value(uid);
             // ⚠ 一定要给默认值：QVariantMap 里插一个无效 QVariant，QML 那边读到的就是
@@ -774,6 +933,8 @@ void ChatController::syncFriends(const QVariantList& friends)
         conv.insert(QStringLiteral("lastTime"), QString());
         conv.insert(QStringLiteral("unread"), 0);
         conv.insert(QStringLiteral("demo"), false);
+        conv.insert(QStringLiteral("kind"), QStringLiteral("user"));
+        conv.insert(QStringLiteral("gid"), QString());
         next.append(conv);
     }
 
@@ -796,12 +957,12 @@ void ChatController::syncFriends(const QVariantList& friends)
         {
             active_alive = true;
             // 备注可能刚改过：把显示名同步过来，否则会话头还挂着旧名字
-            m_active_name = m_conversations.at(index).toMap()
-                                           .value(QStringLiteral("displayName"))
-                                           .toString();
-            m_active_is_demo = m_conversations.at(index).toMap()
-                                              .value(QStringLiteral("demo"))
-                                              .toBool();
+            const QVariantMap active_item = m_conversations.at(index).toMap();
+            m_active_name = active_item.value(QStringLiteral("displayName")).toString();
+            m_active_is_demo = active_item.value(QStringLiteral("demo")).toBool();
+            m_active_is_group = active_item.value(QStringLiteral("kind")).toString()
+                                == QLatin1String("group");
+            m_active_gid = m_active_is_group ? groupIdOfKey(m_active_uid) : QString();
         }
     }
 
@@ -824,6 +985,8 @@ void ChatController::closeConversation()
     m_active_uid.clear();
     m_active_name.clear();
     m_active_is_demo = false;
+    m_active_is_group = false;
+    m_active_gid.clear();
     emit activeConversationChanged();
     emit historyChanged();
     emit messagesChanged();
@@ -914,7 +1077,16 @@ bool ChatController::sendText(const QString& text)
     emit messagesChanged();
     emit conversationsChanged();
 
-    if (!mychat::ChatSocket::instance().sendTextMessage(msg_id, m_active_uid, trimmed))
+    /*
+     * 群消息的 `to_uid` 是**群号**（不是成员 uid），并且要带 `group: true`。
+     * 会话键是 `g<gid>`，所以这里要剥掉前缀 —— 直接把键发出去，
+     * 服务端会 `SISMEMBER chatgroup_g20001`，永远查不到。
+     */
+    const QString target_uid = m_active_is_group ? m_active_gid : m_active_uid;
+
+    if (!mychat::ChatSocket::instance().sendTextMessage(
+            msg_id, target_uid, trimmed, mychat::protocol::ChatMessageType::Text,
+            m_active_is_group))
     {
         // 没排进队列 = 不会有回执：自己把这条标红销账。
         // 具体原因（未连接 / 未登录 / 超长）ChatSocket 那边有 WARN 日志。
@@ -948,11 +1120,17 @@ void ChatController::onTextMessageResult(const bool ok, const int error, const Q
     const PendingSend entry = it.value();
     m_sending.erase(it);
 
-    if (entry.peer_uid != toUid)
+    /*
+     * 群会话的键是 `g<gid>`，而回执里的 to_uid 是**群号本身** —— 比较前先剥前缀，
+     * 否则每条群消息都会刷一条"回执的 to_uid 与发送记录不一致"的假警告。
+     */
+    const bool is_group = isGroupKey(entry.peer_uid);
+    const QString expected_uid = is_group ? groupIdOfKey(entry.peer_uid) : entry.peer_uid;
+    if (expected_uid != toUid)
     {
         // 只有一种可能：服务端把 to_uid 回错 / 我们自己记错了。仍按本地记录标状态。
         qWarning() << "[chat] 消息回执的 to_uid 与发送记录不一致: 记录"
-            << entry.peer_uid << "回包" << toUid;
+            << expected_uid << "回包" << toUid;
     }
 
     markMessageState(entry.peer_uid, entry.message_id,
@@ -967,12 +1145,29 @@ void ChatController::onTextMessageResult(const bool ok, const int error, const Q
 
     qWarning() << "[chat] 发送失败, to_uid =" << toUid << "msg_id =" << msgId
         << "error =" << error;
-    setTip(QStringLiteral("消息发送失败：%1").arg(mychat::protocol::errorToTip(error)), true);
 
-    // 1022 = 服务端的好友校验没过。除了"本来就不是好友"，最常见的原因是**对方把我删了**
-    // （服务端不推送这种变化），所以顺手让界面静默刷新一次好友列表。
     if (error == static_cast<int>(mychat::protocol::ErrorCode::NotFriend))
+    {
+        if (is_group)
+        {
+            /*
+             * 群消息的 1022 是"我不在群里"（服务端复用 NOT_FRIEND，见 api-group.md §9.1）：
+             *   · 群被解散了（Redis 集合被 DEL，但我这边没收到任何通知）；
+             *   · 或者我被移出了群。
+             * 两种都没法从协议上区分，也不该顺手刷好友列表 —— 那条链路救不了群。
+             */
+            setTip(QStringLiteral("发送失败：你已不在这个群里（群可能已解散）"), true);
+            return;
+        }
+
+        /*
+         * 1022 = 服务端的好友校验没过。除了"本来就不是好友"，最常见的原因是**对方把我删了**
+         * （服务端不推送这种变化），所以顺手让界面静默刷新一次好友列表。
+         */
         emit peerIsNotFriend(toUid);
+    }
+
+    setTip(QStringLiteral("消息发送失败：%1").arg(mychat::protocol::errorToTip(error)), true);
 }
 
 void ChatController::requestPull()
@@ -981,7 +1176,16 @@ void ChatController::requestPull()
 
     auto& socket = mychat::ChatSocket::instance();
     if (!socket.isLoggedIn())
+    {
+        /*
+         * 主动退出登录时 socket.reset() 不会发 linkError（它先把 m_logged_in
+         * 清掉了），兜底定时器可能还活着。让它在下一次 tick 时自己停掉，
+         * 别在登录页空转 —— 登录成功后 loginSucceeded 会重新 start。
+         */
+        if (m_fallback_pull_timer != nullptr)
+            m_fallback_pull_timer->stop();
         return; // 登录成功后会自动拉一次，这里不用嚷嚷
+    }
 
     /*
      * 条数 = min(待拉取计数, 10)：
@@ -1105,8 +1309,51 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
             continue;
         }
 
-        const QString peer = QString::number(message.fromUid);
-        ensureConversation(peer);
+        /*
+         * 群消息（2026-10-23）：
+         *   · `group = true` 时 `to_uid` 是群号，消息归属看 `group_id`；
+         *   · 服务端会把群消息**也给发送者本人写一条**离线流（api-group.md §9.2），
+         *     所以拉回来时会看到自己刚发的那条 —— 本地气泡已经在了，
+         *     直接确认、不上屏，否则每条自己发的群消息都会重复显示一遍；
+         *   · 升级前入队的群消息没有 `group_id`，没法归属：确认掉，留一条日志。
+         */
+        if (message.group && QString::number(message.fromUid) == m_self_uid)
+        {
+            qDebug() << "[chat] 跳过自己发送的群消息回显, id =" << message.id
+                << "gid =" << message.groupId;
+            ids.append(message.id);
+            continue;
+        }
+
+        if (message.group && message.groupId.isEmpty())
+        {
+            qWarning() << "[chat] 群消息缺少 group_id（升级前入队的历史消息），已确认但不上屏:"
+                << message.id;
+            ids.append(message.id);
+            continue;
+        }
+
+        /*
+         * 本机已经主动移除的群（解散 / 被移出）：
+         * 服务端解散时是「先写系统消息、再 DEL」（api-group.md §7），所以很可能
+         * 在 removeGroupConversation() 之后才拉到「该群聊已解散」——
+         * 不挡住的话 onChatMessages 会 ensureGroupConversation 把会话重新建出来。
+         */
+        if (message.group && m_removed_gids.contains(message.groupId))
+        {
+            qDebug() << "[chat] 群会话已在本地移除，忽略后续消息, gid =" << message.groupId;
+            ids.append(message.id);
+            continue;
+        }
+
+        const QString peer = message.group
+                                 ? groupKey(message.groupId)
+                                 : QString::number(message.fromUid);
+
+        if (message.group)
+            ensureGroupConversation(message.groupId);
+        else
+            ensureConversation(peer);
 
         const QString stamp = timeFromStreamId(message.id);
 
@@ -1127,6 +1374,16 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
         }
 
         touchConversation(peer, message.body, stamp);
+
+        /*
+         * 群操作的系统消息（from_uid 固定 1）：
+         *   · 界面按 system 标志渲染成居中提示；
+         *   · 抛给页面，让群成员面板在"拉人 / 踢人"后强刷一次 ——
+         *     服务端不推送成员变化，这是唯一的通知口子。
+         * 建群 / 拉人 / 踢人 / 解散各一条，正文格式见 api-group.md §9.5。
+         */
+        if (message.group && message.fromUid == 1)
+            emit groupSystemMessage(message.groupId, message.body);
 
         if (peer == m_active_uid)
         {
@@ -1224,11 +1481,162 @@ void ChatController::ensureConversation(const QString& peerUid)
     item.insert(QStringLiteral("icon"), QString());
     item.insert(QStringLiteral("desc"), QString());
     item.insert(QStringLiteral("sex"), 2);
+    item.insert(QStringLiteral("kind"), QStringLiteral("user"));
+    item.insert(QStringLiteral("gid"), QString());
     item.insert(QStringLiteral("lastText"), QString());
     item.insert(QStringLiteral("lastTime"), QString());
     item.insert(QStringLiteral("unread"), 0);
     item.insert(QStringLiteral("demo"), false);
     m_conversations.prepend(item);
+}
+
+QString ChatController::senderNameFor(const QString& uid) const
+{
+    if (uid.isEmpty())
+        return {};
+
+    // 备注优先（displayName 已经是 "nick 非空 ? nick : name"），没有就退回 uid
+    const QString name = m_friend_names.value(uid);
+    return name.isEmpty() ? uid : name;
+}
+
+void ChatController::ensureGroupConversation(const QString& gid, const QString& name)
+{
+    if (gid.isEmpty())
+        return;
+
+    const QString key = groupKey(gid);
+    const int index = indexOf(key);
+
+    if (index >= 0)
+    {
+        /*
+         * 会话已经在：只有"拿到了更好的名字"才更新。
+         * 服务端不会推群资料，群名可能来自三个地方，优先级从高到低：
+         *   · registerGroup 传入的（建群时用户自己填的）；
+         *   · 本地 groups 表里存过的；
+         *   · 「群 <gid>」占位。
+         */
+        if (name.isEmpty())
+            return;
+
+        QVariantMap item = m_conversations.at(index).toMap();
+        if (item.value(QStringLiteral("displayName")).toString() == name)
+            return;
+
+        item.insert(QStringLiteral("name"), name);
+        item.insert(QStringLiteral("displayName"), name);
+        m_conversations[index] = item;
+        if (m_active_uid == key)
+            m_active_name = name;
+        emit conversationsChanged();
+        return;
+    }
+
+    /*
+     * 新群会话：名字先看本地 groups 表（服务端没有查询接口，那是唯一来源），
+     * 再没有就占位成「群 <gid>」—— 空名字会让会话行只剩一个头像，像坏了一样。
+     */
+    QString display = name;
+    if (display.isEmpty())
+    {
+        for (const ChatStore::Group& group: m_store.groups())
+        {
+            if (group.gid == gid)
+            {
+                display = group.name;
+                break;
+            }
+        }
+    }
+    if (display.isEmpty())
+        display = QStringLiteral("群 %1").arg(gid);
+
+    QVariantMap item;
+    item.insert(QStringLiteral("uid"), key);
+    item.insert(QStringLiteral("gid"), gid);
+    item.insert(QStringLiteral("kind"), QStringLiteral("group"));
+    item.insert(QStringLiteral("name"), display);
+    item.insert(QStringLiteral("nick"), QString());
+    item.insert(QStringLiteral("displayName"), display);
+    item.insert(QStringLiteral("icon"), QString());
+    item.insert(QStringLiteral("desc"), QString());
+    item.insert(QStringLiteral("sex"), 2);
+    item.insert(QStringLiteral("lastText"), QString());
+    item.insert(QStringLiteral("lastTime"), QString());
+    item.insert(QStringLiteral("unread"), 0);
+    item.insert(QStringLiteral("demo"), false);
+    m_conversations.prepend(item);
+}
+
+void ChatController::registerGroup(const QString& gid, const QString& name, const int role)
+{
+    if (gid.isEmpty())
+    {
+        qWarning() << "[chat] registerGroup 收到空群号，已忽略";
+        return;
+    }
+
+    // 重新登记（例如被重新拉回同一个群）时解除"本地已移除"的闸
+    m_removed_gids.remove(gid);
+
+    ChatStore::Group group;
+    group.gid = gid;
+    group.name = name;
+    group.role = role;
+    group.updatedMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_store.isOpen())
+        m_store.saveGroup(group);
+
+    ensureGroupConversation(gid, name);
+
+    const QString key = groupKey(gid);
+    persistConversation(key);
+    emit conversationsChanged();
+
+    qInfo() << "[chat] 已登记群会话, gid =" << gid << "name =" << name << "role =" << role;
+}
+
+void ChatController::removeGroupConversation(const QString& gid)
+{
+    if (gid.isEmpty())
+        return;
+
+    const QString key = groupKey(gid);
+
+    /*
+     * 标记"本地已移除"：服务端的解散系统消息可能还在离线流里，
+     * 稍后拉到时要忽略，不能把会话复活（见 onChatMessages 的闸）。
+     * 即使当前列表里没有这个会话也要记 —— 系统消息一样会把它建出来。
+     */
+    m_removed_gids.insert(gid);
+
+    const int index = indexOf(key);
+    if (index < 0)
+        return;
+
+    /*
+     * 活动会话正好是这个群 → 先关掉。注意顺序：
+     * closeConversation() 会 emit activeConversationChanged，订阅方（ChatPage）
+     * 可能立刻去打开列表里的第一个会话 —— 必须在从列表里删掉它**之前**关，
+     * 否则订阅方会拿一个已经不在列表里的 uid 去 openConversation。
+     */
+    if (m_active_uid == key)
+        closeConversation();
+
+    m_conversations.removeAt(index);
+    m_history.remove(key);
+    m_history_loaded.remove(key);
+    m_history_has_more.remove(key);
+
+    // 群资料一并删掉；消息记录保留（服务端解散时也不清理任何人的记录）
+    if (m_store.isOpen())
+        m_store.removeGroup(gid);
+
+    emit conversationsChanged();
+    emit messagesChanged();
+
+    qInfo() << "[chat] 已移除群会话, gid =" << gid;
 }
 
 void ChatController::appendIncoming(const QString& peerUid, const QString& text, const QString& time)
@@ -1327,7 +1735,18 @@ int ChatController::appendMessage(const QString& peerUid, const bool from_self,
         break;
     }
 
-    m_history[peerUid].append(makeMessage(id, from_self, text, time, state, created));
+    QVariantMap item = makeMessage(id, from_self, text, time, state, created, from_uid);
+    /*
+     * 群操作系统消息（from_uid "1"）：界面按居中灰字提示渲染，不是某个人的气泡。
+     * 这里同时把 senderName 清空 —— senderNameFor("1") 会退回 "1"，
+     * 让气泡一侧莫名出现"1 说："；系统消息本来就不该有发送者名字。
+     */
+    const bool system = !from_self && isGroupKey(peerUid) && from_uid == QLatin1String("1");
+    item.insert(QStringLiteral("system"), system);
+    // 群聊气泡要显示"这条是谁说的"；自己发的 / 系统消息不需要名字
+    item.insert(QStringLiteral("senderName"),
+                (from_self || system) ? QString() : senderNameFor(from_uid));
+    m_history[peerUid].append(item);
     return id;
 }
 

@@ -19,6 +19,8 @@ Rectangle {
 
     /// 请求切到「联系人」分区（搜索框右边的「+」）
     signal addFriendRequested()
+    /// 请求打开「新建群聊」弹窗
+    signal createGroupRequested()
 
     /// 全部会话的未读之和（左侧导航条的角标用）
     readonly property int unreadTotal: {
@@ -37,6 +39,17 @@ Rectangle {
                 return true
         }
         return false
+    }
+
+    /// 会话里的群数（底部标注用：群不在好友列表里，只报好友数会显得少）
+    readonly property int groupCount: {
+        let count = 0
+        const list = ChatController.conversations
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].kind) === "group")
+                ++count
+        }
+        return count
     }
 
     /// 搜索框过滤后的会话
@@ -163,9 +176,20 @@ Rectangle {
 
             ZTextField {
                 id: convSearch
-                width: parent.width - searchAdd.width - parent.spacing
+                width: parent.width - searchAdd.width - searchGroup.width - 2 * parent.spacing
                 placeholderText: "搜索"
                 onTextChanged: pane.reloadConversations()
+            }
+
+            /*
+                新建群聊：服务端没有群列表接口（api-group.md §11.8），
+                建群是唯一能"凭空"多出一个群会话的入口，所以放在这一行最显眼处。
+            */
+            ZIconButton {
+                id: searchGroup
+                glyph: "▣"
+                tooltip: "新建群聊"
+                onClicked: pane.createGroupRequested()
             }
 
             ZIconButton {
@@ -210,6 +234,7 @@ Rectangle {
                             lastText: modelData.lastText
                             lastTime: modelData.lastTime
                             unread: Number(modelData.unread) || 0
+                            isGroup: String(modelData.kind) === "group"
                             selected: ChatController.activePeerUid === String(modelData.uid)
                             // 未知 ≠ 离线：没查到状态就不点亮
                             online: PresenceController.online[String(modelData.uid)] === true
@@ -245,6 +270,7 @@ Rectangle {
             text: pane.hasDemoConversation
                 ? "含 DEMO · 本地演示数据"
                 : "FRIENDS · " + ContactController.friendCount + " 位好友"
+                  + (pane.groupCount > 0 ? "  ·  " + pane.groupCount + " 个群" : "")
             font: Theme.fontMonoSm
             color: Theme.muted
             opacity: 0.6

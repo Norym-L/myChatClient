@@ -22,6 +22,82 @@ namespace mychat
          */
         constexpr int kMaxRemarkLength = protocol::MAX_FRIEND_REMARK_LEN;
 
+        /**
+         * 从回包 body 里取客户端请求编号 `msgid`。
+         *
+         * 服务端原样回显（字符串就回字符串、数字就回数字），所以这里不能用
+         * `toString()` 了事 —— 对数字它返回空串。缺失 / 非法 body 返回空串，
+         * 调用方据此退回"同型号 FIFO"的老认领方式。
+         */
+        QString msgIdOf(const QByteArray& body)
+        {
+            if (body.isEmpty())
+                return {};
+
+            QJsonParseError error{};
+            const QJsonDocument document = QJsonDocument::fromJson(body, &error);
+            if (error.error != QJsonParseError::NoError || !document.isObject())
+                return {};
+
+            const QJsonValue value = document.object().value(QStringLiteral("msgid"));
+            return value.isString() ? value.toString() : value.toVariant().toString();
+        }
+
+        /**
+         * 从群管理回包（1034 / 1036 / 1038 / 1040 / 1042）里取 `error`。
+         *
+         * @return std::nullopt 表示**回包里没有 error 字段**。
+         *
+         * 服务端有几处 Redis 异常会直接逃逸出处理器（`api-group.md` §4.2 / §5.2 /
+         * §7.3），那种回包只剩一个 `msgid`。它既不是成功也不能当 0 ——
+         * 必须按失败上报，否则界面会把一次没发生的事显示成做成了。
+         */
+        std::optional<int> replyErrorCode(const QByteArray& body)
+        {
+            QJsonParseError parse_error{};
+            const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+            if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+                return std::nullopt;
+
+            const QJsonValue value = document.object().value(QStringLiteral("error"));
+            // error 服务端一律写成数字；字符串形态只是兼容，别对 null 调 toInt（会得 0）
+            if (value.isDouble())
+                return value.toInt();
+            if (value.isString())
+                return value.toString().toInt();
+            return std::nullopt;
+        }
+
+        /// 从回包 body 里取一个字符串字段（缺失 / 解析失败返回空串）
+        QString stringField(const QByteArray& body, const QString& key)
+        {
+            QJsonParseError parse_error{};
+            const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+            if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+                return {};
+
+            const QJsonValue value = document.object().value(key);
+            return value.isString() ? value.toString() : value.toVariant().toString();
+        }
+
+        /**
+         * 这串东西是不是一个纯数字的 uint64 标识。
+         *
+         * 服务端所有 uid / group_id / gid 都按 uint64 解析（`uid_codec::ParseUid`
+         * → `std::from_chars` 整串匹配），一个非数字字符就会让整条请求变成 1020。
+         *
+         * 客户端里唯一会混进来的非数字标识是**群会话键** `g<gid>`
+         * （`ChatController::groupKey`）—— 那是内存与 SQLite 里的会话主键，
+         * **永远不该出现在网络层**。群号本身是 uint64（`groups.id`）。
+         * 所有出网前的校验都走这一个判断，别各写各的。
+         */
+        bool isNumericId(const QString& text)
+        {
+            bool be_valid = false;
+            text.trimmed().toULongLong(&be_valid);
+            return be_valid;
+        }
+
         /// message_id -> 名称，仅用于日志
         const char* messageIdName(const std::uint16_t id)
         {
@@ -91,6 +167,34 @@ namespace mychat
                 return "ChangeUserInfoReq";
             case protocol::MessageId::ChangeUserInfoRsp:
                 return "ChangeUserInfoRsp";
+            case protocol::MessageId::GroupCreateReq:
+                return "GroupCreateReq";
+            case protocol::MessageId::GroupCreateRsp:
+                return "GroupCreateRsp";
+            case protocol::MessageId::GroupAddMembersReq:
+                return "GroupAddMembersReq";
+            case protocol::MessageId::GroupAddMembersRsp:
+                return "GroupAddMembersRsp";
+            case protocol::MessageId::GroupKickMemberReq:
+                return "GroupKickMemberReq";
+            case protocol::MessageId::GroupKickMemberRsp:
+                return "GroupKickMemberRsp";
+            case protocol::MessageId::GroupDismissReq:
+                return "GroupDismissReq";
+            case protocol::MessageId::GroupDismissRsp:
+                return "GroupDismissRsp";
+            case protocol::MessageId::GetGroupUserInfoReq:
+                return "GetGroupUserInfoReq";
+            case protocol::MessageId::GetGroupUserInfoRsp:
+                return "GetGroupUserInfoRsp";
+            case protocol::MessageId::GetGroupInfoReq:
+                return "GetGroupInfoReq";
+            case protocol::MessageId::GetGroupInfoRsp:
+                return "GetGroupInfoRsp";
+            case protocol::MessageId::GroupInfoChangeReq:
+                return "GroupInfoChangeReq";
+            case protocol::MessageId::GroupInfoChangeRsp:
+                return "GroupInfoChangeRsp";
             }
             return "Unknown";
         }
@@ -147,8 +251,16 @@ namespace mychat
                         // 只处理到期的那一条；处理完重新起表，下一条由下一次 timeout 带走
                         PendingReply entry = m_pending.takeFirst();
 
+                        /*
+                         * 服务端保证「处理了就一定带 msgid 回包」，所以这里超时
+                         * 等于「这条请求被丢了」—— 把编号一并报出去，调用方才能
+                         * 判断该重试还是该提示（丢包时服务端不会回错误码）。
+                         */
                         qWarning() << "[chat] 等待回包超时:" << messageIdName(entry.reply_id)
-                            << "(请求" << messageIdName(entry.request_id) << ")";
+                            << "(请求" << messageIdName(entry.request_id)
+                            << ", msgid =" << entry.msgid << ")";
+
+                        emit requestTimedOut(entry.msgid, entry.request_id);
                         entry.on_timeout();
 
                         armReplyTimer();
@@ -168,17 +280,44 @@ namespace mychat
     // ── 回包超时的一致性封装 ────────────────────────────────────────────
 
     void ChatSocket::expectReply(const std::uint16_t requestId, const std::uint16_t replyId,
-                                 std::function<void()> onTimeout)
+                                 const QString& msgid, std::function<void()> onTimeout)
     {
         m_pending.append(PendingReply{
-            requestId, replyId, m_clock.elapsed() + kReplyTimeoutMs, std::move(onTimeout)
+            msgid, requestId, replyId, m_clock.elapsed() + kReplyTimeoutMs, std::move(onTimeout)
         });
         armReplyTimer();
     }
 
-    void ChatSocket::finishReply(const std::uint16_t replyId)
+    QString ChatSocket::nextMsgId()
     {
-        // FIFO：同型号的回包按发送顺序认领先发的那一条
+        /*
+         * 用 `r-`（request）而不是服务端文档示例里的 `c-`：
+         * 聊天消息的业务编号 `msg_id` 已经是 `c-<本地气泡 id>`（见 ChatController），
+         * 两套编号撞同一个前缀时，日志里 `msg_id: c-5` 与 `msgid: c-5` 会分不清。
+         */
+        return QStringLiteral("r-") + QString::number(++m_msg_seq);
+    }
+
+    void ChatSocket::finishReply(const std::uint16_t replyId, const QString& msgid)
+    {
+        /*
+         * 优先按 msgid 精确认领：这样即使同类请求并发在飞（例如连发几条心跳、
+         * 多个「查在线」），也不会出现"先回的那条把别人的账销掉"。
+         */
+        if (!msgid.isEmpty())
+        {
+            for (int i = 0; i < m_pending.size(); ++i)
+            {
+                if (m_pending.at(i).reply_id != replyId || m_pending.at(i).msgid != msgid)
+                    continue;
+
+                m_pending.removeAt(i);
+                armReplyTimer();
+                return;
+            }
+        }
+
+        // 回包没带编号（主动推送 / 老服务端）：退回同型号 FIFO，保持旧行为
         for (int i = 0; i < m_pending.size(); ++i)
         {
             if (m_pending.at(i).reply_id != replyId)
@@ -239,11 +378,13 @@ namespace mychat
         body.insert(QStringLiteral("uid"), QString::number(uid));
         body.insert(QStringLiteral("token"), token);
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::ChatLoginReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::ChatLoginReq), body);
+        if (msgid.isEmpty())
             return false;
 
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::ChatLoginReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::ChatLoginRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::ChatLoginRsp), msgid,
                     [this]()
                         {
                             emit loginFailed(static_cast<int>(protocol::ErrorCode::RequestTimeout));
@@ -263,11 +404,13 @@ bool ChatSocket::searchUser(const QString& keyword)
     QJsonObject body;
     body.insert(QStringLiteral("uid"), keyword.trimmed());
 
-    if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SearchUserReq), body))
+    const QString msgid = sendJsonWithId(
+        static_cast<std::uint16_t>(protocol::MessageId::SearchUserReq), body);
+    if (msgid.isEmpty())
         return false;
 
     expectReply(static_cast<std::uint16_t>(protocol::MessageId::SearchUserReq),
-                static_cast<std::uint16_t>(protocol::MessageId::SearchUserRsp),
+                static_cast<std::uint16_t>(protocol::MessageId::SearchUserRsp), msgid,
                 [this]()
                     {
                         emit searchUserResult(false, {},
@@ -285,11 +428,13 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
     body.insert(QStringLiteral("verify_info"), verifyInfo);
     body.insert(QStringLiteral("remark"), remark);
 
-    if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::AddFriendReq), body))
+    const QString msgid = sendJsonWithId(
+        static_cast<std::uint16_t>(protocol::MessageId::AddFriendReq), body);
+    if (msgid.isEmpty())
         return false;
 
     expectReply(static_cast<std::uint16_t>(protocol::MessageId::AddFriendReq),
-                static_cast<std::uint16_t>(protocol::MessageId::AddFriendRsp),
+                static_cast<std::uint16_t>(protocol::MessageId::AddFriendRsp), msgid,
                 [this]()
                     {
                         emit friendRequestResult(false,
@@ -303,11 +448,13 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         QJsonObject body;
         body.insert(QStringLiteral("uid"), QString::number(selfUid));
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestReq), body);
+        if (msgid.isEmpty())
             return false;
 
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::SyncFriendRequestRsp), msgid,
                     [this]()
                         {
                             emit friendRequestList(
@@ -325,11 +472,13 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
          */
         const QJsonObject body;
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListReq), body);
+        if (msgid.isEmpty())
             return false;
 
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::SyncFriendListRsp), msgid,
                     [this]()
                         {
                             emit friendListResult(
@@ -354,9 +503,8 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         if (!m_del_friend_in_flight.isEmpty())
         {
             /*
-             * 1028 没有请求序号，两次删除同时在飞时无法分辨回包属于哪一次
-             * （而且 m_pending 的超时表按型号 FIFO 认领）。界面一次只能点一个按钮，
-             * 串行完全够用 —— 直接拒掉第二条，别让它悄悄错配。
+             * 现在回包已能按 msgid 精确认领（1028 也带），并发技术上可行；
+             * 但界面一次只能点一个删除按钮，保留串行可以少一类状态交错。
              */
             qWarning() << "[chat] 上一个删除好友请求还没回包，本次丢弃:" << target;
             return false;
@@ -365,12 +513,14 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         QJsonObject body;
         body.insert(QStringLiteral("uid"), target);
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::DelFriendReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::DelFriendReq), body);
+        if (msgid.isEmpty())
             return false;
 
         m_del_friend_in_flight = target;
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::DelFriendReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::DelFriendRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::DelFriendRsp), msgid,
                     [this, target]()
                         {
                             m_del_friend_in_flight.clear();
@@ -407,24 +557,28 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
 
         if (!m_remark_uid_in_flight.isEmpty())
         {
-            // 1030 没有可用的请求序号（id 是任意类型、服务端只回显），串行才不会错配
+            // 回包已能按 msgid 认领；界面同一时刻只能改一个备注，保留串行减少交错
             qWarning() << "[chat] 上一个备注请求还没回包，本次丢弃:" << target;
             return false;
         }
 
         QJsonObject body;
-        // id 只是"回显给客户端"的标记，服务端不解析、也不用于业务；这里给个短编号便于抓包
-        body.insert(QStringLiteral("id"), QStringLiteral("r-") + target);
+        /*
+         * 2026-10-22 起 1029 不再有自己的 `id`：统一用 msgid 回显（服务端把
+         * 各处理器里单独的 id 回显删掉了）。这里不用再手工塞编号。
+         */
         body.insert(QStringLiteral("friend_uid"), target);
         body.insert(QStringLiteral("remark"), remark);
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkReq), body);
+        if (msgid.isEmpty())
             return false;
 
         m_remark_uid_in_flight = target;
         m_remark_value_in_flight = remark;
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::SetFriendRemarkRsp), msgid,
                     [this]()
                         {
                             const QString uid = m_remark_uid_in_flight;
@@ -461,12 +615,14 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         const int safe_sex = (sex == 0 || sex == 1) ? sex : 2;
 
         QJsonObject body;
-        body.insert(QStringLiteral("id"), QStringLiteral("u-") + new_name.left(16));
+        // 2026-10-22 起 1031 也不需要自己的 `id`：统一由 sendJsonWithId 注入 msgid
         body.insert(QStringLiteral("name"), new_name);
         body.insert(QStringLiteral("desc"), desc);
         body.insert(QStringLiteral("sex"), safe_sex);
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoReq), body);
+        if (msgid.isEmpty())
             return false;
 
         m_profile_in_flight = true;
@@ -474,7 +630,7 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         m_profile_desc_in_flight = desc;
         m_profile_sex_in_flight = safe_sex;
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::ChangeUserInfoRsp), msgid,
                     [this]()
                         {
                             const QString timeout_name = m_profile_name_in_flight;
@@ -491,7 +647,7 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
     }
 
     bool ChatSocket::sendTextMessage(const QString& msgId, const QString& toUid, const QString& body,
-                                     const protocol::ChatMessageType type)
+                                     const protocol::ChatMessageType type, const bool group)
     {
         const QString target = toUid.trimmed();
         const QString id = msgId.trimmed();
@@ -526,14 +682,18 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
          * 未登录就别发了：服务端 `sendTextMessageHandler` **不校验登录态**，
          * 照样会以 from_uid = 0 写进对方的离线流（api-chat.md §8.2 第 2 条）。
          * 那不是"能发"，那是往别人的消息列表里塞一条无主消息。
+         *
+         * ⚠ 群消息更糟：服务端会 `SISMEMBER chatgroup_<gid> 0`，校验不过直接
+         *   回 1022；但这一条在界面上会表现成"发送失败：你们还不是好友"，
+         *   完全看不出真实原因。所以本地先挡。
          */
         if (!isConnected() || !m_logged_in)
         {
-            qWarning() << "[chat] 未登录或未连接，消息无法发送:" << target;
+            qWarning() << "[chat] 未登录或未连接，消息无法发送:" << target << (group ? "(群)" : "");
             return false;
         }
 
-        m_text_queue.append(OutgoingText{id, target, body, type_value});
+        m_text_queue.append(OutgoingText{id, target, body, type_value, group});
         pumpTextQueue();
         return true;
     }
@@ -557,8 +717,18 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
             body.insert(QStringLiteral("to_uid"), message.to_uid);
             body.insert(QStringLiteral("type"), QString::number(message.type));
             body.insert(QStringLiteral("body"), message.body);
+            /*
+             * 群消息标记（2026-10-23）。只有 true 时才写这个字段：
+             *   · 服务端 `root["group"].asBool()`，缺省就是 false，单聊不必多发；
+             *   · 必须发 **JSON 布尔** —— `asBool()` 对非空字符串也返回真，
+             *     以后若有人图省事发 "false"，单聊会被当成群消息发出去。
+             */
+            if (message.group)
+                body.insert(QStringLiteral("group"), true);
 
-            if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgReq), body))
+            const QString msgid = sendJsonWithId(
+                static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgReq), body);
+            if (msgid.isEmpty())
             {
                 // 连接断了 / body 超过 2048：立刻按失败上报，别让队列装作还在发
                 emit textMessageResult(false,
@@ -570,7 +740,7 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
             m_text_in_flight = message;
 
             expectReply(static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgReq),
-                        static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgRsp),
+                        static_cast<std::uint16_t>(protocol::MessageId::TextChatMsgRsp), msgid,
                         [this]()
                             {
                                 // 服务端一句都没回：这条到底写没写进去，谁都说不清。
@@ -599,8 +769,8 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
 
         if (m_pull_in_flight)
         {
-            // 串行：1024 没有请求序号，并发拉取分不清哪批对哪发。
-            // 调用方（ChatController）会记下"还想再拉"，等这一批回来再补。
+            // 现在 1024 也带 msgid、技术上可并发；但拉取本身是"有积压才拉"，
+            // 并发只会重复拿同一批，保留串行更省事。
             qDebug() << "[chat] 上一个拉取还没回包，本次跳过";
             return false;
         }
@@ -610,13 +780,15 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         QJsonObject body;
         body.insert(QStringLiteral("count"), QString::number(n)); // 服务端按字符串读
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageReq), body);
+        if (msgid.isEmpty())
             return false;
 
         m_pull_in_flight = true;
 
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::SyncChatMessageRsp), msgid,
                     [this]()
                         {
                             m_pull_in_flight = false;
@@ -664,7 +836,9 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
             QJsonObject body;
             body.insert(QStringLiteral("ids"), array); // 唯一的数组字段，别写成字符串
 
-            if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageReq), body))
+            const QString msgid = sendJsonWithId(
+                static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageReq), body);
+            if (msgid.isEmpty())
             {
                 emit chatMessagesAcked(false,
                                        static_cast<int>(protocol::ErrorCode::NetworkError));
@@ -674,7 +848,7 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
             m_ack_in_flight = true;
 
             expectReply(static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageReq),
-                        static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageRsp),
+                        static_cast<std::uint16_t>(protocol::MessageId::AckChatMessageRsp), msgid,
                         [this]()
                             {
                                 m_ack_in_flight = false;
@@ -684,6 +858,372 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
                             });
             return;
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  群聊管理（1033–1042）
+    // ══════════════════════════════════════════════════════════════════
+
+    bool ChatSocket::createGroup(const QString& name, const QString& avatar,
+                                 const QString& announcement)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法创建群聊";
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次创建群聊被丢弃";
+            return false;
+        }
+
+        /*
+         * 字段名就是 `avator`（服务端 `root["avator"]`）—— 拼错的是协议，
+         * 不是笔误；发 `avatar` 会被静默忽略，群头像就永远不会写进库。
+         */
+        QJsonObject body;
+        body.insert(QStringLiteral("name"), name);
+        body.insert(QStringLiteral("avator"), avatar);
+        body.insert(QStringLiteral("announcement"), announcement);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GroupCreateReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::Create;
+        request.name = name;
+        request.avatar = avatar;
+        request.announcement = announcement;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GroupCreateReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GroupCreateRsp), msgid,
+                    [this, msgid, name]()
+                        {
+                            m_group_requests.remove(msgid);
+                            // 群没建成，没有 group id 可回
+                            emit groupCreated(false,
+                                              static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                              {}, name);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::addGroupMembers(const QString& gid, const QStringList& uids)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法拉人入群";
+            return false;
+        }
+
+        if (!isNumericId(gid) || uids.isEmpty())
+        {
+            qWarning() << "[chat] 拉人参数不合法: gid =" << gid << "成员数 =" << uids.size();
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次拉人入群被丢弃";
+            return false;
+        }
+
+        /*
+         * `members` 必须是**数组**：服务端 `!root["members"].isArray()` 直接回 1020。
+         * 元素用字符串（服务端 `member.asString()` 再解析成 uid）。
+         */
+        QJsonArray array;
+        for (const QString& uid: uids)
+            array.append(uid);
+
+        QJsonObject body;
+        body.insert(QStringLiteral("group_id"), gid);
+        body.insert(QStringLiteral("members"), array);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GroupAddMembersReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::AddMembers;
+        request.gid = gid;
+        request.members = uids;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GroupAddMembersReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GroupAddMembersRsp), msgid,
+                    [this, msgid, gid, uids]()
+                        {
+                            m_group_requests.remove(msgid);
+                            emit groupMembersAdded(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                gid, uids);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::kickGroupMember(const QString& gid, const QString& uid)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法踢人";
+            return false;
+        }
+
+        if (!isNumericId(gid) || !isNumericId(uid))
+        {
+            qWarning() << "[chat] 踢人参数不合法: gid =" << gid << "uid =" << uid;
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次踢人被丢弃";
+            return false;
+        }
+
+        QJsonObject body;
+        body.insert(QStringLiteral("group_id"), gid);
+        body.insert(QStringLiteral("uid"), uid);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GroupKickMemberReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::Kick;
+        request.gid = gid;
+        request.target_uid = uid;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GroupKickMemberReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GroupKickMemberRsp), msgid,
+                    [this, msgid, gid, uid]()
+                        {
+                            m_group_requests.remove(msgid);
+                            emit groupMemberKicked(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                gid, uid);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::dismissGroup(const QString& gid)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法解散群聊";
+            return false;
+        }
+
+        if (!isNumericId(gid))
+        {
+            qWarning() << "[chat] 解散群聊缺少合法的 group_id:" << gid;
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次解散被丢弃";
+            return false;
+        }
+
+        QJsonObject body;
+        body.insert(QStringLiteral("group_id"), gid);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GroupDismissReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::Dismiss;
+        request.gid = gid;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GroupDismissReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GroupDismissRsp), msgid,
+                    [this, msgid, gid]()
+                        {
+                            m_group_requests.remove(msgid);
+                            emit groupDismissed(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                gid);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::fetchGroupMembers(const QString& gid)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法获取群成员";
+            return false;
+        }
+
+        if (!isNumericId(gid))
+        {
+            qWarning() << "[chat] 获取群成员缺少合法的 gid:" << gid;
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次获取群成员被丢弃";
+            return false;
+        }
+
+        /*
+         * ⚠ 字段名是 `gid` —— 服务端 `root["gid"]`。
+         *   和 1035/1037/1039 的 `group_id` 不一致，这是服务端的历史包袱，
+         *   写成 group_id 会直接被判成 1020（参数非法）。
+         */
+        QJsonObject body;
+        body.insert(QStringLiteral("gid"), gid);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GetGroupUserInfoReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::FetchMembers;
+        request.gid = gid;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GetGroupUserInfoReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GetGroupUserInfoRsp), msgid,
+                    [this, msgid, gid]()
+                        {
+                            m_group_requests.remove(msgid);
+                            emit groupMembersReceived(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout),
+                                gid, {});
+                        });
+        return true;
+    }
+
+    bool ChatSocket::getGroupInfo(const QString& gid)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法获取群资料";
+            return false;
+        }
+
+        if (!isNumericId(gid))
+        {
+            qWarning() << "[chat] 获取群资料缺少合法的 gid:" << gid;
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次获取群资料被丢弃";
+            return false;
+        }
+
+        // 1043 的字段名同样是 `gid`（和 1041 一致，不是 1035/1037/1039 的 group_id）
+        QJsonObject body;
+        body.insert(QStringLiteral("gid"), gid);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GetGroupInfoReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::GetInfo;
+        request.gid = gid;
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GetGroupInfoReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GetGroupInfoRsp), msgid,
+                    [this, msgid, gid]()
+                        {
+                            m_group_requests.remove(msgid);
+                            protocol::GroupInfo info;
+                            info.gid = gid;
+                            emit groupInfoReceived(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout), info);
+                        });
+        return true;
+    }
+
+    bool ChatSocket::changeGroupInfo(const QString& gid,
+                                     const std::optional<QString>& name,
+                                     const std::optional<QString>& avatar,
+                                     const std::optional<QString>& announcement)
+    {
+        if (!isConnected() || !m_logged_in)
+        {
+            qWarning() << "[chat] 未登录或未连接，无法修改群资料";
+            return false;
+        }
+
+        if (!isNumericId(gid))
+        {
+            qWarning() << "[chat] 修改群资料缺少合法的 gid:" << gid;
+            return false;
+        }
+
+        if (m_group_requests.size() >= kMaxGroupRequestsInFlight)
+        {
+            qWarning() << "[chat] 群请求积压过多(" << m_group_requests.size()
+                << ")，本次修改群资料被丢弃";
+            return false;
+        }
+
+        /*
+         * 可选字段语义（api-group.md §10.2）：
+         *   · 不出现 = 保留原值（服务端 COALESCE）；
+         *   · 空串   = 清空头像 / 公告（群名空串会被存储过程判非法）；
+         * 所以**只有调用方给了值才写字段**，没给就别写 key。
+         */
+        QJsonObject body;
+        body.insert(QStringLiteral("gid"), gid);
+        if (name.has_value())
+            body.insert(QStringLiteral("name"), *name);
+        if (avatar.has_value())
+            body.insert(QStringLiteral("avatar"), *avatar);
+        if (announcement.has_value())
+            body.insert(QStringLiteral("announcement"), *announcement);
+
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::GroupInfoChangeReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        GroupRequest request;
+        request.kind = GroupRequest::Kind::ChangeInfo;
+        request.gid = gid;
+        request.name = name.value_or(QString());
+        request.avatar = avatar.value_or(QString());
+        request.announcement = announcement.value_or(QString());
+        m_group_requests.insert(msgid, request);
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::GroupInfoChangeReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::GroupInfoChangeRsp), msgid,
+                    [this, msgid, gid]()
+                        {
+                            m_group_requests.remove(msgid);
+                            emit groupInfoChangeResult(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout), gid);
+                        });
+        return true;
     }
 
     bool ChatSocket::authFriendRequest(const std::uint64_t requestId, const int state)
@@ -711,14 +1251,16 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
         body.insert(QStringLiteral("add_friend_request_id"), QString::number(requestId));
         body.insert(QStringLiteral("state"), QString::number(state));
 
-        if (!sendJson(static_cast<std::uint16_t>(protocol::MessageId::AuthFriendReq), body))
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::AuthFriendReq), body);
+        if (msgid.isEmpty())
             return false;
 
         m_auth_in_flight = requestId;
         m_auth_state_in_flight = state;
 
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::AuthFriendReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::AuthFriendRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::AuthFriendRsp), msgid,
                     [this]()
                         {
                             // 超时 ≠ 成功也 ≠ 失败：这条申请到底处理了没，谁都说不清。
@@ -735,20 +1277,38 @@ bool ChatSocket::sendFriendRequest(const std::uint64_t selfUid, const std::uint6
     }
 
     bool ChatSocket::sendHeartbeat()
-{
-    if (!isConnected() || !m_logged_in)
     {
-        // 未登录/已断开时静默跳过：这时候发心跳没有任何意义，也不该刷警告
-        return false;
-    }
+        if (!isConnected() || !m_logged_in)
+        {
+            // 未登录/已断开时静默跳过：这时候发心跳没有任何意义，也不该刷警告
+            return false;
+        }
 
-    // 服务端 heartbeatHandler 整个忽略了 message_data，规格也是"不带数据"，
-    // 所以这里发 body_len = 0 的空帧。
-    // （实测过：体长 0 与 "{}" 服务端都正常回 HeartBeatRsp —— 服务端拆帧在
-    //   message_len == 0 时会走 AsyncReadBody(0)，那条路是通的，
-    //   用裸 socket 探过两个 ChatServer 实例。）
-    return sendFrame(static_cast<std::uint16_t>(protocol::MessageId::HeartBeatReq), {});
-}
+        /*
+         * 2026-10-22 起心跳也走 `HANDLER_PREFIX`，回包会**原样回显 msgid**。
+         *
+         * 所以不能再发 0 长度 body：服务端解析不出 msgid，回包里就是 null，
+         * 这条心跳丢没丢也就无从判断。改发只带编号的最小对象（服务端不读其它字段）。
+         */
+        const QJsonObject body;
+        const QString msgid = sendJsonWithId(
+            static_cast<std::uint16_t>(protocol::MessageId::HeartBeatReq), body);
+        if (msgid.isEmpty())
+            return false;
+
+        expectReply(static_cast<std::uint16_t>(protocol::MessageId::HeartBeatReq),
+                    static_cast<std::uint16_t>(protocol::MessageId::HeartBeatRsp), msgid,
+                    [this]()
+                        {
+                            /*
+                             * 心跳超时基本等于这一帧被服务端丢了（队列满时 try_send 失败）。
+                             * 不重连、不重发：下个周期还会发，重连反而会把正常会话打断。
+                             */
+                            emit heartbeatResult(
+                                false, static_cast<int>(protocol::ErrorCode::RequestTimeout));
+                        });
+        return true;
+    }
 
 bool ChatSocket::checkUserOnline(const QString& uid)
 {
@@ -757,6 +1317,20 @@ bool ChatSocket::checkUserOnline(const QString& uid)
         qWarning() << "[chat] 查在线的 uid 为空，请求被丢弃";
         return false;
     }
+
+    /*
+     * 必须是**纯数字**的 uint64：服务端 `checkIsUserOnlineHandler`
+     * （chatServer/LogicSystem.cpp:617）用 `uid_codec::ParseUid()` 解析，
+     * 底层 `std::from_chars` 是整串匹配 —— 任何非数字字符都会直接回 1020。
+     * 客户端里唯一会混进来的非数字标识是群会话键 `g<gid>`，它只该活在本地。
+     */
+    if (!isNumericId(uid))
+    {
+        qWarning() << "[chat] 查在线的 uid 不是纯数字，请求被丢弃:" << uid
+            << "（群会话键 g<gid> 不能当 uid 发出去）";
+        return false;
+    }
+
     if (!isConnected() || !m_logged_in)
     {
         qWarning() << "[chat] 未登录，无法查询在线状态:" << uid;
@@ -784,17 +1358,22 @@ void ChatSocket::pumpOnlineQueue()
     QJsonObject body;
     body.insert(QStringLiteral("uid"), uid);
 
-    if (sendJson(static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineReq), body))
+    const QString msgid = sendJsonWithId(
+        static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineReq), body);
+    if (!msgid.isEmpty())
     {
         m_online_in_flight = uid;
 
         /*
-         * 查在线是**串行**的（回包不带 uid，没法配对）。这一条超时如果不兜住，
-         * 队列就永久卡住 —— 表现出来是"在线状态的小点再也不更新了"，而且完全静默。
-         * 这里不发 userOnlineResult：状态仍旧未知，重排队尾再试一次比谎报离线诚实。
+         * 回包本身不带 uid，但带 msgid，理论上可以并发查多个人了；这里仍保持串行：
+         * 在线状态是"顺带刷新"的低优先级信息，串行足以覆盖界面上的几十个好友。
+         *
+         * 这一条超时如果不兜住，队列就永久卡住 —— 表现出来是"在线状态的小点再也
+         * 不更新了"，而且完全静默。这里不发 userOnlineResult：状态仍旧未知，
+         * 重排队尾再试一次比谎报离线诚实。
          */
         expectReply(static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineReq),
-                    static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineRsp),
+                    static_cast<std::uint16_t>(protocol::MessageId::CheckIsUserOnlineRsp), msgid,
                     [this]()
                         {
                             m_online_in_flight.clear();
@@ -832,6 +1411,8 @@ void ChatSocket::reset()
         m_profile_in_flight = false;
         m_profile_name_in_flight.clear();
         m_profile_desc_in_flight.clear();
+        // 群管理：按 msgid 存的上下文在断线后不可能再有回包，直接清空
+        m_group_requests.clear();
 
         /*
          * 消息队列同理：连接都没了，排队中的消息不可能再发出去。
@@ -876,6 +1457,9 @@ void ChatSocket::reset()
         m_pull_in_flight = false;
         m_ack_queue.clear();
         m_ack_in_flight = false;
+        // 群管理：断线后这些请求不可能再有回包（超时回调也被 clearPendingReplies 清掉了），
+        // 不清就会一直占着 kMaxGroupRequestsInFlight 的名额
+        m_group_requests.clear();
 
         const bool was_logged_in = m_logged_in;
         m_logged_in = false;
@@ -956,9 +1540,12 @@ void ChatSocket::reset()
         /*
          * 回包到了先把「等回包」这笔账销掉 —— 统一在这里做，而不是分散到各个 handler
          * 里：那样每加一条新消息都得记得补一行，漏一次就是一次"界面永远转圈"。
-         * 服务端主动推的那两帧（1009 / 1012）不在登记表里，查不到就自然无事发生。
+         * 服务端主动推的那三帧（1009 / 1012 / 1022）不带 msgid，查不到就自然无事发生。
+         *
+         * 从 2026-10-22 起回包都带 msgid，认领改为**按编号精确匹配**；
+         * 这样同类请求并发在飞时也不会互相销账。
          */
-        finishReply(message_id);
+        finishReply(message_id, msgIdOf(body));
 
         switch (static_cast<protocol::MessageId>(message_id))
     {
@@ -1012,6 +1599,27 @@ void ChatSocket::reset()
             break;
         case protocol::MessageId::ChangeUserInfoRsp:
             handleChangeUserInfoResponse(body);
+            break;
+        case protocol::MessageId::GroupCreateRsp:
+            handleGroupCreateResponse(body);
+            break;
+        case protocol::MessageId::GroupAddMembersRsp:
+            handleGroupAddMembersResponse(body);
+            break;
+        case protocol::MessageId::GroupKickMemberRsp:
+            handleGroupKickMemberResponse(body);
+            break;
+        case protocol::MessageId::GroupDismissRsp:
+            handleGroupDismissResponse(body);
+            break;
+        case protocol::MessageId::GetGroupUserInfoRsp:
+            handleGroupMembersResponse(body);
+            break;
+        case protocol::MessageId::GetGroupInfoRsp:
+            handleGroupInfoResponse(body);
+            break;
+        case protocol::MessageId::GroupInfoChangeRsp:
+            handleGroupInfoChangeResponse(body);
             break;
         default:
             // 其余业务消息按阶段推进逐个接入；未知编号丢弃但不断开连接。
@@ -1714,16 +2322,295 @@ void ChatSocket::reset()
         pumpAckQueue();
     }
 
-    bool ChatSocket::sendJson(const std::uint16_t message_id, const QJsonObject& body)
+    ChatSocket::GroupRequest ChatSocket::takeGroupRequest(const QByteArray& body)
+    {
+        const QString msgid = msgIdOf(body);
+
+        if (!msgid.isEmpty())
+        {
+            const auto it = m_group_requests.constFind(msgid);
+            if (it != m_group_requests.constEnd())
+                return m_group_requests.take(msgid);
+        }
+
+        /*
+         * 回包没带编号（老服务端 / 服务端某条异常路径）：
+         * 只有一条在飞时它必然就是这条，直接认领 —— 和 m_pending 的 FIFO 兜底同理。
+         */
+        if (m_group_requests.size() == 1)
+        {
+            qDebug() << "[chat] 群回包缺少可用的 msgid，按唯一在飞请求认领";
+            const QString only_key = m_group_requests.constBegin().key();
+            return m_group_requests.take(only_key);
+        }
+
+        qWarning() << "[chat] 群回包无法匹配请求上下文, msgid =" << msgid
+            << "在飞条数 =" << m_group_requests.size();
+        return {};
+    }
+
+    void ChatSocket::handleGroupCreateResponse(const QByteArray& body)
+    {
+        // 1034：{"error":0,"msgid":"r-3","group_id":"20001"} —— 唯一回带 group id 的群回包
+        // 按 msgid 取回请求侧上下文；回包不带编号时退回"唯一在飞的那条"
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            /*
+             * 没有 error 字段：服务端把群主写进 Redis 时抛了异常（§4.2 最后一条）。
+             * MySQL 里可能已经建好了群，但客户端拿不到 group_id，只能当失败 ——
+             * 界面上让用户重试，比假装成功、然后收到一个"群里没人"要诚实。
+             */
+            qWarning() << "[chat] 创建群聊回包缺少 error 字段（服务端异常逃逸），按失败处理";
+            emit groupCreated(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                              {}, request.name);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 创建群聊失败, error =" << *error;
+            emit groupCreated(false, *error, {}, request.name);
+            return;
+        }
+
+        const QString gid = stringField(body, QStringLiteral("group_id"));
+        if (gid.isEmpty())
+        {
+            // 成功却没有 group_id：后续拉人 / 发消息都没法进行，同样只能算失败
+            qWarning() << "[chat] 创建群聊成功但回包没有 group_id";
+            emit groupCreated(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                              {}, request.name);
+            return;
+        }
+
+        qInfo() << "[chat] 群聊已创建, group_id =" << gid << "name =" << request.name;
+        emit groupCreated(true, *error, gid, request.name);
+    }
+
+    void ChatSocket::handleGroupAddMembersResponse(const QByteArray& body)
+    {
+        // 1036：{"error":0,"msgid":"r-4"} —— 不回传入群名单
+        // 按 msgid 取回请求侧上下文；回包不带编号时退回"唯一在飞的那条"
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            qWarning() << "[chat] 拉人入群回包缺少 error 字段（空成员列表触发 Redis 异常），按失败处理";
+            emit groupMembersAdded(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                   request.gid, request.members);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            qWarning() << "[chat] 拉人入群失败, gid =" << request.gid << "error =" << *error;
+            emit groupMembersAdded(false, *error, request.gid, request.members);
+            return;
+        }
+
+        qInfo() << "[chat] 拉人入群成功, gid =" << request.gid
+            << "提交" << request.members.size() << "人";
+        emit groupMembersAdded(true, *error, request.gid, request.members);
+    }
+
+    void ChatSocket::handleGroupKickMemberResponse(const QByteArray& body)
+    {
+        // 1038：{"error":0,"msgid":"r-5"}
+        // 按 msgid 取回请求侧上下文；回包不带编号时退回"唯一在飞的那条"
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            qWarning() << "[chat] 踢人回包缺少 error 字段，按失败处理";
+            emit groupMemberKicked(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                   request.gid, request.target_uid);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 1014 在这里表示"目标用户不在群内"，不是"用户不存在"
+            qWarning() << "[chat] 踢人失败, gid =" << request.gid
+                << "uid =" << request.target_uid << "error =" << *error;
+            emit groupMemberKicked(false, *error, request.gid, request.target_uid);
+            return;
+        }
+
+        qInfo() << "[chat] 已踢出成员, gid =" << request.gid << "uid =" << request.target_uid;
+        emit groupMemberKicked(true, *error, request.gid, request.target_uid);
+    }
+
+    void ChatSocket::handleGroupDismissResponse(const QByteArray& body)
+    {
+        // 1040：{"error":0,"msgid":"r-6"}
+        // 按 msgid 取回请求侧上下文；回包不带编号时退回"唯一在飞的那条"
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            qWarning() << "[chat] 解散群聊回包缺少 error 字段（DEL 失败逃逸），按失败处理";
+            emit groupDismissed(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                request.gid);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // ⚠ 群不存在时服务端回的是 1013 而不是 1023（§7.3），文案别只写"服务器不可用"
+            qWarning() << "[chat] 解散群聊失败, gid =" << request.gid << "error =" << *error;
+            emit groupDismissed(false, *error, request.gid);
+            return;
+        }
+
+        qInfo() << "[chat] 群聊已解散, gid =" << request.gid;
+        emit groupDismissed(true, *error, request.gid);
+    }
+
+    void ChatSocket::handleGroupMembersResponse(const QByteArray& body)
+    {
+        // 1042：{"error":0,"msgid":"r-7","mb_infos":[...]}
+        // 按 msgid 取回请求侧上下文；回包不带编号时退回"唯一在飞的那条"
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            qWarning() << "[chat] 群成员回包缺少 error 字段，按失败处理";
+            emit groupMembersReceived(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                      request.gid, {});
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            /*
+             * 1024 有两个意思（§8.2）：我不在群里，**或者 Redis 成员集合丢了**。
+             * 后者在服务端重启 / 清库后很常见，界面上只能提示"权限不足"。
+             */
+            qWarning() << "[chat] 获取群成员失败, gid =" << request.gid << "error =" << *error;
+            emit groupMembersReceived(false, *error, request.gid, {});
+            return;
+        }
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        const QList<protocol::GroupMember> members =
+            parse_error.error == QJsonParseError::NoError && document.isObject()
+                ? protocol::parseGroupMembers(document.object())
+                : QList<protocol::GroupMember>{};
+
+        qInfo() << "[chat] 群成员已获取, gid =" << request.gid << "人数 =" << members.size();
+        emit groupMembersReceived(true, *error, request.gid, members);
+    }
+
+    void ChatSocket::handleGroupInfoResponse(const QByteArray& body)
+    {
+        // 1044：{"error":0,"msgid":"r-8","name":"...","avatar":"","owner_uid":"...",...}
+        const GroupRequest request = takeGroupRequest(body);
+
+        protocol::GroupInfo info;
+        info.gid = request.gid; // 1044 不回群号，用请求上下文补
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            qWarning() << "[chat] 群资料回包缺少 error 字段，按失败处理";
+            emit groupInfoReceived(false, static_cast<int>(protocol::ErrorCode::JsonError), info);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 1023 = 群不存在；1013 = 数据库不可用；1020 = gid 非法
+            qWarning() << "[chat] 获取群资料失败, gid =" << request.gid << "error =" << *error;
+            emit groupInfoReceived(false, *error, info);
+            return;
+        }
+
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 群资料回包 JSON 解析失败:" << parse_error.errorString();
+            emit groupInfoReceived(false, static_cast<int>(protocol::ErrorCode::JsonError), info);
+            return;
+        }
+
+        const protocol::GroupInfo parsed = protocol::parseGroupInfo(document.object());
+        info = parsed;
+        info.gid = request.gid;
+        if (!info.valid)
+        {
+            // 成功回包却没有群名：服务端 group.name 是 NOT NULL，正常不会发生
+            qWarning() << "[chat] 群资料回包缺少 name，按失败处理";
+            emit groupInfoReceived(false, static_cast<int>(protocol::ErrorCode::JsonError), info);
+            return;
+        }
+
+        qInfo() << "[chat] 群资料已获取, gid =" << info.gid << "name =" << info.name
+            << "成员数 =" << info.memberCount;
+        emit groupInfoReceived(true, *error, info);
+    }
+
+    void ChatSocket::handleGroupInfoChangeResponse(const QByteArray& body)
+    {
+        // 1046：{"error":0,"msgid":"r-9"} —— 只回 error，不回新资料
+        const GroupRequest request = takeGroupRequest(body);
+
+        const std::optional<int> error = replyErrorCode(body);
+        if (!error.has_value())
+        {
+            /*
+             * 存储过程 -10 / -11（数据库异常）时处理器直接 co_return，
+             * 回包只有 msgid（api-group.md §10.3）。客户端必须当失败，
+             * 不能因为"没有 error 就当成功"把界面骗过去。
+             */
+            qWarning() << "[chat] 修改群资料回包缺少 error 字段（数据库异常），按失败处理";
+            emit groupInfoChangeResult(false, static_cast<int>(protocol::ErrorCode::JsonError),
+                                       request.gid);
+            return;
+        }
+
+        if (*error != static_cast<int>(protocol::ErrorCode::Success))
+        {
+            // 1020 = 群名为空串 / gid 非法；1023 = 群不存在；1024 = 不是群主或管理员
+            qWarning() << "[chat] 修改群资料失败, gid =" << request.gid << "error =" << *error;
+            emit groupInfoChangeResult(false, *error, request.gid);
+            return;
+        }
+
+        qInfo() << "[chat] 群资料已修改, gid =" << request.gid;
+        emit groupInfoChangeResult(true, *error, request.gid);
+    }
+
+    QString ChatSocket::sendJsonWithId(const std::uint16_t message_id, const QJsonObject& body)
     {
         if (!isConnected())
         {
             qWarning() << "[chat] 未连接，消息被丢弃:" << messageIdName(message_id);
-            return false;
+            return {};
         }
 
-        const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
-        return sendFrame(message_id, payload);
+        /*
+         * 统一注入请求编号：服务端在所有响应里原样回显（缺失时为 null），
+         * 客户端靠它把回包和请求对上号、并判断哪条请求被服务端丢了。
+         */
+        const QString msgid = nextMsgId();
+
+        QJsonObject payload_body = body;
+        payload_body.insert(QStringLiteral("msgid"), msgid);
+
+        const QByteArray payload = QJsonDocument(payload_body).toJson(QJsonDocument::Compact);
+        if (!sendFrame(message_id, payload))
+            return {};
+
+        return msgid;
     }
 
     bool ChatSocket::sendFrame(const std::uint16_t message_id, const QByteArray& payload)

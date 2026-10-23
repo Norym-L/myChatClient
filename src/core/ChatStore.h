@@ -25,7 +25,12 @@
  *   messages(id INTEGER PK AUTOINCREMENT, peer_uid, from_self, from_uid, body,
  *            type, created_ms, server_id TEXT NOT NULL DEFAULT '', state)
  *     + 部分唯一索引 `UNIQUE(server_id) WHERE server_id <> ''`
- *   conversations(peer_uid PK, last_text, last_time, last_ms, unread, updated_ms)
+ *   conversations(peer_uid PK, last_text, last_time, last_ms, unread, updated_ms, kind)
+ *   groups(gid PK, name, icon, announcement, role, updated_ms)
+ *
+ * ⚠ 群会话的 `peer_uid` 存的是 **`g<gid>`**（如 `g20001`），不是裸群号：
+ *   群 id 和用户 uid 都是数字，来自两张表、可能撞号（群 20001 vs 用户 20001），
+ *   不加前缀就会串会话。`kind` 列区分 user / group。
  *
  * ⚠ `server_id` 的唯一索引是**跨会话去重的兜底**：服务端 PEL 会重投未确认的消息，
  *   进程重启后内存里去重表已经没了，只有数据库能挡住重复插入。
@@ -55,11 +60,32 @@ public:
     /// 会话摘要（列表用）
     struct Conversation
     {
+        /// 会话键：单聊是 uid，群聊是 `g<gid>`（见文件头说明）
         QString peerUid;
         QString lastText;
         QString lastTime;
         qint64 lastMs = 0;
         int unread = 0;
+        qint64 updatedMs = 0;
+        /// "user"（默认）/ "group"：重启后回填会话列表时靠它区分是不是群
+        QString kind = QStringLiteral("user");
+    };
+
+    /**
+     * 群资料（`groups` 表）。
+     *
+     * 为什么必须本地存：服务端**没有群资料查询接口**（`api-group.md` §11.8），
+     * 群名 / 头像 / 公告只在创建（1033）时提交过一次，之后再也要不回来。
+     * 本机这份是唯一来源；换设备 / 清库后只能显示「群 <gid>」。
+     */
+    struct Group
+    {
+        QString gid;
+        QString name;
+        QString icon;
+        QString announcement;
+        /// 我的角色：2 群主 / 1 管理员 / 0 成员（1042 才知道；创建群的人固定是 2）
+        int role = 0;
         qint64 updatedMs = 0;
     };
 
@@ -91,6 +117,13 @@ public:
     [[nodiscard]] QList<Conversation> conversations(int limit = 200) const;
     bool saveConversation(const Conversation& row);
     bool markConversationRead(const QString& peerUid);
+
+    /// 全部群资料（重启后回填群会话名用）
+    [[nodiscard]] QList<Group> groups() const;
+    /// 新增 / 更新一个群（按 gid upsert）
+    bool saveGroup(const Group& row);
+    /// 删掉一个群（解散 / 被移出后）
+    bool removeGroup(const QString& gid);
 
     /// 某个会话最近 \a limit 条消息（按时间正序返回）
     [[nodiscard]] QList<Message> recentMessages(const QString& peerUid, int limit = 200) const;
@@ -142,6 +175,8 @@ public:
 private:
     bool openDatabase(const QString& filePath);
     bool ensureSchema();
+    /// \a table 里有没有 \a column（schema 迁移用；`PRAGMA table_info`）
+    [[nodiscard]] bool hasColumn(const QString& table, const QString& column) const;
 
     QSqlDatabase m_db;
     QString m_path;

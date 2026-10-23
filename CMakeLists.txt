@@ -117,6 +117,8 @@ add_library(qtclient_core STATIC
         src/ChatController.cpp
         src/ContactController.h
         src/ContactController.cpp
+        src/GroupController.h
+        src/GroupController.cpp
         src/LoginController.h
         src/LoginController.cpp
         src/PresenceController.h
@@ -207,6 +209,16 @@ qt_add_executable(qtClientChatPullTest
 
 target_link_libraries(qtClientChatPullTest PRIVATE qtclient_core)
 
+# ── 兜底拉取自检（自带假 ChatServer）────────────────────────────────
+# 服务端推送链路可能静默失效（1022 丢了 / 在线状态与会话映射不一致）：
+# 登录后每 30s 主动拉一次，保证最坏情况也只晚一个周期看到消息。
+# 自检用 MYCHAT_FALLBACK_PULL_MS 把周期缩短到 400ms，不会真的等 30s。
+qt_add_executable(qtClientFallbackPullTest
+        tests/fallbackpull.cpp
+)
+
+target_link_libraries(qtClientFallbackPullTest PRIVATE qtclient_core)
+
 # ── 本地聊天记录自检（SQLite，不需要服务端）──────────────────────────
 # 服务端确认即删除，本地库是唯一的历史来源：落盘 / 去重 / 崩溃态恢复必须钉住。
 qt_add_executable(qtClientChatStoreTest
@@ -233,6 +245,36 @@ qt_add_executable(qtClientProfileEditTest
 )
 
 target_link_libraries(qtClientProfileEditTest PRIVATE qtclient_core)
+
+# ── 群聊自检（自带假 ChatServer，不需要服务端）──────────────────────
+# 服务端 2026-10-23 新增 1033–1042 与群消息（1013 的 group 布尔 / 1024 的 group_id）：
+# 这里钉住字段名（avator / gid）、members 必须是数组、group 必须是 JSON 布尔、
+# 群会话键 g<gid>、syncFriends 不删群会话、自己的群消息回显要丢弃但仍 ACK。
+# 真实服务端上建群会留下脏数据，而且服务端的"群消息回显"没法稳定复现。
+qt_add_executable(qtClientGroupTest
+        tests/groupflow.cpp
+)
+
+target_link_libraries(qtClientGroupTest PRIVATE qtclient_core)
+
+# ── 群资料自检（自带假 ChatServer，不需要服务端）────────────────────
+# 服务端 2026-10-23（7338a5c）新增 1043–1046：群资料获取 / 修改。
+# 这里钉住：1043 只发 gid、1044 的字符串数字、1045 的可选字段语义
+# （缺省=保留、空串=清空）、1046 成功后强制重拉、1046 缺 error 按失败。
+qt_add_executable(qtClientGroupInfoTest
+        tests/groupinfo.cpp
+)
+
+target_link_libraries(qtClientGroupInfoTest PRIVATE qtclient_core)
+
+# ── 请求编号 / 丢包识别自检（自带假 ChatServer，不需要服务端）──────────# 服务端 2026-10-22 起所有回包都回显 msgid；而消息队列满时会静默丢帧。
+# 这里验证：请求带编号、回包按编号认领、不回包时报出的编号对得上、
+# 以及回包不带编号时仍能 FIFO 兜底。
+qt_add_executable(qtClientMsgIdDropTest
+        tests/msgiddrop.cpp
+)
+
+target_link_libraries(qtClientMsgIdDropTest PRIVATE qtclient_core)
 
 # ── 账号切换自检（需要真实服务端 + 两个账号）──────────────────────────
 # 同一进程「登录 A → 退出 → 登录 B」，验证不会残留 A 的会话
@@ -262,10 +304,14 @@ if (WIN32)
     set_target_properties(qtClientSocketTimeoutTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatMsgTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatPullTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientFallbackPullTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientChatStoreTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientFriendDeleteTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientMsgIdDropTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientAccountSwitchTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientAccountPickerTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientGroupTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientGroupInfoTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

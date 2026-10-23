@@ -9,7 +9,8 @@
 | `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                                                                                                                                   | 登录成功则切到聊天页                    |
 | `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset` / `Chat`，大小写不敏感                                                                                                 | —                                       |
 | `MYCHAT_SEARCH=<关键字>`            | 进聊天页后自动发起一次用户搜索（切到「联系人」分区）                                                                                                                     | —                                       |
-| `MYCHAT_OPENDLG=<模式>`             | 进聊天页后自动打开「用户资料」弹窗或某个视图（`other` / `self` / `selfedit` / `sendfriend[:uid]` / `applylist` / `applyreceived` / `applysent` / `session[:uid]`），见下 | —                                       |
+| `MYCHAT_OPENDLG=<模式>`             | 进聊天页后自动打开「用户资料」弹窗或某个视图（`other` / `self` / `selfedit` / `sendfriend[:uid]` / `applylist` / `applyreceived` / `applysent` / `session[:uid]` / `creategroup` / `groupmembers`），见下 | —                                       |
+| `MYCHAT_GROUPCREATE=<群名>:<uid,...>` | 进聊天页后自动建群（真实的 1033 → 1035 链路，成员可省略），用来验证群会话 / 群消息                                                                                     | —                                       |
 | `MYCHAT_SENDMSG=<文本>`             | 进聊天页后替用户发一条消息（走真实的 输入框 → ChatController → 本地回显 链路），见下                                                                                     | —                                       |
 | `MYCHAT_AUTHAPPLY=<accept\|refuse>` | 进聊天页后切到「好友申请」，挑一条「收到 + 待处理」的申请，打开资料卡并替用户点「接受 / 拒绝」，见下                                                                     | —                                       |
 | `MYCHAT_THEME=<light\|dark>`        | 启动前把主题存档改掉，等价于用户点左下角的「浅色 / 暗色」，见下                                                                                                          | —                                       |
@@ -328,6 +329,38 @@ MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_OPENDLG=self MYCHAT_SMOKE=... ./qtCl
 
 而且就算能加载，那条路走的也是 **文件路径**，跟 exe 真实走的 `qrc:/qml` 是两套
 解析机制。放到 exe 内部抓图，验证的才是真正会出问题的那条路径。
+
+## 验证群聊（服务端 2026-10-23 起）
+
+服务端**没有群列表接口**，探针也不知道群号 —— 群号来自创建回包，或者从拉取到的
+群消息里读。建群存储过程已在服务端 `df647ad` 修正（`CALL create_group(...)`），
+现在 `MYCHAT_GROUPCREATE` 能直接建群；下面的"手工造群"仍适合测老数据 / 不依赖建群。
+
+```bash
+# ① 造一个群（gid=1），并把成员写进 Redis 成员集合
+mysql -h 127.0.0.1 -P 3308 -u root -p chatserver \
+  -e "CALL create_group('自检群','',666672,500,'',@gid,@res); SELECT @gid,@res;"
+redis-cli -p 6380 -a 123456 SADD chatgroup_1 666672 666673
+
+# ② 以成员 B 的身份发一条群消息
+"$PY" tools/probe-group.py 666673 Test@12345 send 1 "来自 B 的群消息"
+
+# ③ 客户端登录成 A，打开群会话（会看到「群 1」自动建出来）
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_OPENDLG=session:g1 \
+MYCHAT_SMOKE=.../group-recv.png MYCHAT_SMOKE_DELAY=4500 ./qtClient.exe
+
+# ④ 客户端发一条群消息，再用 B 确认收到（1013 带 "group":true，to_uid=群号）
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_OPENDLG=session:g1 \
+MYCHAT_SENDMSG="客户端发的群消息" MYCHAT_SMOKE=.../group-send.png ./qtClient.exe
+"$PY" tools/probe-group.py 666673 Test@12345 pull
+```
+
+群成员面板：`MYCHAT_OPENDLG=groupmembers`（自动打开列表里的第一个群）。
+客户端侧的正常路径是 `MYCHAT_GROUPCREATE="群名:uid"`（服务端已修存储过程，可直接用）。
+
+群操作系统消息（建群 / 拉人 / 踢人 / 解散，`from_uid=1`）会在消息流里显示成居中灰字；
+用两个账号建群 / 拉人 / 踢人即可触发，或直接往某个 uid 的离线流里塞一条 1024 系统消息
+（`probe-group.py` 可扩展一个 `push` 子命令）。
 
 ## 注意
 

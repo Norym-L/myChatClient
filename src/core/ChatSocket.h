@@ -3,6 +3,7 @@
 #include <QAbstractSocket>
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -158,7 +159,7 @@ namespace mychat
         bool checkUserOnline(const QString& uid);
 
         /**
-         * 发送一条单聊消息（message_id = TextChatMsgReq 1013）。
+         * 发送一条消息（message_id = TextChatMsgReq 1013）。
          *
          * 请求体：`{ "msg_id": "...", "to_uid": "...", "type": "1", "body": "..." }`
          * （四个字段服务端都按**字符串**读；`from_uid` 由服务端从会话里取）。
@@ -167,6 +168,12 @@ namespace mychat
          *
          * @param msgId 客户端生成的消息标识，**必填**。服务端不解析、只回显；
          *              缺失时回显空串，那条回执就再也认不回来了。
+         * @param group 群消息标记（2026-10-23 起的 `group` 字段）。
+         *              true 时 `toUid` 传的是**群 id**，服务端改校验
+         *              `SISMEMBER chatgroup_<gid> <自己>`，不再校验好友。
+         *              ⚠ 必须发 JSON **布尔** —— 服务端用 `asBool()`，
+         *                传字符串 "true"/"1" 也能过，但传 `"false"` 同样为真，
+         *                以后想改回单聊就会踩雷。
          *
          * ⚠ 内部仍然**串行发送**：上一条没回包之前，后续消息先排队。
          *   原因不在业务层（业务层已经有 msg_id），而在 \l m_pending 超时表 ——
@@ -178,7 +185,8 @@ namespace mychat
          *         false = 根本没发（未登录 / 未连接 / 参数非法 / msgId 为空 / body 超长）
          */
         bool sendTextMessage(const QString& msgId, const QString& toUid, const QString& body,
-                             protocol::ChatMessageType type = protocol::ChatMessageType::Text);
+                             protocol::ChatMessageType type = protocol::ChatMessageType::Text,
+                             bool group = false);
 
         /**
          * 拉取消息（message_id = SyncChatMessageReq 1023）。
@@ -202,6 +210,124 @@ namespace mychat
          * 服务端执行 `XACK + XDEL` —— **确认后消息即被删除，不能再次拉取**。
          */
         bool ackChatMessages(const QStringList& ids);
+
+        // ══════════════════════════════════════════════════════════════
+        //  群聊管理（2026-10-23 服务端 1033–1042）
+        //
+        //  这一组接口有两个共同的协议特点，写在这里一次说清：
+        //    · 回包**只有 error**（1034 例外，带 group_id）—— 群 id / 成员
+        //      只能靠请求侧记下来再拼回信号，和 1029/1031 是同一种处理；
+        //    · 服务端**不校验**权限 / 群是否存在，全部交给存储过程，
+        //      返回负值再映射成 1023/1024/1013（见 api-group.md §4–§8）。
+        //
+        //  ⚠ 回包**不带群 id**，所以"这一发是给哪个群"必须靠请求侧记下来
+        //     （\l m_group_requests，按 msgid 存）。2026-10-22 起服务端回显
+        //     msgid，因此允许多条群请求并发；但界面本来就一次点一个按钮，
+        //     真正的并发只会来自"建群刚回 + 用户立刻打开成员面板"这种时序。
+        // ══════════════════════════════════════════════════════════════
+
+        /**
+         * 创建群聊（1033）。
+         *
+         * 请求体 `{ "name": "...", "avator": "...", "announcement": "..." }`。
+         * `avator` 的**拼写就是错的**，服务端只认它，发 `avatar` 会被静默忽略。
+         *
+         * 群主固定是当前会话 uid（请求里不传）；`max_members` 服务端硬编码 500。
+         * 新群**只有群主一个人** —— 初始成员要另发 \l addGroupMembers。
+         * 成功后服务端会给群主写一条系统消息「群聊 &lt;gid&gt; 已创建」并推 1022。
+         *
+         * @return true = 已发出（结果看 \l groupCreated，成功时带回新群 id）
+         */
+        bool createGroup(const QString& name, const QString& avatar, const QString& announcement);
+
+        /**
+         * 拉人入群（1035）。
+         *
+         * 请求体 `{ "group_id": "...", "members": ["10002", ...] }`。
+         * 服务端逐个调存储过程，**没有事务**：中途失败时前面的成员已经进库了。
+         * 已经在群里的成员会被跳过（存储过程 -3），不算失败。
+         * 成功后给**所有成员（含新成员）**写系统消息「邀请了 N 个好友」并推 1022。
+         *
+         * ⚠ 如果本次**一个都没加进去**（全在群里 / 空数组），服务端仍会用空数组
+         *   调 `SADD`，Redis 报错后异常逃逸 → 回包**只有 msgid、没有 error**。
+         *   这种回包在客户端表现为超时（5s 后 \l RequestTimeout），不是成功。
+         *
+         * @return true = 已发出（结果看 \l groupMembersAdded）
+         */
+        bool addGroupMembers(const QString& gid, const QStringList& uids);
+
+        /**
+         * 踢人（1037）。
+         *
+         * 请求体 `{ "group_id": "...", "uid": "<被踢者>" }`。
+         * 只有群主 / 管理员能踢；不能踢群主、管理员之间不能互踢。
+         * 成功时服务端**先**给所有成员（含被踢者）写系统消息「踢出了 &lt;uid&gt;」
+         * 并推 1022，**再** SREM；被踢者离线流里的历史群消息不清理。
+         *
+         * 回包 `1014 USER_NOT_FOUND` 在这里表示"目标用户不在群内"。
+         *
+         * @return true = 已发出（结果看 \l groupMemberKicked）
+         */
+        bool kickGroupMember(const QString& gid, const QString& uid);
+
+        /**
+         * 解散群聊（1039）。只有群主可以。
+         *
+         * ⚠ 服务端有两个坑（api-group.md §7.3）：
+         *   · 群不存在时返回的是 `1013` 而不是 `1023`；
+         *   · 成功后 `DEL chatgroup_<请求原串>`，`group_id` 带前导零会漏删。
+         *   客户端一律传规范化后的纯数字串，避开第二个。
+         * 成功时先给所有成员写系统消息「该群聊已解散」并推 1022，再 DEL。
+         *
+         * @return true = 已发出（结果看 \l groupDismissed）
+         */
+        bool dismissGroup(const QString& gid);
+
+        /**
+         * 获取群成员信息（1041）。
+         *
+         * 请求体 `{ "gid": "..." }` —— **字段名是 `gid`**，和本组其它接口的
+         * `group_id` 不一致，服务端只读 `gid`，写成 `group_id` 会直接回 1020。
+         *
+         * 服务端先 `SISMEMBER` 校验"我在不在群里"，再查 MySQL。所以：
+         *   · 我不在群里 → 1024；
+         *   · **Redis 成员集合丢了 → 也回 1024**（哪怕我是真实成员）。
+         *
+         * @return true = 已发出（结果看 \l groupMembersReceived）
+         */
+        bool fetchGroupMembers(const QString& gid);
+
+        /**
+         * 获取群资料（1043）。
+         *
+         * 请求体 `{ "gid": "..." }` —— 与 1041 一样用 `gid`，不是 `group_id`。
+         *
+         * ⚠ 服务端**不校验成员身份**：只要登录了，知道群号就能查（api-group.md §13.13）；
+         *   也**没有 Redis 缓存**，每次都会查 MySQL 的 `groups` 表。
+         *   响应（1044）不带群号，由回包上下文补。
+         *
+         * @return true = 已发出（结果看 \l groupInfoReceived）
+         */
+        bool getGroupInfo(const QString& gid);
+
+        /**
+         * 修改群资料（1045）。只有群主 / 管理员能改。
+         *
+         * 请求体 `{ "gid": "..." }` + 可选 `name` / `avatar` / `announcement`。
+         * **缺省（nullopt）= 不修改**；显式空串 = 清空（头像 / 公告）；
+         * 群名传空串会直接 1020（服务端存储过程返回 -3）。
+         *
+         * ⚠ 与创建群聊的 `avator` 拼写不同，这里是 `avatar`。
+         * ⚠ 数据库异常（-10 / -11）时回包**只有 msgid、没有 error**，
+         *   这里统一按失败处理并回 \l ErrorCode::JsonError。
+         * ⚠ 成功后**不写系统消息、不推 1022**，其他成员不会感知；要刷新得再发 1043。
+         *
+         * @return true = 已发出（结果看 \l groupInfoChangeResult）
+         */
+        bool changeGroupInfo(const QString& gid,
+                             const std::optional<QString>& name,
+                             const std::optional<QString>& avatar,
+                             const std::optional<QString>& announcement);
 
         /// 断开并复位全部状态
         void disconnectFromServer();
@@ -339,6 +465,72 @@ namespace mychat
         /// 确认回包（1026）；error 非 0 时那批消息仍在服务端 PEL 里，下次拉取会重投
         void chatMessagesAcked(bool ok, int error);
 
+        /**
+         * 创建群聊的结果（1033 → 1034）。
+         *
+         * @param groupId 新群 id（**字符串**，服务端 `std::to_string`）；
+         *                失败时为空串
+         * @param name    请求里提交的群名（回包不带，靠请求侧补全）
+         *
+         * ⚠ Redis 写失败时服务端异常逃逸，回包只有 msgid、**没有 error** ——
+         *   这种会走超时（\l RequestTimeout），调用方不要死等。
+         */
+        void groupCreated(bool ok, int error, const QString& groupId, const QString& name);
+
+        /**
+         * 拉人入群的结果（1035 → 1036）。
+         *
+         * 回包**不回传实际入群名单**（已经在群里的会被跳过），
+         * 想确认结果得重新 \l fetchGroupMembers。
+         *
+         * @param uids 请求里提交的成员列表（原样带回，便于日志 / 本地状态）
+         */
+        void groupMembersAdded(bool ok, int error, const QString& gid, const QStringList& uids);
+
+        /// 踢人的结果（1037 → 1038）；uid 是请求里那个被踢者
+        void groupMemberKicked(bool ok, int error, const QString& gid, const QString& uid);
+
+        /// 解散的结果（1039 → 1040）
+        void groupDismissed(bool ok, int error, const QString& gid);
+
+        /**
+         * 群成员信息（1041 → 1042）。
+         *
+         * 空列表是**正常结果**（理论上不会，但别把空当成失败）；失败看 error：
+         * 1024 = 不在群内 / Redis 成员集合丢失，1013 = 数据库不可用。
+         */
+        void groupMembersReceived(bool ok, int error, const QString& gid,
+                                  const QList<mychat::protocol::GroupMember>& members);
+
+        /**
+         * 群资料（1043 → 1044）。
+         *
+         * 失败看 error：1023 群不存在、1013 数据库不可用、1020 gid 非法。
+         * 成功时 \c info 的字段已解析好，`gid` 由请求上下文补上。
+         */
+        void groupInfoReceived(bool ok, int error, const mychat::protocol::GroupInfo& info);
+
+        /**
+         * 修改群资料的结果（1045 → 1046）。
+         *
+         * @param gid 请求里那个群（回包不带群号）
+         */
+        void groupInfoChangeResult(bool ok, int error, const QString& gid);
+
+        /**
+         * 一条请求在 kReplyTimeoutMs 内没有任何回包 —— 按服务端的约定，等价于
+         * **这条请求被抛弃了**。
+         *
+         * 依据：2026-10-22 起所有处理器（含心跳）都由 `HANDLER_PREFIX` 统一回显
+         * `msgid`，只要消息被取走处理就一定有回包；而消息队列（容量 10）满时
+         * `try_send` 直接丢帧、既不回包也不断连。所以「超时 + 没有 msgid 回来」
+         * 只可能是没被处理。
+         *
+         * @param msgid     该请求的编号（\l nextMsgId 生成，形如 `r-12`）
+         * @param requestId 请求帧的 message_id，便于日志区分是哪类请求
+         */
+        void requestTimedOut(const QString& msgid, std::uint16_t requestId);
+
     private
         slots :
 
@@ -359,6 +551,8 @@ namespace mychat
          */
         struct PendingReply
         {
+            /// 客户端生成的请求编号（服务端原样回显）；回包里缺失时为空
+            QString msgid;
             /// 请求帧的 message_id（日志用）
             std::uint16_t request_id = 0;
             /// 期待的回包 message_id
@@ -370,20 +564,22 @@ namespace mychat
         };
 
         /**
-         * 登记「我刚发了 requestId，等 replyId」。
+         * 登记「我刚发了 requestId（编号 msgid），等 replyId」。
          *
+         * @param msgid     与请求一起发出的编号；回包带同一个值才认领得到
          * @param onTimeout 到期回调。**必须负责把调用方的等待状态收干净**
          *                 （m_auth_in_flight 之类的标记由回调自己清）。
          */
         void expectReply(std::uint16_t requestId, std::uint16_t replyId,
-                         std::function<void()> onTimeout);
+                         const QString& msgid, std::function<void()> onTimeout);
         /**
-         * 某个回包到了：把登记表里**最早**的那条同型号清掉，并重排定时器。
+         * 某个回包到了：**优先按 msgid 精确认领**；回包没带编号（老服务端 /
+         * 主动推送）时退回"同型号最早发出"的那条。
          *
          * \note 由 handleFrame 在最前面统一调用，各 handler 不用记得喊它 ——
          *       那就是"每加一条新消息都要记得加一行"的典型漏法。
          */
-        void finishReply(std::uint16_t replyId);
+        void finishReply(std::uint16_t replyId, const QString& msgid);
         /// 按最早到期的那条重设单次定时器（表空就停）
         void armReplyTimer();
         /// 全部作废：断线 / 复位时调用，不再补报超时（连接都没了，报了也没意义）
@@ -423,7 +619,36 @@ namespace mychat
         void handleSyncChatMessages(const QByteArray& body);
         /// 确认回包（1026，只有 error）
         void handleAckChatMessages(const QByteArray& body);
-        bool sendJson(std::uint16_t message_id, const QJsonObject& body);
+        /// 创建群聊回包（1034，error + group_id）
+        void handleGroupCreateResponse(const QByteArray& body);
+        /// 拉人回包（1036，只有 error）
+        void handleGroupAddMembersResponse(const QByteArray& body);
+        /// 踢人回包（1038，只有 error）
+        void handleGroupKickMemberResponse(const QByteArray& body);
+        /// 解散回包（1040，只有 error）
+        void handleGroupDismissResponse(const QByteArray& body);
+        /// 群成员信息回包（1042，error + mb_infos）
+        /// 群成员回包（1042，error + mb_infos）
+        void handleGroupMembersResponse(const QByteArray& body);
+
+        /// 群资料回包（1044，error + name/avatar/owner_uid/announcement/maxMb/mbCnt/createAt）
+        void handleGroupInfoResponse(const QByteArray& body);
+
+        /// 修改群资料回包（1046，只有 error；数据库异常时连 error 都没有）
+        void handleGroupInfoChangeResponse(const QByteArray& body);
+        /**
+         * 发送一条 JSON 请求，**自动注入客户端请求编号 msgid**。
+         *
+         * 服务端从 2026-10-22 起在所有响应里原样回显 `msgid`（含心跳与错误响应），
+         * 所以每条请求都必须带上它 —— 它既是回包认领的依据，也是判断
+         * "这条请求是不是被服务端丢了"的唯一凭据。
+         *
+         * @return 本次请求的 msgid；**空串表示没发出去**（未连接 / 超长）。
+         *         调用方要把返回值原样交给 \l expectReply。
+         */
+        [[nodiscard]] QString sendJsonWithId(std::uint16_t message_id, const QJsonObject& body);
+        /// 生成下一个请求编号（形如 `r-12`，连接内单调递增，重连不清零）
+        [[nodiscard]] QString nextMsgId();
         /// 直接发一段已序列化好的 body（心跳要发体长 0 的空帧，走不了 sendJson）
         bool sendFrame(std::uint16_t message_id, const QByteArray& payload);
         /// 一次只发一个「查在线」请求；上一个回包了就接着发下一个
@@ -444,6 +669,15 @@ namespace mychat
          */
         static constexpr int kReplyTimeoutMs = 5000;
 
+        /**
+         * 同时在飞的群请求上限。
+         *
+         * 群请求按 msgid 配对、可以并发，但没有上限的话，一个不回包的服务端
+         * 会让 \l m_group_requests 一直涨（每条要等 5s 才超时清掉）。
+         * 界面一次最多点一两个按钮，8 条已经远超正常水位。
+         */
+        static constexpr int kMaxGroupRequestsInFlight = 8;
+
         QTcpSocket* m_socket = nullptr;
         QTimer* m_connect_timer = nullptr;
         QTimer* m_heartbeat_timer = nullptr;
@@ -459,6 +693,14 @@ namespace mychat
         QString m_host;
         quint16 m_port = 0;
         bool m_logged_in = false;
+
+        /**
+         * 请求编号的序号。
+         *
+         * 单调递增、\l reset 时**不清零**：断线重连后继续往下发，避免与上一条连接
+         * 的迟到回包撞号（虽然旧连接已关，但服务端的处理可能正好跨界完成）。
+         */
+        quint64 m_msg_seq = 0;
 
         /*
          * 「查在线」回包里只有 error / online，**没有 uid** —— 想同时查多个人，
@@ -515,6 +757,8 @@ namespace mychat
             QString to_uid;
             QString body;
             int type = 1;
+            /// 群消息：1013 请求体里带 `"group": true`（JSON 布尔）
+            bool group = false;
         };
 
         /*
@@ -536,5 +780,53 @@ namespace mychat
         /// 待确认的消息编号，按批（每批 ≤10）排队；一次只发一批
         QList<QStringList> m_ack_queue;
         bool m_ack_in_flight = false;
+
+        /**
+         * 群管理请求的请求侧上下文。
+         *
+         * 1034/1036/1038/1040/1042 的回包都**不回带群 id**（只有 1034 回 group_id），
+         * 所以"这一发是给哪个群、拉的是谁"必须先存下来，回包时再拼回信号。
+         *
+         * 2026-10-22 起服务端在所有回包里原样回显 `msgid`，因此这份上下文按
+         * **msgid** 存（`m_group_requests`），可以并发多条 —— 以前是单槽 + 串行，
+         * 结果"建群刚回、正在拉人"时打开群成员面板会被直接拒掉。
+         */
+        struct GroupRequest
+        {
+            enum class Kind
+            {
+                Create,
+                AddMembers,
+                Kick,
+                Dismiss,
+                FetchMembers,
+                GetInfo,
+                ChangeInfo,
+            };
+
+            Kind kind = Kind::Create;
+            QString gid;
+            QString name;
+            QString avatar;
+            QString announcement;
+            QStringList members;
+            /// Kick 的目标
+            QString target_uid;
+        };
+
+        /// msgid -> 群请求上下文；回包到达时 `take` 出来用，超时回调里 remove
+        QHash<QString, GroupRequest> m_group_requests;
+
+        /**
+         * 取出这条群回包对应的请求上下文。
+         *
+         * 优先按回包里回显的 `msgid` 精确匹配；回包**没带编号**时（老服务端、
+         * 或者服务端某条异常路径只回了半截）退回"唯一在飞的那条"——
+         * 这跟 \l m_pending 的 FIFO 兜底是同一个思路：只有一条时不存在错配风险。
+         *
+         * @return 取不到（多条在飞且编号不认识）时返回默认构造的空上下文，
+         *         调用方会拿着空 gid 上报 —— 一眼能看出没配上，不会张冠李戴。
+         */
+        [[nodiscard]] GroupRequest takeGroupRequest(const QByteArray& body);
     };
 } // namespace mychat

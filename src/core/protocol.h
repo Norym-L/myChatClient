@@ -81,6 +81,20 @@ namespace mychat::protocol
         SetFriendRemarkRsp,   // 1030 —— 备注结果，原样回显 id
         ChangeUserInfoReq,    // 1031 —— 编辑本人资料（服务端 2026-10-21 新增）
         ChangeUserInfoRsp,    // 1032 —— 编辑结果，原样回显 id
+        GroupCreateReq,       // 1033 —— 创建群聊（服务端 2026-10-23 新增）
+        GroupCreateRsp,       // 1034 —— 回包带 group_id
+        GroupAddMembersReq,   // 1035 —— 拉人入群
+        GroupAddMembersRsp,   // 1036 —— 只回 error
+        GroupKickMemberReq,   // 1037 —— 踢人
+        GroupKickMemberRsp,   // 1038 —— 只回 error
+        GroupDismissReq,      // 1039 —— 解散群聊
+        GroupDismissRsp,      // 1040 —— 只回 error
+        GetGroupUserInfoReq,  // 1041 —— 群成员信息（字段名是 gid）
+        GetGroupUserInfoRsp,  // 1042 —— mb_infos
+        GetGroupInfoReq,      // 1043 —— 群资料（字段名是 gid，2026-10-23 新增）
+        GetGroupInfoRsp,      // 1044 —— name / avatar / owner_uid / announcement ...
+        GroupInfoChangeReq,   // 1045 —— 修改群资料（name / avatar / announcement 可选）
+        GroupInfoChangeRsp,   // 1046 —— 只回 error（数据库异常时连 error 都没有）
     };
 
     /**
@@ -126,11 +140,24 @@ namespace mychat::protocol
      */
     inline constexpr int MAX_FRIEND_REMARK_LEN = 64;
 
+    /// 群名称的输入上限（字符）。服务端**不校验**长度（`api-group.md` §4.1），
+    /// 但 MySQL 的列宽终归有限，超长会被截断或直接报 1013 —— 界面先卡住。
+    inline constexpr int MAX_GROUP_NAME_LEN = 32;
+
+    /// 群公告的输入上限（字符）。理由同上。
+    inline constexpr int MAX_GROUP_ANNOUNCEMENT_LEN = 200;
+
     /**
      * 拉取回包（1024）里的一条消息。
      *
      * 字段与服务端 `syncChatMessageHandler` 的序列化一致；`id` 是 Redis Stream
      * 的编号（`<毫秒>-<序号>`），**确认（1025）时必须原样回传**。
+     *
+     * 群消息（2026-10-23 起）在此基础上多两个字段：
+     *   · `group`    —— 布尔，true 表示群消息；
+     *   · `group_id` —— 群 id，**只有群消息才有**（单聊不返回该字段）。
+     * ⚠ 升级前已入队的群消息没有 `group_id`，这种历史消息按 `group=true` +
+     *   空 groupId 处理：能确认，但没法归属到会话（见 ChatController）。
      */
     struct ChatMessage
     {
@@ -138,6 +165,10 @@ namespace mychat::protocol
         std::uint64_t fromUid = 0;
         int type = 1;
         QString body;
+        /// 群消息标记（`msgs[].group`）
+        bool group = false;
+        /// 群 id（`msgs[].group_id`）；单聊 / 历史群消息为空串
+        QString groupId;
 
         [[nodiscard]] bool valid() const { return !id.isEmpty() && fromUid != 0; }
     };
@@ -208,15 +239,23 @@ namespace mychat::protocol
         /**
          * 不是好友关系（服务端 2026-10-19 新增 `NOT_FRIEND`）。
          *
-         * 三个出处：
+         * 四个出处：
          *   · 发消息（1013）的好友校验没过 —— 消息**不会**写进对方离线流；
          *   · 删好友（1027）时双方本来就不是好友；
          *   · 设置好友备注（1029）时对方不是好友，或者试图给自己设置备注。
+         *   · **群消息（1013 且 `group = true`）发送时不在群内**（2026-10-23 起复用，
+         *     见 api-group.md §9.1）。
          *
          * ⚠ 这个数值和「新消息推送」的 message_id 1022 撞号，但那是两套独立枚举
          *   （错误码 vs 消息编号），别混用。
          */
         NotFriend = 1022,
+        /// 群 id 非法或群不存在（1036 / 1038 / 1040）
+        GroupIdInvalid = 1023,
+        /// 权限不足：不是群主 / 管理员，或者**不在群内**（1036 / 1038 / 1040 / 1042）
+        NoPower = 1024,
+        /// 群已满（服务端**定义了但没用**：拉人时群满实际返回 1013，见 api-group.md §11.6）
+        GroupFulled = 1025,
     };
 
 /// 错误码 -> 用户可读提示
@@ -330,6 +369,72 @@ namespace mychat::protocol
      *   · 好友资料查不到的那条服务端会跳过，所以 count 可能大于实际条数。
      */
     [[nodiscard]] QList<FriendInfo> parseFriendList(const QJsonObject& object);
+
+    /**
+     * 群成员（1042 的 `mb_infos[]`）。
+     *
+     * 服务端只给四个字段（见 `api-group.md` §8.2）：
+     *   · `uid`     —— 成员 uid（字符串）
+     *   · `nick_g`  —— **群内昵称**（`group_members.nickname`），不是账号昵称；
+     *                  数据库里为 NULL 时服务端给空串
+     *   · `join_at` —— 入群时间，**毫秒时间戳字符串**（不是 RFC 时间）
+     *   · `role`    —— 0 成员 / 1 管理员 / 2 群主
+     *
+     * ⚠ 没有头像、没有账号昵称 —— 要显示这些得另查好友列表或搜索接口。
+     */
+    struct GroupMember
+    {
+        std::uint64_t uid = 0;
+        QString nickG;
+        qint64 joinAtMs = 0;
+        int role = 0;
+
+        [[nodiscard]] bool valid() const { return uid != 0; }
+        [[nodiscard]] bool isOwner() const { return role == 2; }
+    };
+
+    /**
+     * 群成员信息回包（1042）-> GroupMember 数组。
+     *
+     * ⚠ 没有成员时服务端**不出现** `mb_infos` 字段（和 1021 的 friends 不同，
+     *   friends 是 null）；两种都走空数组。
+     * ⚠ role 是**数字**（服务端直接 `value["role"] = role`），不是字符串。
+     */
+    [[nodiscard]] QList<GroupMember> parseGroupMembers(const QJsonObject& object);
+
+    /**
+     * 群资料（1044 的响应）。
+     *
+     * 服务端字段（见 `api-group.md` §9.2）：
+     *   · `name` / `avatar` / `owner_uid` / `announcement` —— 字符串；
+     *   · `maxMb` / `mbCnt` —— **字符串**（服务端 `to_string`），分别是最大人数与当前人数；
+     *   · `createAt` —— 建群时间，**毫秒时间戳字符串**（不是 RFC 时间）；
+     *   · 响应**不带 gid** —— 由调用方按请求上下文补。
+     *
+     * ⚠ `mbCnt` 来自 `groups.member_count` 冗余列，不是对 `group_members` 的实时统计；
+     *   和 1042 返回的成员列表长度不一致时，以成员列表为准。
+     * ⚠ `avatar` / `announcement` 数据库为 NULL 时服务端回空串，不是 null。
+     */
+    struct GroupInfo
+    {
+        QString gid;
+        QString name;
+        QString avatar;
+        QString ownerUid;
+        QString announcement;
+        int maxMembers = 0;
+        int memberCount = 0;
+        qint64 createdAtMs = 0;
+        bool valid = false;
+    };
+
+    /**
+     * 群资料回包（1044）-> GroupInfo。
+     *
+     * 注意这里只解析字段，**不校验 error**：错误码由 ChatSocket 先判，
+     * 失败时不会调用本函数。`gid` 也不在回包里，调用方拿到后自己补。
+     */
+    [[nodiscard]] GroupInfo parseGroupInfo(const QJsonObject& object);
 
     /**
      * 「查询用户是否在线」回包。

@@ -23,6 +23,7 @@
 
 #include "ChatController.h"
 #include "ContactController.h"
+#include "GroupController.h"
 #include "HttpClient.h"
 #include "LoginController.h"
 #include "PresenceController.h"
@@ -112,6 +113,7 @@ int main(int argc, char* argv[])
     ResetPasswordController reset_controller;
     ContactController contact_controller;
     ChatController chat_controller;
+    GroupController group_controller;
     PresenceController presence_controller;
 
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "LoginController",
@@ -124,6 +126,8 @@ int main(int argc, char* argv[])
                                &contact_controller);
   qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "ChatController",
                                &chat_controller);
+    qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "GroupController",
+                               &group_controller);
     qmlRegisterSingletonInstance("MyChat.Core", 1, 0, "PresenceController",
                                &presence_controller);
 
@@ -138,6 +142,16 @@ int main(int argc, char* argv[])
                      &chat_controller, [&contact_controller, &chat_controller]()
                          {
                              chat_controller.syncFriends(contact_controller.friendList());
+                         });
+
+    /*
+     * 好友名字也要喂给群控制器：群成员列表里服务端只给 uid + 群昵称，
+     * 账号昵称 / 备注只能从好友列表补（memberList 的 displayName 就是靠它）。
+     */
+    QObject::connect(&contact_controller, &ContactController::friendListChanged,
+                     &group_controller, [&contact_controller, &group_controller]()
+                         {
+                             group_controller.syncFriends(contact_controller.friendList());
                          });
 
     QQmlApplicationEngine engine;
@@ -207,6 +221,17 @@ int main(int argc, char* argv[])
     {
         MCLOG_INFO() << "[app] MYCHAT_SENDMSG 已设置，自动发送一条消息";
         root->setProperty("autoMessage", auto_message);
+    }
+
+    // 开发 / 自动化用：MYCHAT_GROUPCREATE="<群名>:<uid1,uid2>"
+    // 进聊天页后替用户建一个群（走真实的 1033 → 1035 链路），用来无头验证群聊：
+    // 建群 → 会话出现在列表里 → 拉人 → 发群消息。
+    // 群名后面的成员列表可省略（只建一个只有自己的群）。
+    if (const QString auto_group = qEnvironmentVariable("MYCHAT_GROUPCREATE");
+        !auto_group.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_GROUPCREATE 已设置，自动建群:" << auto_group;
+        root->setProperty("autoGroup", auto_group);
     }
 
     // 开发 / 自动化用：MYCHAT_AUTHAPPLY=<accept|refuse>

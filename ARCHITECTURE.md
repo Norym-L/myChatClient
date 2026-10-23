@@ -72,12 +72,26 @@ ZmdUI 组件库（终末地工业机能风）。
   （自检：`qtClientAccountPickerTest`）
 - ✅ **删除 / 清空聊天记录**（只影响本机）：会话头「…」→ 选择消息（批量删）/ 清空会话，
   两个操作都有确认弹窗；服务端没有删除接口，对方不受影响
-- ✅ 八套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
+- ✅ **群聊**（服务端 2026-10-23 起，基线 `df647ad` + `7338a5c`）：创建 1033 / 拉人 1035 /
+  踢人 1037 / 解散 1039 / 群成员 1041 / 群资料获取 1043 / 群资料修改 1045
+  （`GroupController`）；群消息复用 1013（`group:true`）/ 1024（`group` + `group_id`）/
+  1025。群会话键是 `g<gid>`，群名 / 公告由 1043 现拉并缓存在本机 `groups` 表
+  （服务端没有群列表 / 退群接口，见 §5.7）
+- ✅ **群操作系统消息**：服务端无独立类型，只把 `from_uid` 置为 `"1"`；建群 / 拉人 /
+  踢人 / 解散四类正文在群会话里以居中灰字显示，不再当用户气泡解析昵称。
+  `ChatController::groupSystemMessage(gid, body)` 通知页面强制刷新成员列表；
+  已删除的群会话用 `m_removed_gids` 挡住晚到的解散系统消息
+- ✅ 十七套无 GUI 的命令行自检程序（复用同一批控制器，验证的是真实链路）
 
 ### 尚未实现
 
 - **服务端历史**：`XACKDEL` 确认即删，跨设备翻不到旧消息（只有本机 SQLite 里有）
-- **群聊**：服务端 `is_to_group` 恒为 false
+- **群列表 / 主动退群**（服务端未实现）：
+  客户端只能记住"我建的群"和"收到过消息的群"，群名丢了就显示「群 &lt;gid&gt;」
+- **群资料变更没有推送**：1045 成功后其他成员不会收到通知，要自己再拉 1043 才看得到；
+  1043 本身也不校验成员身份（知道 gid 就能读）
+- **入群 / 被踢通知**没有独立推送：只有一条 `from_uid=1` 的系统消息，
+  客户端收到后靠强刷 1041 更新成员列表（`df647ad` 起）
 
 ---
 
@@ -97,7 +111,8 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── RegisterController.h/.cpp      注册链路（含验证码 60s 冷却）
 │   ├── ResetPasswordController.h/.cpp 重置密码链路
 │   ├── ContactController.h/.cpp       联系人 / 好友链路（搜索 / 发申请 / 申请列表 / 推送）
-│   ├── ChatController.h/.cpp          会话 / 消息（版式就绪，数据为本地演示）
+│   ├── ChatController.h/.cpp          会话 / 消息（单聊 + 群会话，群键 g&lt;gid&gt;）
+│   ├── GroupController.h/.cpp         群管理（创建 / 拉人 / 踢人 / 解散 / 成员 / 资料 1043-1046）
 │   │
 │   └── core/                   协议 / 网络 / 会话 / 日志（不依赖外部）
 │       ├── protocol.h/.cpp        帧格式、MessageId、ReqId→路径、ErrorCode、parseUid
@@ -129,7 +144,9 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── registerflow.cpp         注册 → qtClientRegisterTest
 │   ├── resetflow.cpp            重置密码 → qtClientResetTest
 │   ├── contactflow.cpp          好友链路 → qtClientContactTest
-│   └── profileedit.cpp          好友备注 + 编辑资料（1029-1032）→ qtClientProfileEditTest
+│   ├── profileedit.cpp          好友备注 + 编辑资料（1029-1032）→ qtClientProfileEditTest
+│   └── groupflow.cpp            群聊（1033-1042 + 群消息 + 系统消息）→ qtClientGroupTest
+│   └── groupinfo.cpp            群资料（1043-1046 获取/修改）→ qtClientGroupInfoTest
 ├── tools/README.md            无头自检（抓图）用法
 ├── third_party/ZmdUI/         vendor 的组件库（升级时整目录替换，勿改其中文件）
 │
@@ -244,23 +261,32 @@ GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] 
 - `connectToServer(host, port)` —— 带超时定时器
 - `login(uid, token)` —— 发送 `ChatLoginReq`
 - `searchUser` / `sendFriendRequest` / `friendApplyList` —— 好友链路三条消息
-- `sendJson(message_id, body)` —— 组帧发送
+- `sendJsonWithId(message_id, body)` —— 组帧发送，**自动注入客户端请求编号 `msgid`**
+  （形如 `r-12`，连接内单调递增；用 `r-` 是为了和业务 `msg_id` 的 `c-` 区分），返回该编号；空串表示没发出去
 - `dispatchBuffer()` —— 循环解帧（粘包 / 半包都在这里处理）
-- `handleFrame()` —— 按编号分发；已知回包全部有处理，服务端推送 1009 / 1012 也在其中，
+- `handleFrame()` —— 按编号分发；已知回包全部有处理，服务端推送 1009 / 1012 / 1022 也在其中，
   真正未知的编号打 WARN 但不断开连接
 
 连接超时、socket 错误、对端断开分别发出 `connectFailed` / `linkError` 信号。
 
-**回包超时是统一的**：每发一个请求就 `expectReply(请求号, 回包号, 超时回调)` 登记一笔，
+**回包超时是统一的**：每发一个请求就 `expectReply(请求号, 回包号, msgid, 超时回调)` 登记一笔，
 回包到了由 `handleFrame` 最前面的 `finishReply()` 销账，到期没回就按 `RequestTimeout`
-（客户端本地码 5，文案「网络连接超时，请稍后重试」）回调一次。
+（客户端本地码 5，文案「网络连接超时，请稍后重试」）回调一次，**并额外发出
+`requestTimedOut(msgid, 请求号)`**。
 
-这么做的原因不是洁癖 —— 服务端 **确实存在不回包的分支**（实测：拿一条不属于自己的
-申请去发 1010，服务端一句都不回）。TCP 层没有任何"一定有回包"的保证，缺了这道闸门
+**销账优先按 `msgid` 精确匹配**（服务端 2026-10-22 起在所有响应里原样回显），
+回包没带编号时才退回"同型号 FIFO"。这样同类请求并发在飞也不会互相销账；
+而超时时能拿到具体编号，就能判断"是这一条被服务端丢了" —— 服务端队列满
+（容量 10）时 `try_send` 直接丢帧，既不回包也不回错误码，没有 `msgid` 就只能
+笼统报"网络超时"。
+
+这么做的原因不是洁癖 —— 服务端确实存在不回包的分支（队列满、以及拿一条不属于
+自己的申请去发 1010）。TCP 层没有任何"一定有回包"的保证，缺了这道闸门
 的表现是界面永远转圈、后续请求全被"上一个还没回包"挡掉，而且完全静默。
 
-因此新增消息时 **必须**在发送处调一次 `expectReply()`；`tests/sockettimeout.cpp`
-用一个只收不发的哑服务器把这件事钉住（不需要真实服务端）。
+因此新增消息时 **必须**在发送处取 `sendJsonWithId()` 的返回值并交给 `expectReply()`；
+`tests/sockettimeout.cpp` 用一个只收不发的哑服务器把"超时必须回调"钉住，
+`tests/msgiddrop.cpp` 另外钉住"超时必须报出正确的 msgid"与"回包不带编号时的 FIFO 兜底"。
 
 ### 4.4 SessionManager
 
@@ -430,7 +456,72 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 | `markMessageState(uid, id, st)` | 改某条气泡的状态（`sending` / `sent` / `failed`）                 |
 
 属性：`conversations` / `conversationCount` / `messages` / `hasActiveConversation` /
-`activePeerUid` / `activePeerName` / `activePeerIsDemo` / `tip` / `tipIsError`。
+`activePeerUid` / `activePeerName` / `activePeerIsDemo` / `activeIsGroup` / `activeGroupId` /
+`tip` / `tipIsError`。
+
+**群会话的约定**（2026-10-23 起）：
+
+1. 会话键是 **`g<gid>`**：群号与用户 uid 都是数字、来自两张表，可能撞号；
+   界面上显示的仍是纯群号（`conversations[].gid`）。
+2. 群会话**永远不在** `friend_uids` 里 —— `syncFriends()` 必须显式放行
+   `kind == "group"`，否则刚建好、还没说话的群会被"非好友空壳"规则删掉。
+3. 群消息的 `to_uid` 是**群号**，请求体要带 `"group": true`（JSON 布尔）；
+   服务端会把它也写进**发送者自己**的离线流 → 拉到 `from_uid == 自己` 的群消息
+   要**丢弃回显但仍 ACK**（见 `m_self_uid`）。
+4. `1024` 的 `msgs[].group_id` 决定归属；没有 `group_id` 的历史群消息确认掉、不上屏。
+5. 群名 / 公告：打开成员面板时用 **1043** 现拉（`GroupController.loadGroupInfo`），
+   成功后缓存在本机 `ChatStore::groups`（schema v2）；本地没有缓存时显示「群 &lt;gid&gt;」。
+6. **群操作系统消息**：服务端无独立类型，只在群会话里把 `from_uid == "1"` 认成系统消息
+   （建群 / 拉人 / 踢人 / 解散）；消息项带 `system: true`，渲染成居中灰字，
+   `senderName` 留空（否则会显示成用户 "1"）。
+7. 自己删掉群会话后（解散 / 被踢），晚到的系统消息不能复活会话：
+   `removeGroupConversation()` 把 gid 记进内存集合 `m_removed_gids`，
+   `onChatMessages()` 在 `ensureGroupConversation()` 之前挡掉；`registerGroup()` 时清除。
+8. **群资料修改（1045）**：只允许群主 / 管理员；可选字段缺省或 `null` = 保留、
+   空串 = 清空（头像 / 公告），群名空串非法；成功后服务端**不推 1022**，
+   客户端必须再发 1043 刷新，并通过 `groupInfoSaved(gid, name)` 把新群名写回会话列表。
+   1046 在数据库异常（-10 / -11）时**没有 error 字段**，按失败处理。
+
+### 5.7 GroupController
+
+群管理链路的唯一入口（1033–1046）。**群消息不在这里**（复用单聊的 1013/1024，
+归 ChatController）。
+
+| 方法                                  | 用途                                             |
+|---------------------------------------|--------------------------------------------------|
+| `createGroup(name, memberUids)`       | 1033 建群 → 成功后自动 1035 拉人 → 1041 拉成员   |
+| `addMembers(gid, uids)`               | 1035，成功后自动重拉成员                         |
+| `kickMember(gid, uid)`                | 1037，成功后自动重拉成员                         |
+| `dismissGroup(gid)`                   | 1039（仅群主），成功后页面删本地会话             |
+| `loadMembers(gid, force)` / `clearMembers()` | 1041；同群不重复请求（`m_members_loading` 挡住并发），`force` 用于收到系统消息后强刷 |
+| `loadGroupInfo(gid, force)`           | 1043 拉群资料（群名 / 群主 / 公告 / 人数 / 上限 / 创建时间）；同群命中缓存不重复请求 |
+| `changeGroupInfo(gid, name, announcement)` | 1045 改群名 / 公告（头像暂不开放，服务端没有上传通道）；成功后强制重拉 1043 |
+
+属性：`memberList`（`uid` / `nickG` / `role` / `roleText` / `joinAtText` /
+`displayName` / `isOwner` / `isMe` / **`canKick`**）/ `memberCount` / `gid` /
+`myRole` / `canManage` / `isOwner` / `groupInfo`（`loaded` / `name` / `avatar` /
+`ownerUid` / `announcement` / `maxMembers` / `memberCount` / `createAt`）/
+`infoLoading` / `busy` / `tip`。
+
+几条要点：
+
+1. **回包不带群 id**（除 1034 的 `group_id`）→ 同一时刻只允许一条群管理请求在飞
+   （`ChatSocket::m_group_in_flight`），回包靠请求侧记下的上下文补全信号。
+2. `canKick` 按服务端规则复刻：群主可踢任何非群主；管理员只能踢普通成员；
+   都不能踢自己。真正的裁决仍在存储过程。
+3. `myRole` 是**从成员列表里认出自己**算出来的（服务端不单独下发）；
+   自己的 uid 来自 `loginSucceeded`，不能用 `SessionManager`（自检里没人 update 它）。
+4. 建群后把 `m_gid` 记成新群：否则 `onGroupMembersAdded` 里的 `m_gid == gid`
+   不成立，创建完群成员面板会一片空白。
+5. 建群存储过程已修正（`df647ad` 起 `CALL create_group(...)`），建群 →
+   拉人 → 成员面板可以一次走通；被踢 / 解散时服务端会先给所有成员写系统消息再动 Redis。
+   客户端在 `ChatPage.qml` 用 `onGroupSystemMessage(gid, body)` 调
+   `GroupController.loadMembers(gid, true)` 强刷成员面板。
+6. `groupInfo` 的 `memberCount` 来自 `groups.member_count` 冗余列，和 `memberList` 长度
+   冲突时以成员列表为准；`maxMb` / `mbCnt` / `createAt` 在服务端都是字符串，
+   `createAt` 是毫秒时间戳。
+7. 1043 **不校验成员身份**（知道 gid 就能读），且每次直查 MySQL、没有 Redis 缓存；
+   1045 成功后也不推送，所以面板打开、保存后各要拉一次 1043。
 
 **收消息链路的关键约定**（`api-chat.md` §3.1 + 2026-10-18 晚的 PEL 重投）：
 
@@ -451,6 +542,10 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 9. 拉取超时 → 2s 后自动重试（消息还在服务端）；确认失败 → 1s 后再拉（PEL 会重投），
    连续失败 3 次就停手，别对着不健康的服务端空转。
 10. 迟到（已超时）的 1024 也照常处理：反正下一轮 PEL 还会重投，能早一步是一步。
+11. **兜底拉取**：登录后每 **30s** 主动发一次 1023（即使一条 1022 都没有），断线停止、
+    重登再启动。服务端推送链路曾出现"静默丢 1022"的竞态（2026-10-23 修掉的旧连接
+    误删新会话映射），这层保底让最坏情况也只晚一个周期，不会表现成"能发不能收、重登才恢复"。
+    自检用 `MYCHAT_FALLBACK_PULL_MS` 缩短周期（`tests/fallbackpull.cpp`）。
 
 **发送链路的关键约定**：
 
@@ -786,14 +881,18 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 
 ## 11. 已知约束与技术债
 
-1. **认证 + 好友链路 + 好友列表 + 收发消息 + 本地记录已完成；群聊未做。**
+1. **认证 + 好友链路 + 好友列表 + 收发消息 + 本地记录 + 群聊已完成。**
    发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 → 1025（`XACKDEL`）。
    ⚠ 服务端**确认即删除**，所以历史只在**本机 SQLite** 里（`ChatStore`）——
    换台机器 / 换账号看不到；卸载或删库就没了。后续可参考 `docs/ServerDocs/api-chat.md`。
+   群聊的已知缺口全在服务端：没有群列表 / 退群 / 资料变更推送；
+   建群存储过程已在 `df647ad` 修正，系统消息（`from_uid=1`）已在本机渲染，
+   群资料获取 / 修改（1043–1046）已在 `7338a5c` 接入。
 
 2. **`ChatSocket::handleFrame` 的 default 分支是预留扩展点。**
    目前处理了登录 / 搜索 / 发申请 / 申请列表 / 好友列表 / 心跳 / 查在线 / 发消息 /
-   新消息推送 / 拉取 / 确认，未知编号打 WARN 不断连。
+   新消息推送 / 拉取 / 确认 / 群管理（1034 / 1036 / 1038 / 1040 / 1042 / 1044 / 1046），
+   未知编号打 WARN 不断连。
 
 2.1 **注册 / 重置密码依赖 VerifyServer。** 该服务未启动时 `/get_Verifycode`
 必然失败，属于环境问题而非客户端 bug —— 报错信息里已区分（见 §4.1）。
