@@ -61,7 +61,9 @@ ZmdUI 组件库（终末地工业机能风）。
   （`ChatController.syncFriends()`，在 `main.cpp` 里接线）；备注 `nick` 优先作为显示名
 - ✅ **会话界面**（会话列表 / 消息气泡 / 输入框 / 未读角标）—— 版式与交互已就绪，
   会话列表来自好友列表；**收发都已接通服务端**：
-  发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 拉取 → 1025 确认。
+  发 1013/1014（`msg_id` 回显配对）；收消息**两条链路并存** ——
+  1022 → 1023 拉取 → 1025 确认（离线 / 旧服务端），以及 1047 直推正文（2026-10-24 实验分支，
+  在线时直接上屏、不拉取也不确认）。
   ⚠ 确认后服务端即删除 → **本地 SQLite 才是历史来源**（`ChatStore`，见 §5.6）。
   演示数据只在 `MYCHAT_DEMO=1` 时注入（用于版式自检）
 - ✅ **本地聊天记录**（SQLite）：按 uid 分库、收发先落库再 ACK、未读/已读/发送状态持久化、
@@ -74,8 +76,8 @@ ZmdUI 组件库（终末地工业机能风）。
   两个操作都有确认弹窗；服务端没有删除接口，对方不受影响
 - ✅ **群聊**（服务端 2026-10-23 起，基线 `df647ad` + `7338a5c`）：创建 1033 / 拉人 1035 /
   踢人 1037 / 解散 1039 / 群成员 1041 / 群资料获取 1043 / 群资料修改 1045
-  （`GroupController`）；群消息复用 1013（`group:true`）/ 1024（`group` + `group_id`）/
-  1025。群会话键是 `g<gid>`，群名 / 公告由 1043 现拉并缓存在本机 `groups` 表
+  （`GroupController`）；群消息复用 1013（`group:true`）/ 1024（`group_id`）/ 1025，
+  在线成员由 1047 直推。群会话键是 `g<gid>`，群名 / 公告由 1043 现拉并缓存在本机 `groups` 表
   （服务端没有群列表 / 退群接口，见 §5.7）
 - ✅ **群操作系统消息**：服务端无独立类型，只把 `from_uid` 置为 `"1"`；建群 / 拉人 /
   踢人 / 解散四类正文在群会话里以居中灰字显示，不再当用户气泡解析昵称。
@@ -146,7 +148,8 @@ qtClient/                      ← 仓库根 == 工程根（不再有子工程�
 │   ├── contactflow.cpp          好友链路 → qtClientContactTest
 │   ├── profileedit.cpp          好友备注 + 编辑资料（1029-1032）→ qtClientProfileEditTest
 │   └── groupflow.cpp            群聊（1033-1042 + 群消息 + 系统消息）→ qtClientGroupTest
-│   └── groupinfo.cpp            群资料（1043-1046 获取/修改）→ qtClientGroupInfoTest
+│   ├── groupinfo.cpp            群资料（1043-1046 获取/修改）→ qtClientGroupInfoTest
+│   └── chatpushflow.cpp         1047 直推 + 1024 新字段 → qtClientChatPushTest
 ├── tools/README.md            无头自检（抓图）用法
 ├── third_party/ZmdUI/         vendor 的组件库（升级时整目录替换，勿改其中文件）
 │
@@ -264,8 +267,8 @@ GateServer 把 VerifyServer 的 `rsp.error()` **原样透传**（`root["error"] 
 - `sendJsonWithId(message_id, body)` —— 组帧发送，**自动注入客户端请求编号 `msgid`**
   （形如 `r-12`，连接内单调递增；用 `r-` 是为了和业务 `msg_id` 的 `c-` 区分），返回该编号；空串表示没发出去
 - `dispatchBuffer()` —— 循环解帧（粘包 / 半包都在这里处理）
-- `handleFrame()` —— 按编号分发；已知回包全部有处理，服务端推送 1009 / 1012 / 1022 也在其中，
-  真正未知的编号打 WARN 但不断开连接
+- `handleFrame()` —— 按编号分发；已知回包全部有处理，服务端推送 1009 / 1012 / 1022 / 1047
+  也在其中，真正未知的编号打 WARN 但不断开连接
 
 连接超时、socket 错误、对端断开分别发出 `connectFailed` / `linkError` 信号。
 
@@ -443,7 +446,8 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 
 会话 / 消息的唯一入口。 **会话列表由好友列表驱动**（`syncFriends()`）；
 收发都已接通服务端：发 1013/1014（本地落一条 `sending` 气泡 → 回执按 `msg_id` 改状态），
-收 1022 推送 → 1023 拉取 → 1024 落库 → 1025 确认。历史在本地 SQLite（服务端确认即删除）。
+收消息两条链路：1022 推送 → 1023 拉取 → 1024 落库 → 1025 确认，以及 1047 直推
+（在线直接上屏，不拉取不确认，见下方「1047 直推链路」）。历史在本地 SQLite（服务端确认即删除）。
 `MYCHAT_DEMO=1` 时才注入演示会话（`demo: true`，`syncFriends` 不会清掉它们）。
 
 | 方法                            | 用途                                                             |
@@ -523,19 +527,37 @@ engine 后声明。QML 侧 `import MyChat.Core 1.0` 后直接用 `LoginControlle
 7. 1043 **不校验成员身份**（知道 gid 就能读），且每次直查 MySQL、没有 Redis 缓存；
    1045 成功后也不推送，所以面板打开、保存后各要拉一次 1043。
 
+**1047 直推链路**（2026-10-24 实验分支，`docs/ServerDocs/design-message-push.md`）：
+
+1. 接收方**在线**时服务端调度器直接推完整正文（`group_id` / `from_uid` / `type` /
+   `body` / `time`），不再推 1022，也**不再写** `offlinestream_<uid>` → 正文直接上屏。
+2. **不拉取、不确认**：在线消息没有 PEL 条目，发 1025 只会被服务端忽略。
+3. `group_id` 恒出现，单聊是字符串 `"0"`；`protocol::parseChatMessage()` 归一化成空串，
+   下游只判 `group` / `groupId` 是否为空（别在业务层再认一次 `"0"`）。
+4. 落地规则与 1024 完全一致（去重 / 自己的群回显丢弃 / 缺 `group_id` 不上屏 /
+   本机已移除的群不上屏 / `from_uid == "1"` 按系统消息渲染），两条路径共用
+   `ChatController::landIncomingMessage()`，`onPushedMessage()` 只额外处理未读与信号。
+5. 旧服务端不发这一帧、离线消息也仍走拉取 —— **两条链路必须都在**（`1047` 丢了不会补投，
+   但离线流会兜住；回滚服务端时只有 1022）。
+6. 自检：`tests/chatpushflow.cpp`（`qtClientChatPushTest`），真机验证见
+   `tools/probe-chatpush.py`。
+
 **收消息链路的关键约定**（`api-chat.md` §3.1 + 2026-10-18 晚的 PEL 重投）：
 
 1. 1022 只是"有新消息"的信号（**不含内容**）→ 必须自己发 1023 拉。
+   （2026-10-24 实验分支的在线消息改走 1047 直推，见上一节。）
 2. 节流：攒够 **10 条以上**立刻拉；否则等 **2s** 合并成一批。计时器**不因每条推送重启**
    （持续来消息时会永远推后，永远拉不成）。
 3. `count = min(待拉取计数, 10)` —— 服务端单次上限 10，超了回 `1020`；`1024` 的 `count`
    是**字符串**（`to_string`）。
 4. **服务端 PEL 优先**：先重投"已投递未确认"的消息，PEL 空才读新消息 →
-   **同一条消息会被重复下发（at-least-once）**，客户端必须按 `msgs[].id` 去重
-   （`m_seen_message_ids`，内存态、上限 2000 条）。
+   **同一条消息会被重复下发（at-least-once）**，客户端必须按 Stream 编号去重
+   （`m_seen_message_ids`，内存态、上限 2000 条）。字段名两版都吃：旧版 `id`、
+   2026-10-24 起的 `time`，解析后都落到 `ChatMessage::id`。
 5. **去重 ≠ 跳过确认**：重复的那条也要放进 1025 的 `ids` 里，否则服务端会一直重投。
-6. `msgs[].id` 是 Redis Stream ID（`<毫秒>-<序号>`），既用于确认，也是客户端唯一的
-   "消息时间"来源（服务端不回时间戳）—— `ChatController::timeFromStreamId()`。
+6. Stream ID（旧 `msgs[].id`、新 `msgs[].time` / 推送 `time`）是 `<毫秒>-<序号>`，
+   既用于去重 / 确认，也是客户端唯一的"消息时间"来源（服务端不回时间戳）——
+   `ChatController::timeFromStreamId()`。
 7. 回来的条数**达到本次请求的 count**（不是硬编码 10）→ 200ms 后再拉一批，
    直到拉不满为止；PEL 抽干后才算停。
 8. **登录成功后主动拉一次**：离线期间的消息不会补推 1022，PEL 里上次没确认的也靠这一步找回来。
@@ -606,6 +628,10 @@ ChatPage  ──logoutRequested──▶ LoginPage
 
 相比旧前端 `setCentralWidget` + `deleteLater` 的做法，`Loader` 卸载即断开连接，
 天然避免了「旧页面继续响应全局信号」的坑。
+
+注册成功时服务端会下发 `uid`，而登录用的是 uid 而不是邮箱 —— `RegisterController`
+把它暂存成 `registeredUid`，`LoginPage` 创建时用 `takeRegisteredUid()` 取走
+（取走即清空），回填账号框并显示「注册成功」横幅；退出登录回到登录页不会重弹。
 
 ---
 
@@ -882,7 +908,7 @@ QML 加载失败时 Qt 会弹错误对话框，进程照样活着。必须读 st
 ## 11. 已知约束与技术债
 
 1. **认证 + 好友链路 + 好友列表 + 收发消息 + 本地记录 + 群聊已完成。**
-   发 1013/1014（`msg_id` 回显配对）、收 1022 → 1023 → 1025（`XACKDEL`）。
+   发 1013/1014（`msg_id` 回显配对）、收 1047 直推 / 1022 → 1023 → 1025（`XACKDEL`）。
    ⚠ 服务端**确认即删除**，所以历史只在**本机 SQLite** 里（`ChatStore`）——
    换台机器 / 换账号看不到；卸载或删库就没了。后续可参考 `docs/ServerDocs/api-chat.md`。
    群聊的已知缺口全在服务端：没有群列表 / 退群 / 资料变更推送；

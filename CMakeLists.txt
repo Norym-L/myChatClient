@@ -267,6 +267,18 @@ qt_add_executable(qtClientGroupInfoTest
 
 target_link_libraries(qtClientGroupInfoTest PRIVATE qtclient_core)
 
+# ── 直推消息自检（自带假 ChatServer，不需要服务端）──────────────────────
+# 服务端 2026-10-24 实验分支（design-message-push.md）：在线消息由调度器直推
+# 1047 完整正文，不再推 1022、也不写 offlinestream；1024 的 msgs[] 改成
+# time + group_id（单聊 "0"）。这里钉住：1047 直接上屏且**不拉取、不确认**、
+# 按 time 去重、五种归属（单聊/群/陌生人/自己的群回显/系统消息）、
+# "0" 不等于群 0、1024 新旧两版字段都能吃、群消息不在群的 1023 文案。
+qt_add_executable(qtClientChatPushTest
+        tests/chatpushflow.cpp
+)
+
+target_link_libraries(qtClientChatPushTest PRIVATE qtclient_core)
+
 # ── 请求编号 / 丢包识别自检（自带假 ChatServer，不需要服务端）──────────# 服务端 2026-10-22 起所有回包都回显 msgid；而消息队列满时会静默丢帧。
 # 这里验证：请求带编号、回包按编号认领、不回包时报出的编号对得上、
 # 以及回包不带编号时仍能 FIFO 兜底。
@@ -312,6 +324,7 @@ if (WIN32)
     set_target_properties(qtClientAccountPickerTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientGroupTest PROPERTIES WIN32_EXECUTABLE FALSE)
     set_target_properties(qtClientGroupInfoTest PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(qtClientChatPushTest PROPERTIES WIN32_EXECUTABLE FALSE)
 endif ()
 
 # 配置文件：服务层按 applicationDirPath()/config.ini 读取 GateServer 地址

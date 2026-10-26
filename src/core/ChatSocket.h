@@ -449,8 +449,27 @@ namespace mychat
          *
          * ⚠ 推送体只有 `{"error":0}`：**没有发送者、没有类型、没有内容** ——
          *   收到之后必须发 1023 拉取（见 \l syncChatMessages），内容才拿得到。
+         *
+         * 2026-10-24 起（实验分支）**在线聊天消息不再走这条**，改由 1047 直推完整
+         * 正文（见 \l chatMessagePushed）；1022 只剩好友验证等未迁移的推送。
+         * 但离线消息、以及旧版服务端的在线消息仍要按这条走 —— 两条链路都得留着。
          */
         void messageReceived();
+
+        /**
+         * 服务端直推一条完整聊天消息（message_id = 1047 ChatMessage）。
+         *
+         * 消息调度器在接收方**在线**时直接下发正文，不再写 `offlinestream_<uid>`：
+         * 所以收到这条**不需要**发 1023 拉取、也**不需要** ACK（`XACKDEL` 只表示
+         * "调度器已取出处理"，不是客户端收件确认）。
+         *
+         * 字段见 protocol::ChatMessage：`group_id` 单聊为 `"0"`，
+         * `id`（推送体里叫 `time`）是 Stream 编号，可直接用来去重 / 排序。
+         *
+         * ⚠ 旧版服务端不会发这一帧；不认识它的客户端在新服务端上"能发不能收"，
+         *   所以业务侧要同时保留 1022 + 1023 的拉取路径。
+         */
+        void chatMessagePushed(const mychat::protocol::ChatMessage& message);
 
         /**
          * 拉取回包（1024）。
@@ -615,6 +634,8 @@ namespace mychat
         void handleTextMessageResponse(const QByteArray& body);
         /// 服务端主动推送「你有新消息」（1022，不含内容）
         void handleNotifyReceiveMessage(const QByteArray& body);
+        /// 服务端直推完整消息体（1047，含 group_id / from_uid / type / body / time）
+        void handleChatMessagePush(const QByteArray& body);
         /// 拉取消息回包（1024）
         void handleSyncChatMessages(const QByteArray& body);
         /// 确认回包（1026，只有 error）

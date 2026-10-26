@@ -8,6 +8,7 @@
 | `MYCHAT_SMOKE_DELAY=<ms>`           | 覆盖抓图前的等待时长（默认 1.5s，带 `AUTOLOGIN` 时 4s）。验心跳这类"要等一会儿才发生"的行为时，要跑到 25s+                                                               | —                                       |
 | `MYCHAT_AUTOLOGIN=<uid>:<password>` | 启动后自动发起一次登录                                                                                                                                                   | 登录成功则切到聊天页                    |
 | `MYCHAT_PAGE=<页名>`                | 指定起始页：`Login`（默认）/ `Register` / `Reset` / `Chat`，大小写不敏感                                                                                                 | —                                       |
+| `MYCHAT_REGISTERED_UID=<uid>`       | 模拟「刚注册成功」：登录页创建时回填账号框并显示注册成功横幅（真实注册要验证码 + 服务端），见下                                                                          | —                                       |
 | `MYCHAT_SEARCH=<关键字>`            | 进聊天页后自动发起一次用户搜索（切到「联系人」分区）                                                                                                                     | —                                       |
 | `MYCHAT_OPENDLG=<模式>`             | 进聊天页后自动打开「用户资料」弹窗或某个视图（`other` / `self` / `selfedit` / `sendfriend[:uid]` / `applylist` / `applyreceived` / `applysent` / `session[:uid]` / `creategroup` / `groupmembers`），见下 | —                                       |
 | `MYCHAT_GROUPCREATE=<群名>:<uid,...>` | 进聊天页后自动建群（真实的 1033 → 1035 链路，成员可省略），用来验证群会话 / 群消息                                                                                     | —                                       |
@@ -35,6 +36,20 @@ MYCHAT_PAGE=Reset    MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/reset.png    ./qt
 ```
 
 页名写错会回落登录页并在 stderr 打一条 WARN，不会静默起一个空白窗口。
+
+## 抓「注册成功后回到登录页」
+
+真实注册要邮箱验证码 + GateServer，抓图跑不了；用 `MYCHAT_REGISTERED_UID` 直接
+注入服务端会下发的 uid，等价于注册页自动返回登录页的那一步：
+
+```bash
+MYCHAT_PAGE=Login MYCHAT_REGISTERED_UID=1005 \
+MYCHAT_SMOKE=C:/dev/MyChat/qtClient/build/login-after-register.png ./qtClient.exe
+```
+
+登录页会把 uid 回填进账号框并显示「注册成功」横幅。这个值必须在 `engine.load()`
+之前注入（main.cpp 里已经排好序）—— 登录页是在加载时 `takeRegisteredUid()`
+取走它的，取走即清空，退出登录再回登录页不会重弹。
 
 ## 抓「登录成功后的聊天页」
 
@@ -361,6 +376,58 @@ MYCHAT_SENDMSG="客户端发的群消息" MYCHAT_SMOKE=.../group-send.png ./qtCl
 群操作系统消息（建群 / 拉人 / 踢人 / 解散，`from_uid=1`）会在消息流里显示成居中灰字；
 用两个账号建群 / 拉人 / 踢人即可触发，或直接往某个 uid 的离线流里塞一条 1024 系统消息
 （`probe-group.py` 可扩展一个 `push` 子命令）。
+
+## 验证 1047 直推（服务端 2026-10-24 实验分支起）
+
+服务端把在线投递改成「调度器直推完整正文」：接收方在线时收 `1047`
+（`group_id` / `from_uid` / `type` / `body` / `time`），**不再推 1022、也不写离线流**。
+客户端收到就上屏，不发 1023、不发 1025。判据是客户端日志里这一行：
+
+```text
+[chat] 收到直推消息, from_uid = 1001 gid = "-" time = "..." body 长度 = N
+```
+
+而没有紧跟着的 `发送 SyncChatMessageReq` / `发送 AckChatMessageReq`。
+
+```bash
+# ① 客户端登录成 666672，挂着等推送（截图会拍到气泡）
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_PAGE=Chat \
+MYCHAT_SMOKE=.../smoke-push-recv.png MYCHAT_SMOKE_DELAY=9000 \
+MYCHAT_DATA_DIR=.../e2e-push-data ./qtClient.exe > push.log 2>&1 &
+
+# ② 用好友账号发一条（1013 的 error = 0 只代表已交给调度器）
+"$PY" tools/probe-chatpush.py 1001 123456 send 666672 "直推消息"
+
+# ③ 反过来验「客户端发 → 探针收」：探针先挂着，再让客户端自动发
+"$PY" tools/probe-chatpush.py 1001 123456 listen 25 &
+MYCHAT_AUTOLOGIN="666672:Test@12345" MYCHAT_PAGE=Chat \
+MYCHAT_SENDMSG="反向直推自检" ./qtClient.exe
+```
+
+⚠ `1013` 要求双方是好友（Redis `userfriendset_<uid>`）：不是好友会回 `1022`，
+探针要换一个真有好友关系的账号。`666672` 现在只与 `1001` 互为好友。
+
+离线兜底的对照实验：客户端登录后等一条 1047，再等 **30s 兜底拉取**（`1023`）——
+回包 `count` 应该是 `"0"`，说明在线消息确实没写进 `offlinestream_<uid>`。
+
+## 压测：1013 → 1047 推送链路（`bench-push.py`）
+
+`bench-chat.py` 打的是请求-回包；**推送**要走「在线流 → 调度器 → 1047」，得用这个。
+三种模式：`e2e`（发送+接收同进程，测到达/延迟/丢失）、`send`（接收方是真客户端）、
+`drain`（清掉落到离线流的消息）。两个账号密码不同时用 `--from-password` / `--to-password`。
+
+```bash
+"$PY" tools/bench-push.py e2e --from 1001 --from-password 123456 \
+    --to 666672 --to-password Test@12345 --rates 50,200,500,1000 --duration 8 --inflight 32
+"$PY" tools/bench-push.py send --from 1001 --from-password 123456 \
+    --to 666672 --count 3000 --rate 500 --inflight 64
+"$PY" tools/bench-push.py drain --uid 666672
+```
+
+2026-10-24 的实测结果与结论见 `docs/2026-10-24-压测报告.md`：单实例 ≤1000 条/秒零丢失，
+**2000 条/秒会让 ChatServer2 堆损坏崩溃**（`0xc0000374`），真客户端持续处理上限约 200 条/秒。
+
+
 
 ## 注意
 

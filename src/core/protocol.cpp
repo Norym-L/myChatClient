@@ -7,6 +7,56 @@
 
 namespace mychat::protocol
 {
+    namespace
+    {
+        /**
+         * 1024 的 `msgs[]` 与 1047 推送体共用这一个解析。
+         *
+         * 两处字段差别都在服务端：
+         *   · 2026-10-23 版 1024：`id` + 布尔 `group`（+ 只有群消息才有的 `group_id`）；
+         *   · 2026-10-24 实验分支：`time` + `group_id`（恒出现，单聊 `"0"`），取消 `group`。
+         * 这里两边都吃，并且把单聊的 `"0"` 归一化成空串 —— 下游只判
+         * `group` / `groupId` 是否为空，不用记两个魔法值。
+         */
+        std::optional<ChatMessage> parseChatMessageObject(const QJsonObject& entry)
+        {
+            ChatMessage message;
+
+            // 都是 Redis Stream 编号（`<毫秒>-<序号>`），只是字段名换了
+            message.id = entry.value(QStringLiteral("time")).toString();
+            if (message.id.isEmpty())
+                message.id = entry.value(QStringLiteral("id")).toString();
+
+            message.fromUid = parseUid(entry.value(QStringLiteral("from_uid"))).value_or(0);
+            message.body = entry.value(QStringLiteral("body")).toString();
+
+            message.groupId = entry.value(QStringLiteral("group_id")).toString();
+            if (message.groupId == QLatin1String("0"))
+                message.groupId.clear();
+
+            /*
+             * 旧格式的布尔 `group` 还得看：升级前入队的群消息只有 `group = true`、
+             * 没有 `group_id`（那种消息能确认，但没法归属到会话）。
+             */
+            message.group = entry.value(QStringLiteral("group")).toBool(false)
+                            || !message.groupId.isEmpty();
+
+            /*
+             * `type` 文档写的是 number，但服务端的历史习惯是把数字 to_string 之后再发
+             * （1013 请求里就是字符串）。两种都吃掉，别因为它换了形态就丢掉整条消息。
+             */
+            const QJsonValue type_value = entry.value(QStringLiteral("type"));
+            message.type = type_value.isString()
+                               ? type_value.toString().toInt()
+                               : type_value.toInt();
+
+            if (!message.valid())
+                return std::nullopt;
+
+            return message;
+        }
+    } // namespace
+
     QString reqPath(const ReqId id)
     {
         switch (id)
@@ -362,44 +412,32 @@ namespace mychat::protocol
                 continue;
 
             const QJsonObject entry = item.toObject();
-            ChatMessage message;
-            message.id = entry.value(QStringLiteral("id")).toString();
-            message.fromUid = parseUid(entry.value(QStringLiteral("from_uid"))).value_or(0);
-            message.body = entry.value(QStringLiteral("body")).toString();
-
-            /*
-             * 群消息标记（2026-10-23 起）。`group` 是**布尔**（服务端
-             * `value["group"] = message.is_to_group`），单聊也显式给 false。
-             */
-            message.group = entry.value(QStringLiteral("group")).toBool(false);
-            /*
-             * `group_id` 只在群消息里出现，而且是**字符串**（`std::to_string`）。
-             * 升级前写入的群消息没有这个字段 —— 那时客户端拿不到群 id，
-             * 只能当成"无法归属的群消息"跳过（仍然要 ACK，否则一直重投）。
-             */
-            message.groupId = entry.value(QStringLiteral("group_id")).toString();
-
-            /*
-             * `type` 文档写的是 number，但服务端的历史习惯是把数字 to_string 之后再发
-             * （1013 请求里就是字符串）。两种都吃掉，别因为它换了形态就丢掉整条消息。
-             */
-            const QJsonValue type_value = entry.value(QStringLiteral("type"));
-            message.type = type_value.isString()
-                               ? type_value.toString().toInt()
-                               : type_value.toInt();
-
-            if (!message.valid())
+            std::optional<ChatMessage> parsed = parseChatMessageObject(entry);
+            if (!parsed.has_value())
             {
-                // 缺 id（没法 ACK）或缺 from_uid（不知道是谁发的）：留着也没用，
+                // 缺编号（没法 ACK）或缺 from_uid（不知道是谁发的）：留着也没用，
                 // 而且 ACK 不了会让它在服务端 PEL 里躺着 —— 至少要留一条日志。
                 qWarning() << "[protocol] 拉取到的消息字段不完整，已跳过:" << entry;
                 continue;
             }
 
-            list.append(message);
+            list.append(*parsed);
         }
 
         return list;
+    }
+
+    std::optional<ChatMessage> parseChatMessage(const QJsonObject& object)
+    {
+        /*
+         * 1047 是**推送**，没有 error 字段、也没有回包 —— 解析失败只能丢这一帧，
+         * 别假装成功（上屏一条空消息比丢一条更糟）。
+         */
+        std::optional<ChatMessage> message = parseChatMessageObject(object);
+        if (!message.has_value())
+            qWarning() << "[protocol] 推送的消息字段不完整，已丢弃:" << object;
+
+        return message;
     }
 
     QList<GroupMember> parseGroupMembers(const QJsonObject& object)

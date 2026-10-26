@@ -155,6 +155,8 @@ namespace mychat
                 return "AckChatMessageReq";
             case protocol::MessageId::AckChatMessageRsp:
                 return "AckChatMessageRsp";
+            case protocol::MessageId::ChatMessage:
+                return "ChatMessage";
             case protocol::MessageId::DelFriendReq:
                 return "DelFriendReq";
             case protocol::MessageId::DelFriendRsp:
@@ -1585,6 +1587,9 @@ void ChatSocket::reset()
         case protocol::MessageId::NotifyReceiveMessage:
             handleNotifyReceiveMessage(body);
             break;
+        case protocol::MessageId::ChatMessage:
+            handleChatMessagePush(body);
+            break;
         case protocol::MessageId::SyncChatMessageRsp:
             handleSyncChatMessages(body);
             break;
@@ -2252,15 +2257,51 @@ void ChatSocket::reset()
         emit messageReceived();
     }
 
+    void ChatSocket::handleChatMessagePush(const QByteArray& body)
+    {
+        /*
+         * 1047：{"group_id":"0","from_uid":"10002","type":1,"body":"你好",
+         *        "time":"1734567890123-0"}
+         *
+         * 2026-10-24 实验分支：调度器在接收方在线时**直接推正文**，不再发 1022，
+         * 也不再写 offlinestream_<uid>（写失败才回落）。由此两个结论：
+         *   · 不用发 1023 拉取 —— 正文已经在手上了；
+         *   · 不用发 1025 确认 —— 这条不在离线流的 PEL 里，确认只会被服务端忽略。
+         * 推送没有回包，解析失败只能丢这一帧（一条脏帧不该毁掉后面的消息）。
+         */
+        QJsonParseError parse_error{};
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parse_error);
+        if (parse_error.error != QJsonParseError::NoError || !document.isObject())
+        {
+            qWarning() << "[chat] 消息推送解析失败:" << parse_error.errorString()
+                << QString::fromUtf8(body);
+            return;
+        }
+
+        const std::optional<protocol::ChatMessage> message =
+            protocol::parseChatMessage(document.object());
+        if (!message.has_value())
+            return;
+
+        qInfo() << "[chat] 收到直推消息, from_uid =" << message->fromUid
+            << "gid =" << (message->group ? message->groupId : QStringLiteral("-"))
+            << "time =" << message->id
+            << "body 长度 =" << message->body.size();
+
+        emit chatMessagePushed(*message);
+    }
+
     void ChatSocket::handleSyncChatMessages(const QByteArray& body)
     {
         /*
          * 1024：{"error":0, "count":"2", "msgs":[{type,from_uid,body,id}, ...]}
          *
          * 没有消息时服务端**不带 msgs 字段**，count 为 "0"（字符串）。
+         * 2026-10-24 实验分支把 `id` 改名 `time`、`group_id` 改为恒出现（单聊 "0"），
+         * 两版字段都由 protocol::parseChatMessages 一并吃下。
          *
          * ⚠ 服务端按 **PEL 优先**投递：未确认的消息会在下一次拉取时重复返回
-         *   （at-least-once）。去重交给 ChatController（按 msgs[].id），
+         *   （at-least-once）。去重交给 ChatController（按 Stream 编号），
          *   这里只管把这一批原样上报。
          *   迟到的回包也照常处理 —— 反正下一轮 PEL 还会重投，能早一步是一步。
          */

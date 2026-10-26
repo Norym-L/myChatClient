@@ -184,6 +184,15 @@ ChatController::ChatController(QObject* parent)
             this, &ChatController::onChatMessages);
 
     /*
+     * 1047：在线时服务端直接推正文（2026-10-24 实验分支）。
+     *
+     * 与 1024 落同一条流水线，但不确认、不拉取 —— 这条消息根本不在离线流里。
+     * 旧服务端不发这一帧，1022 + 1023 的路径原样保留。
+     */
+    connect(&socket, &mychat::ChatSocket::chatMessagePushed,
+            this, &ChatController::onPushedMessage);
+
+    /*
      * 1022 推送只说明"有新消息"，内容要自己拉（1023）。
      *
      * 节流规则见 api-chat.md §3.1：攒够 10 条立刻拉，否则 2s 后拉。
@@ -1151,7 +1160,8 @@ void ChatController::onTextMessageResult(const bool ok, const int error, const Q
         if (is_group)
         {
             /*
-             * 群消息的 1022 是"我不在群里"（服务端复用 NOT_FRIEND，见 api-group.md §9.1）：
+             * 旧版服务端（2026-10-23 那批）群消息不在群里时复用了 1022 NOT_FRIEND
+             * （api-group.md §9.1）：
              *   · 群被解散了（Redis 集合被 DEL，但我这边没收到任何通知）；
              *   · 或者我被移出了群。
              * 两种都没法从协议上区分，也不该顺手刷好友列表 —— 那条链路救不了群。
@@ -1165,6 +1175,15 @@ void ChatController::onTextMessageResult(const bool ok, const int error, const Q
          * （服务端不推送这种变化），所以顺手让界面静默刷新一次好友列表。
          */
         emit peerIsNotFriend(toUid);
+    }
+    else if (is_group && error == static_cast<int>(mychat::protocol::ErrorCode::GroupIdInvalid))
+    {
+        /*
+         * 2026-10-24 实验分支把群消息"不在群"改成了 1023 GROUP_ID_INVALID
+         * （design-message-push.md §4）：语义相同，文案也照旧。
+         */
+        setTip(QStringLiteral("发送失败：你已不在这个群里（群可能已解散）"), true);
+        return;
     }
 
     setTip(QStringLiteral("消息发送失败：%1").arg(mychat::protocol::errorToTip(error)), true);
@@ -1283,11 +1302,8 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
     }
 
     /*
-     * 逐条落进会话：
-     *   · **按 msgs[].id 去重** —— 服务端 PEL 优先重投，同一条会被拉到多次；
-     *   · 发送者没有会话就建一条（服务端不校验好友关系，理论上能收到陌生人的消息）；
-     *   · 时间从 Stream ID 的毫秒部分取 —— 服务端不回消息时间，离线消息可能是几天前的；
-     *   · 未读先按会话累计，最后一次性写回，避免每加一条就重建一次列表。
+     * 逐条落进会话。落地规则（去重 / 自己的群回显 / 群消息归属 / 本机已移除的群）
+     * 都在 landIncomingMessage 里，1047 单条推送共用同一套，别在两边各写一遍。
      */
     QStringList ids;
     ids.reserve(messages.size());
@@ -1301,89 +1317,23 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
 
     for (const mychat::protocol::ChatMessage& message: messages)
     {
-        // 重复的（PEL 重投）不落库，但**照样确认**，否则它会一直被重投
-        if (!markMessageSeen(message.id))
+        /*
+         * 无论落没落下来都要确认：PEL 重投的旧消息要 ACK 才不会被一直重投，
+         * 认不出的群消息也一样（留着只会在服务端 PEL 里躺着）。
+         */
+        ids.append(message.id);
+
+        QString peer;
+        const LandStatus status = landIncomingMessage(message, &peer);
+
+        if (status == LandStatus::Duplicate)
         {
             ++skipped;
-            ids.append(message.id);
             continue;
         }
 
-        /*
-         * 群消息（2026-10-23）：
-         *   · `group = true` 时 `to_uid` 是群号，消息归属看 `group_id`；
-         *   · 服务端会把群消息**也给发送者本人写一条**离线流（api-group.md §9.2），
-         *     所以拉回来时会看到自己刚发的那条 —— 本地气泡已经在了，
-         *     直接确认、不上屏，否则每条自己发的群消息都会重复显示一遍；
-         *   · 升级前入队的群消息没有 `group_id`，没法归属：确认掉，留一条日志。
-         */
-        if (message.group && QString::number(message.fromUid) == m_self_uid)
-        {
-            qDebug() << "[chat] 跳过自己发送的群消息回显, id =" << message.id
-                << "gid =" << message.groupId;
-            ids.append(message.id);
+        if (status != LandStatus::Landed)
             continue;
-        }
-
-        if (message.group && message.groupId.isEmpty())
-        {
-            qWarning() << "[chat] 群消息缺少 group_id（升级前入队的历史消息），已确认但不上屏:"
-                << message.id;
-            ids.append(message.id);
-            continue;
-        }
-
-        /*
-         * 本机已经主动移除的群（解散 / 被移出）：
-         * 服务端解散时是「先写系统消息、再 DEL」（api-group.md §7），所以很可能
-         * 在 removeGroupConversation() 之后才拉到「该群聊已解散」——
-         * 不挡住的话 onChatMessages 会 ensureGroupConversation 把会话重新建出来。
-         */
-        if (message.group && m_removed_gids.contains(message.groupId))
-        {
-            qDebug() << "[chat] 群会话已在本地移除，忽略后续消息, gid =" << message.groupId;
-            ids.append(message.id);
-            continue;
-        }
-
-        const QString peer = message.group
-                                 ? groupKey(message.groupId)
-                                 : QString::number(message.fromUid);
-
-        if (message.group)
-            ensureGroupConversation(message.groupId);
-        else
-            ensureConversation(peer);
-
-        const QString stamp = timeFromStreamId(message.id);
-
-        /*
-         * 收到的消息状态用 "sent"：气泡组件对 sent 不挂任何小字（正常消息）。
-         * 时间 / 服务端编号一起写进库 —— `server_id` 的 UNIQUE 是跨进程去重的兜底。
-         */
-        const int local_id = appendMessage(peer, false, message.body, stamp,
-                                           QStringLiteral("sent"),
-                                           streamIdToMsecs(message.id), message.id,
-                                           QString::number(message.fromUid));
-        if (local_id == 0)
-        {
-            // 库里已经有同一个 server_id（上个进程留下的 PEL 重投）：不显示，但照样确认
-            ++skipped;
-            ids.append(message.id);
-            continue;
-        }
-
-        touchConversation(peer, message.body, stamp);
-
-        /*
-         * 群操作的系统消息（from_uid 固定 1）：
-         *   · 界面按 system 标志渲染成居中提示；
-         *   · 抛给页面，让群成员面板在"拉人 / 踢人"后强刷一次 ——
-         *     服务端不推送成员变化，这是唯一的通知口子。
-         * 建群 / 拉人 / 踢人 / 解散各一条，正文格式见 api-group.md §9.5。
-         */
-        if (message.group && message.fromUid == 1)
-            emit groupSystemMessage(message.groupId, message.body);
 
         if (peer == m_active_uid)
         {
@@ -1405,8 +1355,6 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
         {
             unread_delta[peer] += 1;
         }
-
-        ids.append(message.id);
     }
 
     if (skipped > 0)
@@ -1464,6 +1412,142 @@ void ChatController::onChatMessages(const QList<mychat::protocol::ChatMessage>& 
         m_pull_again = false;
         requestPull();
     }
+}
+
+ChatController::LandStatus ChatController::landIncomingMessage(
+    const mychat::protocol::ChatMessage& message, QString* peer)
+{
+    if (peer != nullptr)
+        peer->clear();
+
+    // 重复的（PEL 重投 / 同一帧到两次）不落库
+    if (!markMessageSeen(message.id))
+        return LandStatus::Duplicate;
+
+    /*
+     * 群消息（2026-10-23）：`group = true` 时归属看 `group_id`；`group_id` 在
+     * 2026-10-24 起恒出现（单聊 "0"，已由 protocol 归一化成空串）。
+     *
+     * 服务端会把群消息**也给发送者本人**写一份 / 推一份（api-group.md §9.2、
+     * design-message-push.md §5），所以回显会看到自己刚发的那条 ——
+     * 本地气泡已经在了，再上屏就是重复。
+     */
+    if (message.group && QString::number(message.fromUid) == m_self_uid)
+    {
+        qDebug() << "[chat] 跳过自己发送的群消息回显, id =" << message.id
+            << "gid =" << message.groupId;
+        return LandStatus::Dropped;
+    }
+
+    // 升级前入队的群消息没有 group_id：能确认但没法归属，别硬塞进某个会话
+    if (message.group && message.groupId.isEmpty())
+    {
+        qWarning() << "[chat] 群消息缺少 group_id（升级前入队的历史消息），已确认但不上屏:"
+            << message.id;
+        return LandStatus::Dropped;
+    }
+
+    /*
+     * 本机已经主动移除的群（解散 / 被移出）：
+     * 服务端解散时是「先写系统消息、再 DEL」（api-group.md §7），所以很可能
+     * 在 removeGroupConversation() 之后才收到「该群聊已解散」——
+     * 不挡住的话会把会话重新建出来。
+     */
+    if (message.group && m_removed_gids.contains(message.groupId))
+    {
+        qDebug() << "[chat] 群会话已在本地移除，忽略后续消息, gid =" << message.groupId;
+        return LandStatus::Dropped;
+    }
+
+    const QString key = message.group
+                            ? groupKey(message.groupId)
+                            : QString::number(message.fromUid);
+
+    if (message.group)
+        ensureGroupConversation(message.groupId);
+    else
+        ensureConversation(key);
+
+    /*
+     * 时间从 Stream ID 的毫秒部分取 —— 服务端不回消息时间，离线消息可能是几天前的。
+     * 收到的消息状态用 "sent"：气泡组件对 sent 不挂任何小字（正常消息）。
+     * 服务端编号一起写进库 —— `server_id` 的 UNIQUE 是跨进程去重的兜底。
+     */
+    const QString stamp = timeFromStreamId(message.id);
+    const int local_id = appendMessage(key, false, message.body, stamp,
+                                       QStringLiteral("sent"),
+                                       streamIdToMsecs(message.id), message.id,
+                                       QString::number(message.fromUid));
+    if (local_id == 0)
+    {
+        // 库里已经有同一个 server_id（上个进程留下的 PEL 重投）：不显示
+        return LandStatus::Duplicate;
+    }
+
+    touchConversation(key, message.body, stamp);
+
+    /*
+     * 群操作的系统消息（from_uid 固定 1）：
+     *   · 界面按 system 标志渲染成居中提示；
+     *   · 抛给页面，让群成员面板在"拉人 / 踢人"后强刷一次 ——
+     *     服务端不推送成员变化，这是唯一的通知口子。
+     * 建群 / 拉人 / 踢人 / 解散各一条，正文格式见 api-group.md §9.5。
+     */
+    if (message.group && message.fromUid == 1)
+        emit groupSystemMessage(message.groupId, message.body);
+
+    if (peer != nullptr)
+        *peer = key;
+
+    return LandStatus::Landed;
+}
+
+void ChatController::onPushedMessage(const mychat::protocol::ChatMessage& message)
+{
+    /*
+     * 1047：在线时服务端直接推正文（2026-10-24 实验分支）。
+     *
+     * 与 1024 的区别只有两处，都很关键：
+     *   · **不确认**：这条消息没有进 offlinestream_<uid>，没有 PEL 条目可销；
+     *   · **不触发拉取**：正文已经在手上，再发 1023 只会白跑一趟。
+     */
+    QString peer;
+    const LandStatus status = landIncomingMessage(message, &peer);
+    if (status != LandStatus::Landed)
+        return;
+
+    const bool is_active = peer == m_active_uid;
+
+    if (is_active)
+    {
+        if (attention())
+            markRead(peer); // 人正看着：收到就算已读，不攒角标
+        else
+            bumpUnread(peer);
+
+        // 只有当前会话的消息列表真的变了才刷；别的会话收到消息只动列表 / 角标
+        emit messagesChanged();
+    }
+    else
+    {
+        bumpUnread(peer);
+    }
+
+    emit conversationsChanged();
+}
+
+void ChatController::bumpUnread(const QString& peerUid)
+{
+    const int index = indexOf(peerUid);
+    if (index < 0)
+        return;
+
+    QVariantMap item = m_conversations.at(index).toMap();
+    item.insert(QStringLiteral("unread"), item.value(QStringLiteral("unread")).toInt() + 1);
+    m_conversations[index] = item;
+
+    // 未读落库（touchConversation 那次写的是加未读之前的值）
+    persistConversation(peerUid);
 }
 
 void ChatController::ensureConversation(const QString& peerUid)

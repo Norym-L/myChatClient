@@ -95,6 +95,15 @@ namespace mychat::protocol
         GetGroupInfoRsp,      // 1044 —— name / avatar / owner_uid / announcement ...
         GroupInfoChangeReq,   // 1045 —— 修改群资料（name / avatar / announcement 可选）
         GroupInfoChangeRsp,   // 1046 —— 只回 error（数据库异常时连 error 都没有）
+        /**
+         * 1047 —— 服务端**直推完整消息体**（2026-10-24 实验分支，未合入主干）。
+         *
+         * 消息调度器把聊天消息直接推给在线会话，不再发 1022 让客户端去拉：
+         * 在线消息**不会再写进 `offlinestream_<uid>`**，所以不认识 1047 的客户端
+         * 在同一台服务端上"能发不能收"。详见 `ServerDocs/design-message-push.md`。
+         * 离线消息与好友验证等旧推送仍走 1022 / 1023，两条链路要同时留着。
+         */
+        ChatMessage = 1047,
     };
 
     /**
@@ -148,16 +157,23 @@ namespace mychat::protocol
     inline constexpr int MAX_GROUP_ANNOUNCEMENT_LEN = 200;
 
     /**
-     * 拉取回包（1024）里的一条消息。
+     * 一条聊天消息（1024 的 `msgs[]` / 1047 推送体）。
      *
-     * 字段与服务端 `syncChatMessageHandler` 的序列化一致；`id` 是 Redis Stream
-     * 的编号（`<毫秒>-<序号>`），**确认（1025）时必须原样回传**。
+     * 字段与服务端 `syncChatMessageHandler`（1024）和调度器推送（1047）一致。
      *
-     * 群消息（2026-10-23 起）在此基础上多两个字段：
-     *   · `group`    —— 布尔，true 表示群消息；
-     *   · `group_id` —— 群 id，**只有群消息才有**（单聊不返回该字段）。
-     * ⚠ 升级前已入队的群消息没有 `group_id`，这种历史消息按 `group=true` +
-     *   空 groupId 处理：能确认，但没法归属到会话（见 ChatController）。
+     * ── 消息编号：`id` 这个成员名对两套字段都成立 ──────────────────────
+     *   1024 在 2026-10-23 之前叫 `id`，2026-10-24 实验分支改名 `time`；
+     *   1047 推的也是 `time`。两套解析都写进 `id`（都是 Redis Stream ID），
+     *   因为 **确认（1025）必须原样回传这个串**；成员名保持 `id` 是为了不改
+     *   已落库的字段名与 QML 侧读法（库里叫 `server_id`）。
+     *
+     * ── 群消息判定 ────────────────────────────────────────────────────
+     *   · 2026-10-23 版 1024：`group`（bool）+ `group_id`（**只有群消息才有**）；
+     *   · 2026-10-24 实验分支：取消 `group`，`group_id` **恒出现**（单聊 `"0"`）；
+     *   · 1047：同实验分支，单聊 `group_id = "0"`。
+     *   解析时统一归一化：单聊的 `groupId` 一律清成空串，`group` 由
+     *   `groupId` 反推（旧格式没有 group_id 的群消息仍按 `group = true` 处理，
+     *   这种历史消息能确认但没法归属到会话，见 ChatController）。
      */
     struct ChatMessage
     {
@@ -165,9 +181,9 @@ namespace mychat::protocol
         std::uint64_t fromUid = 0;
         int type = 1;
         QString body;
-        /// 群消息标记（`msgs[].group`）
+        /// 群消息标记（旧 `msgs[].group`；新格式由 `group_id != "0"` 推出）
         bool group = false;
-        /// 群 id（`msgs[].group_id`）；单聊 / 历史群消息为空串
+        /// 群 id（`group_id`）；单聊 / 历史群消息为空串
         QString groupId;
 
         [[nodiscard]] bool valid() const { return !id.isEmpty() && fromUid != 0; }
@@ -175,7 +191,18 @@ namespace mychat::protocol
 
     /// 拉取回包（1024）-> 消息列表；失败 / 空时返回空列表。
     /// （没有消息时服务端**不出现** `msgs` 字段，不是空数组。）
+    /// 同时吃 2026-10-23（`group` + `id`）与 2026-10-24（`group_id` + `time`）两版字段。
     [[nodiscard]] QList<ChatMessage> parseChatMessages(const QJsonObject& object);
+
+    /**
+     * 推送体（1047）-> 一条消息。
+     *
+     * `{"group_id":"0","from_uid":"10002","type":1,"body":"你好","time":"1734567890123-0"}`
+     *
+     * 返回 `std::nullopt` 表示字段缺得没法用（没有 `time` 就没法去重，
+     * 没有 `from_uid` 就不知道是谁说的）。推送没有回包，解析失败只能丢这一帧。
+     */
+    [[nodiscard]] std::optional<ChatMessage> parseChatMessage(const QJsonObject& object);
 
     /// 客户端内部请求编号（HTTP 用），与 TCP 的 MessageId 各自独立
     enum class ReqId : std::uint16_t
@@ -239,18 +266,24 @@ namespace mychat::protocol
         /**
          * 不是好友关系（服务端 2026-10-19 新增 `NOT_FRIEND`）。
          *
-         * 四个出处：
+         * 三个出处：
          *   · 发消息（1013）的好友校验没过 —— 消息**不会**写进对方离线流；
          *   · 删好友（1027）时双方本来就不是好友；
          *   · 设置好友备注（1029）时对方不是好友，或者试图给自己设置备注。
-         *   · **群消息（1013 且 `group = true`）发送时不在群内**（2026-10-23 起复用，
-         *     见 api-group.md §9.1）。
+         *
+         * 群消息"我不在群里"曾经也复用它（2026-10-23 那批），2026-10-24 起改为
+         * `GroupIdInvalid`（1023）；这里保留兼容判断，两边都得认。
          *
          * ⚠ 这个数值和「新消息推送」的 message_id 1022 撞号，但那是两套独立枚举
          *   （错误码 vs 消息编号），别混用。
          */
         NotFriend = 1022,
-        /// 群 id 非法或群不存在（1036 / 1038 / 1040）
+        /**
+         * 群 id 非法或群不存在（1036 / 1038 / 1040 / 1046）。
+         *
+         * 2026-10-24 起群消息"我不在群里"也从 1022 改成了这个码
+         * （1014，见 design-message-push.md §4）。
+         */
         GroupIdInvalid = 1023,
         /// 权限不足：不是群主 / 管理员，或者**不在群内**（1036 / 1038 / 1040 / 1042）
         NoPower = 1024,
