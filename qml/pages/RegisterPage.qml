@@ -17,7 +17,7 @@ import "../components"
 Item {
     id: page
 
-    /*! 返回登录页 */
+    /*! 返回登录页（注册成功拿到的 uid 由 RegisterController 暂存，登录页会取走） */
     signal backRequested()
 
     /// 清掉所有输入框的出错高亮
@@ -40,7 +40,7 @@ Item {
             codeEdit.text)
     }
 
-    // 注册成功后停留一下再回登录页
+    // 注册成功后停留一下再回登录页（uid 已由 RegisterController 暂存，登录页接着显示）
     Timer {
         id: backTimer
         interval: 2000
@@ -196,8 +196,9 @@ Item {
             }
         }
 
-        // 注册成功：先让「注册成功，你的账号是 xxx」这条提示停留一会儿，
-        // 再自动回登录页 —— 直接切走的话用户根本来不及看到自己的 uid。
+        // 注册成功：服务端下发的 uid 由控制器暂存（登录页会 take 走并回填），
+        // 这里让「注册成功」的提示停留一会儿再自动回登录页 —— 直接切走的话
+        // 用户根本来不及看清自己刚拿到的账号。
         function onRegisterSucceeded(uid) {
             backTimer.restart()
         }

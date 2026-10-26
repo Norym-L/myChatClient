@@ -32,6 +32,15 @@ class RegisterController : public QObject
     /// 获取验证码的冷却剩余秒数；> 0 时不应再允许用户点「获取验证码」
     Q_PROPERTY(int cooldown READ cooldown NOTIFY cooldownChanged)
 
+    /**
+     * 最近一次注册成功拿到的 uid（空串 = 还没有 / 已被登录页取走）。
+     *
+     * 服务端在 /user_register 回包里下发 uid，用户登录用的就是它 —— 注册页和
+     * 登录页是两个独立实例，靠这个属性把结果传过去（见 takeRegisteredUid）。
+     * 只读：QML 不需要写它，写入只发生在注册成功回包里（C++ 自检可注入）。
+     */
+    Q_PROPERTY(QString registeredUid READ registeredUid NOTIFY registeredUidChanged)
+
 public:
     explicit RegisterController(QObject* parent = nullptr);
 
@@ -39,6 +48,18 @@ public:
     [[nodiscard]] bool tipIsError() const { return m_tip_is_error; }
     [[nodiscard]] bool busy() const { return m_busy; }
     [[nodiscard]] int cooldown() const { return m_cooldown; }
+    [[nodiscard]] QString registeredUid() const { return m_registered_uid; }
+
+    /**
+     * 取走刚注册成功的 uid 并清空（空串 = 没有可取的值）。
+     *
+     * 登录页创建时调用它回填账号框 —— 「取走即清空」保证只有紧接着的那一次
+     * 会显示「注册成功」，退出登录再回登录页不会又弹一遍。
+     */
+    Q_INVOKABLE QString takeRegisteredUid();
+
+    /// C++ 侧注入刚注册成功的 uid（MYCHAT_REGISTERED_UID 抓图自检用）；QML 不可写
+    void setRegisteredUid(const QString& uid);
 
     /// 请求邮箱验证码；成功后进入冷却，避免用户反复触发发信
     Q_INVOKABLE void requestVerifyCode(const QString& email);
@@ -54,6 +75,7 @@ public:
     void tipIsErrorChanged();
     void busyChanged();
     void cooldownChanged();
+    void registeredUidChanged();
     /// 本地校验失败，field 为 email / nickname / password / confirm / code
     void validationFailed(const QString& field);
     /// 验证码已请求
@@ -75,6 +97,8 @@ private:
     QString m_tip;
     bool m_tip_is_error = false;
     bool m_busy = false;
+    /// 最近一次注册成功的 uid；被登录页 take 走之前一直留着
+    QString m_registered_uid;
 
     QTimer* m_cooldown_timer = nullptr;
     int m_cooldown = 0;

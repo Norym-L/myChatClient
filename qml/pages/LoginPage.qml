@@ -25,6 +25,15 @@ Item {
         signal
     resetRequested
 
+    /**
+     * 本页正在展示的「刚注册」账号（空串 = 不显示注册成功横幅）。
+     *
+     * 服务端在 /user_register 回包里下发 uid，注册页拿不到本页的实例 ——
+     * 值由 RegisterController 暂存，本页创建时用 takeRegisteredUid() 取走
+     * （取走即清空，退出登录再回到本页不会又弹一遍「注册成功」）。
+     */
+    property string registeredUid: ""
+
     /*!
         自动化：进页面后替用户操作账号卡片（MYCHAT_PICKER）。
 
@@ -44,8 +53,33 @@ Item {
             autoPickTimer.restart()
     }
 
+    /**
+     * 把刚注册成功的 uid 回填到账号框，并让密码框直接拿到焦点。
+     *
+     * 登录用的是 uid，用户不抄下来就登不进去 —— 所以「显示」不能只是一行字，
+     * 账号框也要替他填好。新号还没有账号卡，顺手清掉卡片选中态，
+     * 免得一张旧卡片高亮着、账号框里却是另一个新的 uid。
+     */
+    function showRegisteredAccount(uid) {
+        if (uid.length === 0)
+            return
+        page.registeredUid = uid
+        LoginController.selectAccount("")
+        accountEdit.text = uid
+        passEdit.text = ""
+        accountEdit.invalid = false
+        passEdit.invalid = false
+        passEdit.forceActiveFocus()
+    }
+
+    /// 收起「注册成功」横幅：开始登录 / 换账号之后这条提示就不再成立了
+    function dismissRegisterNotice() {
+        page.registeredUid = ""
+    }
+
     /// 提交登录：先清掉上一次的高亮，校验交给 C++
     function doLogin() {
+        page.dismissRegisterNotice()
         accountEdit.invalid = false;
         passEdit.invalid = false;
         LoginController.login(accountEdit.text, passEdit.text);
@@ -96,6 +130,7 @@ Item {
 
     /// 单击卡片：选中并把 uid 填进账号框（用户还能改，改了就按新号登录）
     function pickAccount(uid) {
+        page.dismissRegisterNotice()
         LoginController.selectAccount(uid)
         accountEdit.text = uid
         passEdit.text = ""
@@ -112,6 +147,7 @@ Item {
 
     /// 「+」卡：切回空白表单（不删任何已记住的账号）
     function startNewAccount() {
+        page.dismissRegisterNotice()
         LoginController.selectAccount("")
         accountEdit.text = ""
         passEdit.text = ""
@@ -120,6 +156,7 @@ Item {
 
     /// 主按钮：能免密就免密，否则按密码登录
     function doPrimary() {
+        page.dismissRegisterNotice()
         if (page.primaryIsSaved && LoginController.loginWithAccount(accountEdit.text))
             return
         page.doLogin()
@@ -143,6 +180,9 @@ Item {
 
     Component.onCompleted: {
         page.syncSelectedAccount()
+        // 刚注册成功：把控制器里暂存的 uid 取走（只取一次），回填到账号框 + 横幅。
+        // 放在同步之后 —— 同步可能把上次用的账号填进来，这里要用新 uid 盖掉。
+        page.showRegisteredAccount(RegisterController.takeRegisteredUid())
         if (page.autoPick.length > 0)
             autoPickTimer.restart()
     }
@@ -193,6 +233,60 @@ Item {
         subtitle: "账号登录"
         tag: "AUTH-01"
         footerText: "GATE SERVER LINK"
+
+        // ── 注册成功横幅：显示服务端下发的 uid（账号框已经同步填好）──
+        // 放在内容区最上面：注册完自动跳回本页时，第一眼就能看到自己的账号。
+        Rectangle {
+            id: registerNotice
+            width: parent.width
+            height: 38
+            visible: page.registeredUid.length > 0
+            color: Theme.accent
+
+            // 左侧小黑条：和面板标题的亮黄竖条同一套语言，只是落在强调黄上做反相
+            Rectangle {
+                id: noticeBar
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.spacingMd
+                anchors.verticalCenter: parent.verticalCenter
+                width: 5
+                height: 16
+                color: Theme.textOnAccent
+            }
+
+            Text {
+                id: noticeTitle
+                anchors.left: noticeBar.right
+                anchors.leftMargin: Theme.spacingSm
+                anchors.verticalCenter: parent.verticalCenter
+                text: "注册成功"
+                font: Theme.fontStrong
+                color: Theme.textOnAccent
+            }
+
+            Text {
+                id: noticeUid
+                anchors.left: noticeTitle.right
+                anchors.leftMargin: Theme.spacingSm
+                anchors.verticalCenter: parent.verticalCenter
+                // 等宽字：uid 是一串数字，等宽才好核对
+                text: "UID " + page.registeredUid
+                font: Theme.fontMonoMd
+                color: Theme.textOnAccent
+            }
+
+            Text {
+                anchors.left: noticeUid.right
+                anchors.leftMargin: Theme.spacingSm
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.spacingMd
+                anchors.verticalCenter: parent.verticalCenter
+                text: "已填入账号框，请输入密码登录"
+                font: Theme.fontBody
+                color: Theme.textOnAccent
+                elide: Text.ElideRight
+            }
+        }
 
         /*
          * ── 账号卡片条（左右滑动选择）──────────────────────────────
@@ -324,8 +418,13 @@ Item {
             enabled: !LoginController.busy
 
             onAccepted: page.doPrimary()
-            // 重新输入即清掉出错高亮，避免红框一直挂着
-            onTextChanged: invalid = false
+            // 重新输入即清掉出错高亮，避免红框一直挂着；
+            // 改成了别的账号，注册成功横幅也就不再成立
+            onTextChanged: {
+                invalid = false
+                if (page.registeredUid.length > 0 && text !== page.registeredUid)
+                    page.dismissRegisterNotice()
+            }
         }
 
         ZTextField {
@@ -351,9 +450,12 @@ Item {
         // 注意不要写 `height: visible ? implicitHeight : 0`：Text 的 implicitHeight
         // 依赖 width（wrapMode 会重排），再让 height 反过来依赖它就会触发绑定循环。
         // Column 本来就会跳过 visible=false 的子项，不需要手动把高度置 0。
+        //
+        // 注册成功横幅在的时候不叠 tip：那多半是上一轮登录失败 / 状态失效留下的，
+        // 两条消息一上一下只会让人以为这次注册也出了岔子。
         Text {
             width: parent.width
-            visible: LoginController.tip.length > 0
+            visible: page.registeredUid.length === 0 && LoginController.tip.length > 0
             text: LoginController.tip
             font: Theme.fontBody
             color: LoginController.tipIsError ? Theme.danger : Theme.muted

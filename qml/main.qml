@@ -18,6 +18,9 @@ import "components"
       LoginPage  ──registerRequested──▶  RegisterPage  ──backRequested──▶ LoginPage
       LoginPage  ──resetRequested──────▶  ResetPasswordPage ──backRequested──▶ LoginPage
 
+    注册成功时服务端下发的 uid 由 RegisterController 暂存，登录页创建时
+    用 takeRegisteredUid() 取走，回填账号框并显示「注册成功」横幅。
+
     只有整条登录链路（HTTP 登录 → 连接 ChatServer → TCP 登录握手）全部成功
     才切到聊天页，其余跳转都是用户主动导航。
 */

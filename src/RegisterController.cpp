@@ -175,10 +175,32 @@ void RegisterController::onRegisterDone(const bool ok, const QJsonObject& resp)
     }
 
     MCLOG_INFO() << "[register] 注册成功, uid =" << uid_text;
-    // 把 uid 回显给用户 —— 登录用的是 uid 而不是邮箱，不显示的话用户根本无从登录
-    setTip(QStringLiteral("注册成功，你的账号是 %1，请返回登录").arg(uid_text), false);
+    // 把 uid 回显给用户 —— 登录用的是 uid 而不是邮箱，不显示的话用户根本无从登录。
+    // 暂存一份给登录页：本页两秒后就自动返回，光在这儿提示用户根本抄不下来。
+    setRegisteredUid(uid_text);
+    setTip(QStringLiteral("注册成功，账号 UID %1 已创建，正在返回登录…").arg(uid_text), false);
     setBusy(false);
     emit registerSucceeded(uid_text);
+}
+
+void RegisterController::setRegisteredUid(const QString& uid)
+{
+    if (m_registered_uid == uid)
+        return;
+
+    m_registered_uid = uid;
+    emit registeredUidChanged();
+}
+
+QString RegisterController::takeRegisteredUid()
+{
+    if (m_registered_uid.isEmpty())
+        return QString();
+
+    const QString uid = m_registered_uid;
+    m_registered_uid.clear();
+    emit registeredUidChanged();
+    return uid;
 }
 
 void RegisterController::startCooldown()

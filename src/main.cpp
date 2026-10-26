@@ -154,6 +154,24 @@ int main(int argc, char* argv[])
                              group_controller.syncFriends(contact_controller.friendList());
                          });
 
+    /*
+     * 开发 / 自动化用：MYCHAT_REGISTERED_UID=<uid>
+     *
+     * 模拟「刚注册成功、正跳回登录页」的那一步：登录页会把 uid 回填进账号框
+     * 并显示注册成功横幅。真实注册要过验证码 + 服务端，无头抓图跑不了，
+     * 只能把暂存值直接注入，用来验证这条 UI 链路的渲染。
+     *
+     * ⚠ 必须在 engine.load() 之前：登录页是加载时创建、在 Component.onCompleted
+     * 里 takeRegisteredUid() 取走的，注入晚了就什么都不剩。
+     */
+    if (const QString registered_uid = qEnvironmentVariable("MYCHAT_REGISTERED_UID");
+        !registered_uid.isEmpty())
+    {
+        MCLOG_INFO() << "[app] MYCHAT_REGISTERED_UID 已设置，登录页回填注册账号:"
+            << registered_uid;
+        register_controller.setRegisteredUid(registered_uid);
+    }
+
     QQmlApplicationEngine engine;
 
     // 让 QML 里的 "import ZmdUI 1.0" 能在 qrc 里解析到 :/qml/ZmdUI/qmldir
