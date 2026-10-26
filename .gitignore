@@ -13,6 +13,9 @@ build-*/
 out/
 cmake-build-*/
 
+# 打包产物（packaging/windows/package.ps1 生成）
+dist/
+
 # ── IDE / 工具 ────────────────────────────────────────────────────────
 # CMakeUserPresets.json 是 IDE 自动生成的本地配置，环境相关，不进库
 .idea/

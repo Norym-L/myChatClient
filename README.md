@@ -59,6 +59,18 @@ cmake --build --preset mingw-debug
 3. `Settings > Toolchains` 确认 MinGW（`C:/dev/Qt/Tools/mingw1310_64`）
 4. 直接 Run
 
+## 打包
+
+Release 构建 → 收 Qt 依赖 → 绿色版 zip → 安装包（安装包需要 Inno Setup 6.3+）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\windows\package.ps1
+```
+
+产物在 `dist/`：`MyChat-<version>\`（绿色版目录）、`MyChat-<version>-win64.zip`、
+`MyChat-Setup-<version>.exe`（装了 Inno Setup 才会生成）。
+安装位置、config.ini、自检步骤和代码签名说明见 `packaging/windows/README.md`。
+
 ## 运行
 
 登录需要一个在跑的服务端。本地默认连 `http://localhost:8080`，
